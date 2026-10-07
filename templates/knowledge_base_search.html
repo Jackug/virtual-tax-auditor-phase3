@@ -2,236 +2,442 @@
 
 {% block content %}
 
+<style>
+
+    .search-header {
+        margin-bottom: 25px;
+    }
+
+    .search-header h1 {
+        margin-bottom: 8px;
+    }
+
+    .search-header p {
+        color: #666;
+        margin: 0;
+    }
+
+    .search-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 25px;
+        padding: 12px;
+        background: #f5f6f8;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .search-nav a {
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        color: #333;
+        background: white;
+        border: 1px solid #ddd;
+        font-size: 13px;
+    }
+
+    .search-card {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 22px;
+        margin-bottom: 25px;
+    }
+
+    .search-form {
+        display: flex;
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .search-form input {
+        flex: 1;
+        padding: 13px;
+        border: 1px solid #bbb;
+        border-radius: 6px;
+        font-size: 15px;
+    }
+
+    .search-form button {
+        padding: 13px 22px;
+        border: none;
+        border-radius: 6px;
+        background: #1f4e79;
+        color: white;
+        cursor: pointer;
+        font-size: 15px;
+    }
+
+    .result-card {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 18px;
+    }
+
+    .result-title {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 7px;
+    }
+
+    .result-meta {
+        color: #666;
+        font-size: 13px;
+        margin-bottom: 15px;
+    }
+
+    .approved {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 15px;
+        background: #d4edda;
+        color: #155724;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .result-text {
+        line-height: 1.6;
+        white-space: pre-wrap;
+    }
+
+    .result-source {
+        margin-top: 15px;
+        padding-top: 12px;
+        border-top: 1px solid #eee;
+        font-size: 13px;
+        color: #555;
+    }
+
+    .empty {
+        background: white;
+        border: 1px dashed #ccc;
+        border-radius: 8px;
+        padding: 35px;
+        text-align: center;
+        color: #777;
+    }
+
+    .notice {
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+
+    @media (max-width: 700px) {
+
+        .search-form {
+            flex-direction: column;
+        }
+
+        .search-form button {
+            width: 100%;
+        }
+
+    }
+
+</style>
+
+
+<!-- =========================================================
+     NAVIGATION
+     ========================================================= -->
+
+<div class="search-nav">
+
+    <a href="{{ url_for('tasks') }}">
+        Tasks
+    </a>
+
+    <a href="{{ url_for('data_sources') }}">
+        Data Sources
+    </a>
+
+    <a href="{{ url_for('risk_assessment') }}">
+        Risk Assessment
+    </a>
+
+    <a href="{{ url_for('risk_universe') }}">
+        Risk Universe
+    </a>
+
+    <a href="{{ url_for('cases') }}">
+        Cases
+    </a>
+
+    <a href="{{ url_for('findings_queue') }}">
+        Findings
+    </a>
+
+    <a href="{{ url_for('knowledge_base') }}">
+        Knowledge Base
+    </a>
+
+    <a href="{{ url_for('knowledge_base_search') }}">
+        Search Knowledge
+    </a>
+
+    <a href="{{ url_for('knowledge_approval_queue') }}">
+        Approval Queue
+    </a>
+
+    <a href="{{ url_for('audit_log') }}">
+        Audit Trail
+    </a>
+
+    <a href="{{ url_for('logout') }}">
+        Log out
+    </a>
+
+</div>
+
+
+<!-- =========================================================
+     HEADER
+     ========================================================= -->
+
+<div class="search-header">
+
+    <h1>
+        Search Approved Knowledge
+    </h1>
+
+    <p>
+        Search the human-approved Knowledge Base used by the
+        Virtual Tax Auditor.
+    </p>
+
+</div>
+
+
+<!-- =========================================================
+     GOVERNANCE NOTICE
+     ========================================================= -->
+
 <div class="notice">
 
-  <b>Approved Knowledge Search</b>
+    <strong>
+        Knowledge Governance
+    </strong>
 
-  <div class="muted">
-    This search retrieves knowledge from
-    <b>Approved Knowledge Base versions only</b>.
-    Draft, Rejected, Superseded and Retired versions are excluded.
-  </div>
+    <p>
+        Search results are restricted to Knowledge Base versions
+        that have been approved by a human reviewer.
+    </p>
+
+    <p>
+        Draft, Rejected, Superseded and other non-approved versions
+        are not returned as authoritative knowledge.
+    </p>
 
 </div>
 
 
-<div class="card">
+<!-- =========================================================
+     SEARCH FORM
+     ========================================================= -->
 
-  <h3 style="margin-top:0;">
-    Search Approved Knowledge
-  </h3>
+<div class="search-card">
 
-  <form
-    method="get"
-    action="{{ url_for('knowledge_base_search') }}"
-  >
-
-    <input
-      type="text"
-      name="q"
-      value="{{ query }}"
-      placeholder="Example: input VAT requirements"
-      style="
-        width:75%;
-        box-sizing:border-box;
-        padding:10px;
-      "
-      required
+    <form
+        method="GET"
+        action="{{ url_for('knowledge_base_search') }}"
+        class="search-form"
     >
 
-    <button type="submit">
-      Search
-    </button>
+        <input
+            type="text"
+            name="q"
+            value="{{ query or '' }}"
+            placeholder="Search tax laws, VAT, PAYE, assessments, deductions, penalties..."
+            autofocus
+        >
 
-  </form>
+        <button type="submit">
+            🔎 Search
+        </button>
+
+    </form>
 
 </div>
 
+
+<!-- =========================================================
+     SEARCH RESULTS
+     ========================================================= -->
 
 {% if query %}
 
-<div style="margin-top:20px;">
+    {% if results %}
 
-  <h3 class="section-title">
-    Search Results
-  </h3>
+        <div style="margin-bottom:15px;">
+
+            <strong>
+                Search results for:
+            </strong>
+
+            "{{ query }}"
+
+            <span class="muted">
+                — {{ results|length }} result(s)
+            </span>
+
+        </div>
 
 
-  {% if results %}
+        {% for result in results %}
 
-    <div class="muted" style="margin-bottom:15px;">
-      Found {{ results|length }} relevant knowledge section(s)
-      for:
-      <b>{{ query }}</b>
+        <div class="result-card">
+
+            <div class="result-title">
+
+                {{ result['title'] }}
+
+                <span class="approved">
+                    APPROVED
+                </span>
+
+            </div>
+
+
+            <div class="result-meta">
+
+                <strong>
+                    Reference:
+                </strong>
+
+                {{ result['document_ref'] }}
+
+                &nbsp; | &nbsp;
+
+                <strong>
+                    Version:
+                </strong>
+
+                v{{ result['version_number'] }}
+
+                &nbsp; | &nbsp;
+
+                <strong>
+                    Category:
+                </strong>
+
+                {{ result['category'] }}
+
+                &nbsp; | &nbsp;
+
+                <strong>
+                    Type:
+                </strong>
+
+                {{ result['document_type'] }}
+
+                &nbsp; | &nbsp;
+
+                <strong>
+                    Tax Type:
+                </strong>
+
+                {{ result['tax_type'] or 'General' }}
+
+            </div>
+
+
+            <div class="result-text">
+
+                {{ result['text_content'] }}
+
+            </div>
+
+
+            <div class="result-source">
+
+                <strong>
+                    Source:
+                </strong>
+
+                {{ result['source_filename'] }}
+
+                {% if result['page_number'] %}
+
+                    &nbsp; | &nbsp;
+
+                    <strong>
+                        Page / Sheet:
+                    </strong>
+
+                    {{ result['page_number'] }}
+
+                {% endif %}
+
+                {% if result['issuing_authority'] %}
+
+                    &nbsp; | &nbsp;
+
+                    <strong>
+                        Authority:
+                    </strong>
+
+                    {{ result['issuing_authority'] }}
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+        {% endfor %}
+
+
+    {% else %}
+
+        <div class="empty">
+
+            <h3>
+                No approved knowledge found
+            </h3>
+
+            <p>
+                No indexed Approved Knowledge Base content matched
+                "{{ query }}".
+            </p>
+
+            <p>
+                Try a broader search term such as
+                <strong>VAT</strong>,
+                <strong>PAYE</strong>,
+                <strong>income tax</strong>,
+                <strong>penalty</strong>, or
+                <strong>assessment</strong>.
+            </p>
+
+        </div>
+
+    {% endif %}
+
+
+{% else %}
+
+    <div class="empty">
+
+        <h3>
+            Search the VTA Knowledge Base
+        </h3>
+
+        <p>
+            Enter a question, tax concept, law, section topic,
+            compliance requirement or other keyword above.
+        </p>
+
     </div>
-
-
-    {% for result in results %}
-
-    <div class="task" style="margin-bottom:15px;">
-
-      <div style="width:100%;">
-
-        <div>
-
-          <b>
-            {{ result['title'] }}
-          </b>
-
-          <span class="muted">
-            —
-            Version {{ result['version_number'] }}
-          </span>
-
-        </div>
-
-
-        <div class="muted" style="margin-top:6px;">
-
-          <b>Reference:</b>
-          {{ result['document_ref'] }}
-
-          |
-
-          <b>Status:</b>
-          {{ result['version_status'] }}
-
-        </div>
-
-
-        <div class="muted">
-
-          <b>Category:</b>
-          {{ result['category'] }}
-
-          |
-
-          <b>Document Type:</b>
-          {{ result['document_type'] }}
-
-          |
-
-          <b>Tax Type:</b>
-          {{ result['tax_type'] or 'General' }}
-
-        </div>
-
-
-        {% if result['page_number'] %}
-
-        <div class="muted">
-
-          <b>Page:</b>
-          {{ result['page_number'] }}
-
-        </div>
-
-        {% endif %}
-
-
-        <div
-          style="
-            margin-top:12px;
-            padding:14px;
-            border:1px solid #d9dee5;
-            border-radius:6px;
-            background:#fafafa;
-            white-space:pre-wrap;
-            line-height:1.5;
-          "
-        >
-          {{ result['text_content'] }}
-        </div>
-
-
-        <div class="muted" style="margin-top:8px;">
-
-          <b>Source file:</b>
-          {{ result['source_filename'] }}
-
-          |
-
-          <b>Knowledge chunk:</b>
-          {{ result['chunk_number'] }}
-
-        </div>
-
-
-        <div style="margin-top:12px;">
-
-          <a
-            class="button"
-            href="{{ url_for(
-                'knowledge_base_versions',
-                document_id=result['document_id']
-            ) }}"
-          >
-            View Document Versions
-          </a>
-
-        </div>
-
-      </div>
-
-    </div>
-
-    {% endfor %}
-
-
-  {% else %}
-
-    <div class="task" style="opacity:.7;">
-
-      <div>
-
-        <b>No approved knowledge matched your search.</b>
-
-        <div class="muted">
-          The search only uses approved Knowledge Base versions.
-          Check whether the relevant document has been approved
-          and successfully indexed.
-        </div>
-
-      </div>
-
-    </div>
-
-  {% endif %}
-
-</div>
 
 {% endif %}
 
-
-<div
-  class="notice"
-  style="margin-top:20px;"
->
-
-  <b>Governance control</b>
-
-  <div class="muted" style="margin-top:6px;">
-
-    Search results are restricted to Knowledge Base versions whose
-    status is <b>Approved</b>.
-
-    The VTA must not treat Draft, Rejected, Superseded or Retired
-    documents as authoritative tax knowledge.
-
-  </div>
-
-</div>
-
-
-<div style="margin-top:20px;">
-
-  <a
-    class="button"
-    href="{{ url_for('knowledge_base') }}"
-  >
-    ← Back to Knowledge Base
-  </a>
-
-</div>
 
 {% endblock %}
