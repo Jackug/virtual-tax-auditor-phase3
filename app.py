@@ -1,4 +1,4 @@
-import os, json, sqlite3, base64, shutil
+import os, json, sqlite3, base64
 from pathlib import Path
 from datetime import datetime, timezone
 from functools import wraps
@@ -446,6 +446,7 @@ def knowledge_base_version_download(document_id, version_number):
 @app.route('/knowledge-base/<int:document_id>/edit', methods=['GET', 'POST'])
 @login_required
 def knowledge_base_edit(document_id):
+    # Edit the current Draft KB version without overwriting its file.
     c = db()
 
     doc = c.execute(
@@ -458,11 +459,7 @@ def knowledge_base_edit(document_id):
         abort(404)
 
     current = c.execute(
-        '''
-        SELECT *
-        FROM knowledge_document_versions
-        WHERE document_id=? AND version_number=?
-        ''',
+        'SELECT * FROM knowledge_document_versions WHERE document_id=? AND version_number=?',
         (document_id, doc['current_version'])
     ).fetchone()
 
@@ -473,7 +470,7 @@ def knowledge_base_edit(document_id):
     if current['version_status'] != 'Draft':
         c.close()
         flash(
-            'Only a Draft Knowledge Base version can be edited before approval.',
+            'Only the current Draft version can be edited before approval.',
             'error'
         )
         return redirect(
@@ -494,7 +491,7 @@ def knowledge_base_edit(document_id):
     title = request.form.get('title', '').strip()
     category = request.form.get('category', '').strip()
     document_type = request.form.get('document_type', '').strip()
-    tax_type = request.form.get('tax_type', '').strip()
+    tax_type = request.form.get('tax_type', '').strip() or 'General'
     authority = request.form.get('issuing_authority', '').strip()
     description = request.form.get('description', '').strip()
     effective_date = request.form.get('effective_date', '').strip() or None
@@ -506,6 +503,16 @@ def knowledge_base_edit(document_id):
         c.close()
         flash(
             'Title, knowledge category and document type are required.',
+            'error'
+        )
+        return redirect(
+            url_for('knowledge_base_edit', document_id=document_id)
+        )
+
+    if not change_summary:
+        c.close()
+        flash(
+            'Please provide an amendment/change summary before saving.',
             'error'
         )
         return redirect(
@@ -524,75 +531,54 @@ def knowledge_base_edit(document_id):
 
     next_version = int(doc['current_version']) + 1
     document_ref = doc['document_ref']
-
     target = UPLOAD / 'knowledge_base'
     target.mkdir(parents=True, exist_ok=True)
-
-    if file and file.filename:
-        safe_original = secure_filename(file.filename)
-        if not safe_original:
-            c.close()
-            flash('The selected filename is not valid.', 'error')
-            return redirect(
-                url_for('knowledge_base_edit', document_id=document_id)
-            )
-
-        stored_filename = f'{document_ref}_v{next_version}_{safe_original}'
-        new_file_path = target / stored_filename
-        file.save(new_file_path)
-        original_filename = safe_original
-        mime_type = file.mimetype
-    else:
-        source_path = Path(current['file_path'])
-
-        if not source_path.exists():
-            c.close()
-            flash(
-                'The current Knowledge Base file could not be found. '
-                'Please upload the amended document.',
-                'error'
-            )
-            return redirect(
-                url_for('knowledge_base_edit', document_id=document_id)
-            )
-
-        original_filename = current['original_filename']
-        ext = kb_ext(original_filename)
-        stored_filename = (
-            f'{document_ref}_v{next_version}_amended.{ext}'
-            if ext else
-            f'{document_ref}_v{next_version}_amended'
-        )
-        new_file_path = target / stored_filename
-        shutil.copy2(source_path, new_file_path)
-        mime_type = current['mime_type']
+    new_file_path = None
 
     try:
+        if file and file.filename:
+            safe_original = secure_filename(file.filename)
+            if not safe_original:
+                raise ValueError('The selected filename is not valid.')
+
+            stored_filename = f'{document_ref}_v{next_version}_{safe_original}'
+            new_file_path = target / stored_filename
+            file.save(new_file_path)
+            original_filename = safe_original
+            mime_type = file.mimetype or current['mime_type']
+        else:
+            source_path = Path(current['file_path'])
+            if not source_path.exists():
+                raise FileNotFoundError(
+                    'The current Knowledge Base file could not be found. '
+                    'Please upload the amended document.'
+                )
+
+            original_filename = current['original_filename']
+            ext = kb_ext(original_filename)
+            stored_filename = (
+                f'{document_ref}_v{next_version}_amended.{ext}'
+                if ext else
+                f'{document_ref}_v{next_version}_amended'
+            )
+            new_file_path = target / stored_filename
+
+            # Copy the old file into a NEW version file. The old file is never overwritten.
+            new_file_path.write_bytes(source_path.read_bytes())
+            mime_type = current['mime_type']
+
         c.execute(
-            '''
-            UPDATE knowledge_document_versions
-            SET version_status='Superseded'
-            WHERE document_id=? AND version_number=?
-            ''',
+            "UPDATE knowledge_document_versions SET version_status='Superseded' "
+            "WHERE document_id=? AND version_number=?",
             (document_id, doc['current_version'])
         )
 
         c.execute(
             '''
             INSERT INTO knowledge_document_versions
-            (
-                document_id,
-                version_number,
-                original_filename,
-                stored_filename,
-                mime_type,
-                size_bytes,
-                file_path,
-                uploaded_by,
-                uploaded_at,
-                version_status,
-                change_summary
-            )
+            (document_id, version_number, original_filename, stored_filename,
+             mime_type, size_bytes, file_path, uploaded_by, uploaded_at,
+             version_status, change_summary)
             VALUES(?,?,?,?,?,?,?,?,?,'Draft',?)
             ''',
             (
@@ -605,25 +591,16 @@ def knowledge_base_edit(document_id):
                 str(new_file_path),
                 email(),
                 now(),
-                change_summary or f'Reviewer amendment to version {doc["current_version"]}.'
+                change_summary
             )
         )
 
         c.execute(
             '''
             UPDATE knowledge_documents
-            SET
-                title=?,
-                category=?,
-                document_type=?,
-                tax_type=?,
-                issuing_authority=?,
-                description=?,
-                effective_date=?,
-                expiry_date=?,
-                current_version=?,
-                status='Draft',
-                updated_at=?
+            SET title=?, category=?, document_type=?, tax_type=?,
+                issuing_authority=?, description=?, effective_date=?,
+                expiry_date=?, current_version=?, status='Draft', updated_at=?
             WHERE id=?
             ''',
             (
@@ -643,38 +620,34 @@ def knowledge_base_edit(document_id):
 
         c.commit()
 
-    except Exception:
+    except Exception as exc:
         c.rollback()
-
-        try:
-            new_file_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-
+        if new_file_path is not None:
+            try:
+                new_file_path.unlink(missing_ok=True)
+            except Exception:
+                pass
         c.close()
-        raise
+        flash(f'Knowledge Base amendment could not be saved: {exc}', 'error')
+        return redirect(
+            url_for('knowledge_base_edit', document_id=document_id)
+        )
 
     c.close()
 
     log(
-        'KNOWLEDGE_DOCUMENT_REVIEWER_AMENDED',
-        (
-            f'{document_ref}: reviewer amended v{doc["current_version"]} '
-            f'and created v{next_version} Draft; '
-            f'change={change_summary or "No change summary supplied"}'
-        )
+        'KNOWLEDGE_DOCUMENT_AMENDED',
+        f'{document_ref}: v{doc["current_version"]} amended to v{next_version}; '
+        f'new status Draft; change={change_summary}'
     )
 
     flash(
-        f'{document_ref} was amended by the reviewer and saved as '
-        f'version {next_version} (Draft). It must be reviewed and approved again.',
+        f'{document_ref} amended successfully. Version {next_version} is now Draft and requires human approval.',
         'success'
     )
-
     return redirect(
         url_for('knowledge_base_versions', document_id=document_id)
     )
-
 
 @app.route('/knowledge-base/<int:document_id>/review', methods=['POST'])
 @login_required
