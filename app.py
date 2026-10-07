@@ -71,7 +71,32 @@ def oauth_flow(state=None,verifier=None):
 def save_creds(e,creds):
     payload=json.dumps({'token':creds.token,'refresh_token':creds.refresh_token,'token_uri':creds.token_uri,'client_id':creds.client_id,'client_secret':creds.client_secret,'scopes':creds.scopes}); c=db(); c.execute("INSERT INTO oauth_credentials VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET token=excluded.token,updated_at=excluded.updated_at",(e,payload,now(),now())); c.execute("INSERT OR IGNORE INTO users(email,created_at) VALUES(?,?)",(e,now())); c.commit(); c.close()
 def get_creds(e):
-    c=db(); r=c.execute('SELECT token FROM oauth_credentials WHERE email=?',(e,)).fetchone(); c.close(); return Credentials.from_authorized_user_info(json.loads(r['token']),SCOPES) if r else None
+    if not e:
+        return None
+    c = db()
+    r = c.execute(
+        'SELECT token FROM oauth_credentials WHERE email=?',
+        (e,)
+    ).fetchone()
+    c.close()
+    if not r:
+        return None
+    try:
+        return Credentials.from_authorized_user_info(
+            json.loads(r['token']),
+            SCOPES
+        )
+    except Exception:
+        # Do not allow a corrupt/stale credential record to crash the
+        # communication workflow.
+        try:
+            c = db()
+            c.execute('DELETE FROM oauth_credentials WHERE email=?', (e,))
+            c.commit()
+            c.close()
+        except Exception:
+            pass
+        return None
 
 def metrics(c,tid): return {r['metric_name'].lower():r for r in c.execute('SELECT * FROM taxpayer_metrics WHERE taxpayer_id=?',(tid,)).fetchall()}
 def assess(tid):
@@ -109,8 +134,31 @@ def authorize():
 @app.route('/oauth2callback')
 def callback():
     try:
-        f=oauth_flow(session.get('oauth_state'),session.get('oauth_code_verifier')); f.fetch_token(authorization_response=request.url); creds=f.credentials; p=build('oauth2','v2',credentials=creds).userinfo().get().execute(); e=p['email']; save_creds(e,creds); session['email']=e; session.pop('oauth_state',None); session.pop('oauth_code_verifier',None); log('LOGIN','Google OAuth login successful',actor=e); return redirect(url_for('tasks'))
-    except Exception as ex: return render_template('error.html',message=str(ex)),500
+        state = session.get('oauth_state')
+        verifier = session.get('oauth_code_verifier')
+        f = oauth_flow(state, verifier)
+        f.fetch_token(authorization_response=request.url)
+        creds = f.credentials
+        p = build('oauth2', 'v2', credentials=creds).userinfo().get().execute()
+        e = p['email']
+        save_creds(e, creds)
+        session['email'] = e
+        session.pop('oauth_state', None)
+        session.pop('oauth_code_verifier', None)
+
+        # If Gmail authorization was requested while sending a communication,
+        # continue that send automatically after OAuth succeeds.
+        pending_mid = session.pop('pending_send_mid', None)
+        if pending_mid:
+            log('GMAIL_REAUTHORIZED', 'Google/Gmail authorization completed; resuming pending communication send.', actor=e)
+            return redirect(url_for('send_comm', mid=pending_mid))
+
+        log('LOGIN', 'Google OAuth login successful', actor=e)
+        return redirect(url_for('tasks'))
+    except Exception as ex:
+        session.pop('oauth_state', None)
+        session.pop('oauth_code_verifier', None)
+        return render_template('error.html', message='Google authorization failed: ' + str(ex)), 500
 @app.route('/logout')
 @login_required
 def logout(): session.clear(); return redirect(url_for('login'))
@@ -232,7 +280,8 @@ def case_communication(cid):
             c.close(); flash('The selected finding is no longer Human Validated and cannot be communicated.','error'); return redirect(url_for('case_communication',cid=cid))
         recipient=request.form['recipient'].strip(); subject=request.form['subject'].strip(); body=request.form['body'].strip(); approved=request.form.get('approve_send')=='1'; draft=ai_draft(f)
         c.execute('INSERT INTO communications(case_id,finding_id,recipient,subject,ai_draft,human_body,status,created_at) VALUES(?,?,?,?,?,?,?,?)',(cid,fid,recipient,subject,draft,body,'Approved' if approved else 'Draft',now())); mid=c.execute('SELECT last_insert_rowid()').fetchone()[0]; c.commit(); c.close()
-        if approved: return send_comm(mid)
+        if approved:
+            return redirect(url_for('send_comm', mid=mid))
         flash('Draft saved. Human approval is still required before sending.','success'); return redirect(url_for('case_communication',cid=cid,finding_id=fid))
     original_ai_draft=ai_draft(f) if f else ''
     c.close(); return render_template(
@@ -245,14 +294,129 @@ def case_communication(cid):
         subject='Virtual Tax Auditor Phase 3 Test Communication',
         body=original_ai_draft
     )
+@app.route('/send-communication/<int:mid>')
+@login_required
 def send_comm(mid):
-    c=db(); x=c.execute('SELECT c.*,ac.case_ref FROM communications c JOIN audit_cases ac ON ac.id=c.case_id WHERE c.id=?',(mid,)).fetchone(); c.close()
+    c = db()
+    x = c.execute(
+        'SELECT c.*,ac.case_ref FROM communications c '
+        'JOIN audit_cases ac ON ac.id=c.case_id WHERE c.id=?',
+        (mid,)
+    ).fetchone()
+    c.close()
+
+    if not x:
+        abort(404)
+
+    # Only an explicitly approved communication can be transmitted.
+    if x['status'] not in ('Approved', 'Sending'):
+        flash('This communication has not been approved for sending.', 'error')
+        return redirect(url_for('case_communication', cid=x['case_id'], finding_id=x['finding_id']))
+
     try:
-        cr=get_creds(email());
-        if cr.expired and cr.refresh_token: cr.refresh(Request()); save_creds(email(),cr)
-        service=build('gmail','v1',credentials=cr); msg=MIMEText(x['human_body'],'plain','utf-8'); msg['to']=x['recipient']; msg['subject']=x['subject']; raw=base64.urlsafe_b64encode(msg.as_bytes()).decode(); sent=service.users().messages().send(userId='me',body={'raw':raw}).execute(); gid=sent.get('id','')
-        c=db(); c.execute("UPDATE communications SET status='Sent',approved_by=?,approved_at=?,sent_at=?,gmail_message_id=? WHERE id=?",(email(),now(),now(),gid,mid)); c.execute("UPDATE audit_cases SET status='Communication Sent',updated_at=? WHERE id=?",(now(),x['case_id'])); c.commit(); c.close(); log('EMAIL_SENT',f'Gmail message {gid} sent to {x["recipient"]}',x['case_ref']); flash(f'Email sent successfully to {x["recipient"]}. Gmail message ID: {gid}', 'success'); return redirect(url_for('response',cid=x['case_id']))
-    except Exception as e: log('EMAIL_SEND_FAILED',str(e),x['case_ref']); return render_template('error.html',message='Email send failed: '+str(e)),500
+        cr = get_creds(email())
+
+        # The local SQLite database may not contain the Gmail credential after
+        # a Render restart/redeployment. In that case, request Google
+        # authorization again rather than failing with a blank page.
+        if not cr:
+            session['pending_send_mid'] = mid
+            flash('Gmail authorization is required. Please authorize Google again to send this communication.', 'error')
+            return redirect(url_for('authorize'))
+
+        # Refresh an expired credential when a refresh token is available.
+        if cr.expired:
+            if not cr.refresh_token:
+                session['pending_send_mid'] = mid
+                flash('Your Gmail authorization has expired. Please authorize Google again.', 'error')
+                return redirect(url_for('authorize'))
+
+            try:
+                cr.refresh(Request())
+                save_creds(email(), cr)
+            except Exception:
+                # Refresh token is no longer usable. Re-authorize instead of
+                # returning a blank/error page.
+                session['pending_send_mid'] = mid
+                c = db()
+                c.execute('DELETE FROM oauth_credentials WHERE email=?', (email(),))
+                c.commit()
+                c.close()
+                flash('Your Gmail authorization could not be refreshed. Please authorize Google again.', 'error')
+                return redirect(url_for('authorize'))
+
+        # Mark as Sending so the audit trail records that transmission started.
+        c = db()
+        c.execute("UPDATE communications SET status='Sending' WHERE id=?", (mid,))
+        c.commit()
+        c.close()
+
+        service = build('gmail', 'v1', credentials=cr)
+        msg = MIMEText(x['human_body'], 'plain', 'utf-8')
+        msg['to'] = x['recipient']
+        msg['subject'] = x['subject']
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+        sent = service.users().messages().send(
+            userId='me',
+            body={'raw': raw}
+        ).execute()
+
+        gid = sent.get('id', '')
+
+        c = db()
+        c.execute(
+            "UPDATE communications SET status='Sent',approved_by=?,approved_at=?,sent_at=?,gmail_message_id=? WHERE id=?",
+            (email(), now(), now(), gid, mid)
+        )
+        c.execute(
+            "UPDATE audit_cases SET status='Communication Sent',updated_at=? WHERE id=?",
+            (now(), x['case_id'])
+        )
+        c.commit()
+        c.close()
+
+        log(
+            'EMAIL_SENT',
+            f'Gmail message {gid} sent to {x["recipient"]}',
+            x['case_ref']
+        )
+        flash(
+            f'Email sent successfully to {x["recipient"]}. Gmail message ID: {gid}',
+            'success'
+        )
+        return redirect(url_for('response', cid=x['case_id']))
+
+    except Exception as e:
+        # Restore the communication to Approved so the human can retry after
+        # correcting the Gmail problem. Do not silently lose the approved draft.
+        try:
+            c = db()
+            c.execute(
+                "UPDATE communications SET status='Approved' WHERE id=? AND status='Sending'",
+                (mid,)
+            )
+            c.commit()
+            c.close()
+        except Exception:
+            pass
+
+        log(
+            'EMAIL_SEND_FAILED',
+            f'Gmail send failed: {type(e).__name__}: {str(e)}',
+            x['case_ref']
+        )
+
+        return render_template(
+            'error.html',
+            message=(
+                'Gmail send failed. The approved communication was NOT sent. '
+                'No tax workflow data was deleted.\n\n'
+                f'Google/Gmail error: {type(e).__name__}: {str(e)}'
+            )
+        ), 500
+
+
 @app.route('/communication')
 @login_required
 def communication():
