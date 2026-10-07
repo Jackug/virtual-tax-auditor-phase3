@@ -28,6 +28,14 @@
 
 <h3 class="section-title">Knowledge & Risk Configuration</h3>
 
+{% if counts.knowledge_pending > 0 %}
+<div class="notice" style="border-left:6px solid #c47f00; margin-bottom:12px;">
+  <b>Action required: {{ counts.knowledge_pending }} Knowledge Base approval task{% if counts.knowledge_pending != 1 %}s{% endif %} pending.</b>
+  <div class="muted">Draft knowledge documents cannot be treated as approved VTA knowledge until a human reviewer makes a decision.</div>
+  <div style="margin-top:8px"><a href="{{ url_for('knowledge_approval_queue') }}"><b>Open Knowledge Approval Tasks →</b></a></div>
+</div>
+{% endif %}
+
 <a class="task" href="{{ url_for('knowledge_base') }}">
   <div>
     <b>Knowledge Base</b>
