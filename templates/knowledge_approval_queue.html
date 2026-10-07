@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="notice">
+  <b>Knowledge Base Approval Queue</b>
+
+  <div class="muted">
+    These Knowledge Base document versions are currently Draft and require
+    human review before they can become approved knowledge for the VTA.
+  </div>
+</div>
+
+
+<h3 class="section-title">Pending Knowledge Approval Tasks</h3>
+
+
+{% if pending %}
+
+  {% for item in pending %}
+
+  <div class="task">
+
+    <div>
+
+      <b>
+        {{ item['title'] }} — Version {{ item['version_number'] }}
+      </b>
+
+      <div class="muted">
+        Reference: {{ item['document_ref'] }}
+      </div>
+
+      <div class="muted">
+        Category: {{ item['category'] }}
+        |
+        Document Type: {{ item['document_type'] }}
+        |
+        Tax Type: {{ item['tax_type'] or 'General' }}
+      </div>
+
+      <div class="muted">
+        Uploaded by: {{ item['uploaded_by'] }}
+        |
+        Uploaded: {{ item['uploaded_at'] }}
+      </div>
+
+      {% if item['change_summary'] %}
+
+      <div class="muted">
+        Change Summary: {{ item['change_summary'] }}
+      </div>
+
+      {% endif %}
+
+    </div>
+
+
+    <div>
+
+      <a class="button"
+         href="{{ url_for('knowledge_base_versions', document_id=item['id']) }}">
+
+        Review →
+
+      </a>
+
+    </div>
+
+  </div>
+
+  {% endfor %}
+
+
+{% else %}
+
+  <div class="task" style="opacity:.65">
+
+    <div>
+
+      <b>No pending Knowledge Base approvals</b>
+
+      <div class="muted">
+        There are currently no Draft Knowledge Base versions requiring review.
+      </div>
+
+    </div>
+
+    <div class="arrow">
+      ✓
+    </div>
+
+  </div>
+
+{% endif %}
+
+
+<div class="notice">
+
+  <b>Governance rule:</b>
+
+  Draft knowledge is not treated as approved authoritative knowledge.
+  A human reviewer must approve the specific version before it can be used
+  as approved VTA knowledge.
+
+</div>
+
+
+<a class="task" href="{{ url_for('knowledge_base') }}">
+
+  <div>
+
+    <b>← Back to Knowledge Base</b>
+
+    <div class="muted">
+      Return to the Knowledge Base document registry.
+    </div>
+
+  </div>
+
+  <div class="arrow">
+    →
+  </div>
+
+</a>
+
+{% endblock %}
