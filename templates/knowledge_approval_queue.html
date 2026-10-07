@@ -2,370 +2,492 @@
 
 {% block content %}
 
-<div class="notice">
-  <b>Knowledge Base Approval Queue</b>
+<style>
+    .approval-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        margin-bottom: 25px;
+        flex-wrap: wrap;
+    }
 
-  <div class="muted">
-    Review the Draft Knowledge Base versions below. A human reviewer must
-    approve, reject, or edit each version before it can become approved
-    authoritative knowledge for the Virtual Tax Auditor.
-  </div>
+    .approval-header h1 {
+        margin: 0 0 8px 0;
+    }
+
+    .approval-header p {
+        margin: 0;
+        color: #666;
+    }
+
+    .approval-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 25px;
+        padding: 12px;
+        background: #f5f6f8;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .approval-nav a {
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        color: #333;
+        background: white;
+        border: 1px solid #ddd;
+        font-size: 13px;
+    }
+
+    .approval-card {
+        background: white;
+        border: 1px solid #ddd;
+        border-left: 6px solid #c58a00;
+        border-radius: 8px;
+        padding: 22px;
+        margin-bottom: 20px;
+    }
+
+    .approval-card h2 {
+        margin-top: 0;
+    }
+
+    .approval-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(250px, 1fr));
+        gap: 12px 25px;
+    }
+
+    .approval-field {
+        padding: 7px 0;
+    }
+
+    .approval-field strong {
+        display: inline-block;
+        min-width: 150px;
+    }
+
+    .approval-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+        padding-top: 18px;
+        border-top: 1px solid #ddd;
+    }
+
+    .approval-btn {
+        display: inline-block;
+        padding: 10px 16px;
+        border-radius: 6px;
+        text-decoration: none;
+        border: 1px solid #ccc;
+        background: white;
+        color: #222;
+        cursor: pointer;
+    }
+
+    .approval-btn-primary {
+        background: #1f4e79;
+        color: white;
+        border-color: #1f4e79;
+    }
+
+    .approval-btn-success {
+        background: #217346;
+        color: white;
+        border-color: #217346;
+    }
+
+    .approval-empty {
+        padding: 40px;
+        text-align: center;
+        border: 1px dashed #ccc;
+        border-radius: 8px;
+        color: #777;
+        background: white;
+    }
+
+    .approval-notice {
+        margin-top: 25px;
+        padding: 16px;
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .muted {
+        color: #777;
+        font-size: 13px;
+    }
+
+    .status-draft {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 20px;
+        background: #fff3cd;
+        color: #856404;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    @media (max-width: 800px) {
+        .approval-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .approval-field strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+    }
+</style>
+
+
+<!-- =========================================================
+     NAVIGATION
+     ========================================================= -->
+
+<div class="approval-nav">
+
+    <a href="{{ url_for('tasks') }}">
+        Tasks
+    </a>
+
+    <a href="{{ url_for('data_sources') }}">
+        Data Sources
+    </a>
+
+    <a href="{{ url_for('risk_assessment') }}">
+        Risk Assessment
+    </a>
+
+    <a href="{{ url_for('risk_universe') }}">
+        Risk Universe
+    </a>
+
+    <a href="{{ url_for('cases') }}">
+        Cases
+    </a>
+
+    <a href="{{ url_for('findings_queue') }}">
+        Findings
+    </a>
+
+    <a href="{{ url_for('knowledge_base') }}">
+        Knowledge Base
+    </a>
+
+    <a href="{{ url_for('knowledge_approval_queue') }}">
+        Approval Queue
+    </a>
+
+    <a href="{{ url_for('audit_log') }}">
+        Audit Trail
+    </a>
+
+    <a href="{{ url_for('logout') }}">
+        Log out
+    </a>
+
 </div>
 
 
-<h3 class="section-title">Pending Knowledge Approval Tasks</h3>
+<!-- =========================================================
+     HEADER
+     ========================================================= -->
 
+<div class="approval-header">
+
+    <div>
+
+        <h1>
+            Knowledge Base Approval Queue
+        </h1>
+
+        <p>
+            Review Draft Knowledge Base versions before they become
+            approved authoritative knowledge for the Virtual Tax Auditor.
+        </p>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     PENDING APPROVALS
+     ========================================================= -->
 
 {% if pending %}
 
-  {% for item in pending %}
+    {% for item in pending %}
 
-  <div class="card"
-       style="margin-bottom:20px; border-left:6px solid #c0392b;">
+    <div class="approval-card">
 
-    <div>
-
-      <h3 style="margin-top:0;">
-        {{ item['title'] }}
-      </h3>
+        <h2>
+            {{ item['title'] }}
+        </h2>
 
 
-      <div class="muted" style="margin-bottom:15px;">
+        <div class="muted" style="margin-bottom:18px;">
 
-        <b>Reference:</b>
-        {{ item['document_ref'] }}
+            Reference:
+            <strong>{{ item['document_ref'] }}</strong>
 
-        &nbsp; | &nbsp;
+            &nbsp; | &nbsp;
 
-        <b>Version:</b>
-        v{{ item['version_number'] }}
+            Version:
+            <strong>v{{ item['version_number'] }}</strong>
 
-        &nbsp; | &nbsp;
+            &nbsp; | &nbsp;
 
-        <b>Status:</b>
-        {{ item['version_status'] }}
+            Status:
+            <span class="status-draft">
+                {{ item['version_status'] }}
+            </span>
 
-      </div>
-
-
-      <p>
-        <b>Knowledge Category:</b>
-        {{ item['category'] }}
-      </p>
+        </div>
 
 
-      <p>
-        <b>Document Type:</b>
-        {{ item['document_type'] }}
-      </p>
+        <div class="approval-grid">
+
+            <div class="approval-field">
+
+                <strong>
+                    Knowledge Category:
+                </strong>
+
+                {{ item['category'] }}
+
+            </div>
 
 
-      <p>
-        <b>Tax Type:</b>
-        {{ item['tax_type'] or 'General' }}
-      </p>
+            <div class="approval-field">
+
+                <strong>
+                    Document Type:
+                </strong>
+
+                {{ item['document_type'] }}
+
+            </div>
 
 
-      <p>
-        <b>Issuing Authority / Source:</b>
-        {{ item['issuing_authority'] or 'Not specified' }}
-      </p>
+            <div class="approval-field">
+
+                <strong>
+                    Tax Type:
+                </strong>
+
+                {{ item['tax_type'] or 'General' }}
+
+            </div>
 
 
-      <p>
-        <b>Effective Date:</b>
-        {{ item['effective_date'] or 'Not specified' }}
-      </p>
+            <div class="approval-field">
+
+                <strong>
+                    Issuing Authority:
+                </strong>
+
+                {{ item['issuing_authority'] or 'Not specified' }}
+
+            </div>
 
 
-      <p>
-        <b>Expiry / End Date:</b>
-        {{ item['expiry_date'] or 'Not specified' }}
-      </p>
+            <div class="approval-field">
+
+                <strong>
+                    Effective Date:
+                </strong>
+
+                {{ item['effective_date'] or 'Not specified' }}
+
+            </div>
 
 
-      <p>
-        <b>Description:</b>
-        {{ item['description'] or 'Not specified' }}
-      </p>
+            <div class="approval-field">
+
+                <strong>
+                    Expiry Date:
+                </strong>
+
+                {{ item['expiry_date'] or 'Not specified' }}
+
+            </div>
 
 
-      <p>
-        <b>Original File:</b>
-        {{ item['original_filename'] }}
-      </p>
+            <div class="approval-field">
+
+                <strong>
+                    Uploaded By:
+                </strong>
+
+                {{ item['uploaded_by'] }}
+
+            </div>
 
 
-      <p>
-        <b>Uploaded By:</b>
-        {{ item['uploaded_by'] }}
+            <div class="approval-field">
 
-        &nbsp; | &nbsp;
+                <strong>
+                    Uploaded At:
+                </strong>
 
-        <b>Uploaded At:</b>
-        {{ item['uploaded_at'] }}
-      </p>
+                {{ item['uploaded_at'] }}
 
-
-      {% if item['change_summary'] %}
-
-      <p>
-        <b>Change Summary:</b>
-        {{ item['change_summary'] }}
-      </p>
-
-      {% endif %}
+            </div>
 
 
-      <p>
+            <div class="approval-field">
 
-        <a href="{{ url_for(
-            'knowledge_base_version_download',
-            document_id=item['id'],
-            version_number=item['version_number']
-        ) }}">
-          Download document for review
-        </a>
+                <strong>
+                    Original File:
+                </strong>
 
-        &nbsp; | &nbsp;
+                {{ item['original_filename'] }}
 
-        <a href="{{ url_for(
-            'knowledge_base_versions',
-            document_id=item['id']
-        ) }}">
-          View version history
-        </a>
+            </div>
 
-      </p>
+        </div>
+
+
+        {% if item['description'] %}
+
+        <div style="margin-top:18px;">
+
+            <strong>
+                Description
+            </strong>
+
+            <p>
+                {{ item['description'] }}
+            </p>
+
+        </div>
+
+        {% endif %}
+
+
+        {% if item['change_summary'] %}
+
+        <div style="margin-top:18px;">
+
+            <strong>
+                Change Summary
+            </strong>
+
+            <p>
+                {{ item['change_summary'] }}
+            </p>
+
+        </div>
+
+        {% endif %}
+
+
+        <!-- =================================================
+             REVIEW ACTIONS
+             ================================================= -->
+
+        <div class="approval-actions">
+
+            <a
+                class="approval-btn"
+                href="{{ url_for(
+                    'knowledge_base_version_download',
+                    document_id=item['id'],
+                    version_number=item['version_number']
+                ) }}"
+            >
+                Download Document
+            </a>
+
+
+            <a
+                class="approval-btn"
+                href="{{ url_for(
+                    'knowledge_base_versions',
+                    document_id=item['id']
+                ) }}"
+            >
+                View Version History
+            </a>
+
+
+            <a
+                class="approval-btn approval-btn-primary"
+                href="{{ url_for(
+                    'knowledge_base_versions',
+                    document_id=item['id']
+                ) }}"
+            >
+                Review Version →
+            </a>
+
+        </div>
 
     </div>
 
-
-    <hr style="margin:20px 0;">
-
-
-    <form method="post"
-          action="{{ url_for(
-              'knowledge_base_review',
-              document_id=item['id']
-          ) }}">
-
-
-      <label for="comments_{{ item['id'] }}">
-
-        <b>
-          Reviewer Comments / Decision Rationale *
-        </b>
-
-      </label>
-
-
-      <textarea
-        id="comments_{{ item['id'] }}"
-        name="comments"
-        rows="5"
-        required
-        style="
-          width:100%;
-          box-sizing:border-box;
-          margin-top:8px;
-        "
-        placeholder="Enter the reason for approving or rejecting this Knowledge Base version."
-      ></textarea>
-
-
-      <div
-        style="
-          margin-top:15px;
-          display:flex;
-          gap:10px;
-          flex-wrap:wrap;
-          align-items:center;
-        "
-      >
-
-
-        <!-- EDIT BEFORE APPROVAL -->
-
-        <a
-          href="{{ url_for(
-              'knowledge_base_edit',
-              document_id=item['id']
-          ) }}"
-          style="
-            display:inline-block;
-            padding:8px 14px;
-            text-decoration:none;
-            border:1px solid #777;
-            border-radius:4px;
-            background:#f4f4f4;
-            color:#111;
-          "
-        >
-          ✎ Edit Before Approval
-        </a>
-
-
-        <!-- APPROVE -->
-
-        <button
-          type="submit"
-          name="decision"
-          value="Approve"
-          onclick="
-            return confirm(
-              'Approve this Knowledge Base version?'
-            );
-          "
-        >
-          ✓ Approve Version
-        </button>
-
-
-        <!-- REJECT -->
-
-        <button
-          type="submit"
-          name="decision"
-          value="Reject"
-          onclick="
-            return confirm(
-              'Reject this Knowledge Base version?'
-            );
-          "
-        >
-          ✕ Reject Version
-        </button>
-
-
-      </div>
-
-
-    </form>
-
-
-    <div
-      class="muted"
-      style="
-        margin-top:15px;
-        padding:12px;
-        border-left:3px solid #777;
-      "
-    >
-
-      <b>Edit Before Approval:</b>
-
-      If the reviewer identifies an error, omission, outdated information,
-      incorrect metadata, or another amendment that should be made before
-      approval, select <b>Edit Before Approval</b>.
-
-      <br><br>
-
-      The original version will not be overwritten.
-
-      <br><br>
-
-      The amendment will be registered as a new Draft version and must go
-      through human approval again.
-
-    </div>
-
-
-  </div>
-
-  {% endfor %}
-
+    {% endfor %}
 
 {% else %}
 
+    <div class="approval-empty">
 
-  <div class="task" style="opacity:.65">
+        <h2>
+            No Pending Knowledge Approvals
+        </h2>
 
-    <div>
+        <p>
+            There are currently no Draft Knowledge Base versions
+            waiting for human review.
+        </p>
 
-      <b>
-        No pending Knowledge Base approvals
-      </b>
-
-      <div class="muted">
-        There are currently no Draft Knowledge Base versions requiring review.
-      </div>
+        <p>
+            <a
+                href="{{ url_for('knowledge_base') }}"
+                class="approval-btn approval-btn-primary"
+            >
+                Go to Knowledge Base
+            </a>
+        </p>
 
     </div>
-
-    <div class="arrow">
-      ✓
-    </div>
-
-  </div>
-
 
 {% endif %}
 
 
-<div class="notice">
+<!-- =========================================================
+     GOVERNANCE RULE
+     ========================================================= -->
 
-  <b>Governance rule:</b>
+<div class="approval-notice">
 
-  Draft knowledge is not treated as approved authoritative knowledge.
+    <h3>
+        Governance Rule
+    </h3>
 
-  Only a human-approved version may be treated as approved VTA Knowledge Base
-  content.
+    <p>
+        Draft knowledge is not treated as approved authoritative
+        knowledge by the Virtual Tax Auditor.
+    </p>
 
-  Rejected versions remain in the audit history and cannot be used as approved
-  knowledge.
+    <p>
+        The reviewer must examine the specific version and make
+        a human decision before the version can be used as
+        approved knowledge.
+    </p>
 
-  Edited versions create a new Draft version and must go through the approval
-  process again.
-
-</div>
-
-
-<div class="notice">
-
-  <b>Version control:</b>
-
-  <br><br>
-
-  Draft Version
-  →
-  Edit Before Approval
-  →
-  New Draft Version
-  →
-  Human Review
-  →
-  Approve / Reject
-
-  <br><br>
-
-  Previous versions remain retained in the Knowledge Base history and are not
-  silently overwritten or deleted.
+    <p>
+        Previous versions remain retained for auditability and
+        version history.
+    </p>
 
 </div>
-
-
-<a
-  class="task"
-  href="{{ url_for('knowledge_base') }}"
->
-
-  <div>
-
-    <b>
-      ← Back to Knowledge Base
-    </b>
-
-    <div class="muted">
-      Return to the Knowledge Base document registry.
-    </div>
-
-  </div>
-
-  <div class="arrow">
-    →
-  </div>
-
-</a>
 
 {% endblock %}
