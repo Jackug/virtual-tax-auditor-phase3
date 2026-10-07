@@ -251,12 +251,17 @@ def send_comm(mid):
         cr=get_creds(email());
         if cr.expired and cr.refresh_token: cr.refresh(Request()); save_creds(email(),cr)
         service=build('gmail','v1',credentials=cr); msg=MIMEText(x['human_body'],'plain','utf-8'); msg['to']=x['recipient']; msg['subject']=x['subject']; raw=base64.urlsafe_b64encode(msg.as_bytes()).decode(); sent=service.users().messages().send(userId='me',body={'raw':raw}).execute(); gid=sent.get('id','')
-        c=db(); c.execute("UPDATE communications SET status='Sent',approved_by=?,approved_at=?,sent_at=?,gmail_message_id=? WHERE id=?",(email(),now(),now(),gid,mid)); c.execute("UPDATE audit_cases SET status='Communication Sent',updated_at=? WHERE id=?",(now(),x['case_id'])); c.commit(); c.close(); log('EMAIL_SENT',f'Gmail message {gid} sent to {x["recipient"]}',x['case_ref']); return render_template('sent.html',recipient=x['recipient'],subject=x['subject'],message_id=gid,case_id=x['case_id'],sender=email())
+        c=db(); c.execute("UPDATE communications SET status='Sent',approved_by=?,approved_at=?,sent_at=?,gmail_message_id=? WHERE id=?",(email(),now(),now(),gid,mid)); c.execute("UPDATE audit_cases SET status='Communication Sent',updated_at=? WHERE id=?",(now(),x['case_id'])); c.commit(); c.close(); log('EMAIL_SENT',f'Gmail message {gid} sent to {x["recipient"]}',x['case_ref']); flash(f'Email sent successfully to {x["recipient"]}. Gmail message ID: {gid}', 'success'); return redirect(url_for('response',cid=x['case_id']))
     except Exception as e: log('EMAIL_SEND_FAILED',str(e),x['case_ref']); return render_template('error.html',message='Email send failed: '+str(e)),500
 @app.route('/communication')
 @login_required
 def communication():
-    c=db(); x=c.execute("SELECT id FROM audit_cases WHERE status='Finding Validation Completed' ORDER BY id DESC LIMIT 1").fetchone(); c.close(); return redirect(url_for('case_communication',cid=x['id'])) if x else redirect(url_for('tasks'))
+    c=db(); x=c.execute("SELECT id,status FROM audit_cases WHERE status IN ('Finding Validation Completed','Communication Sent') ORDER BY id DESC LIMIT 1").fetchone(); c.close()
+    if not x:
+        return redirect(url_for('tasks'))
+    if x['status'] == 'Communication Sent':
+        return redirect(url_for('response',cid=x['id']))
+    return redirect(url_for('case_communication',cid=x['id']))
 @app.route('/case/<int:cid>/response',methods=['GET','POST'])
 @login_required
 def response(cid):
