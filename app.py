@@ -1,4 +1,4 @@
-import os, json, sqlite3, base64, re
+import os, json, sqlite3, base64, re, csv, uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from functools import wraps
@@ -24,6 +24,16 @@ try:
     import pandas as pd
 except Exception:
     pd = None
+
+try:
+    from openpyxl import load_workbook
+except Exception:
+    load_workbook = None
+
+try:
+    import xlrd
+except Exception:
+    xlrd = None
 
 BASE=Path(__file__).resolve().parent
 DB=Path(os.getenv('DB_PATH', BASE/'vta_phase3.sqlite3'))
@@ -142,6 +152,20 @@ CREATE TABLE IF NOT EXISTS knowledge_retrievals(
     FOREIGN KEY(analysis_id) REFERENCES audit_analyses(id) ON DELETE SET NULL,
     FOREIGN KEY(chunk_id) REFERENCES knowledge_chunks(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS knowledge_chunk_staging(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_token TEXT NOT NULL,
+    document_id INTEGER NOT NULL,
+    version_number INTEGER NOT NULL,
+    chunk_number INTEGER NOT NULL,
+    page_number INTEGER,
+    source_filename TEXT NOT NULL,
+    text_content TEXT NOT NULL,
+    character_count INTEGER NOT NULL,
+    extracted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kb_staging_batch
+    ON knowledge_chunk_staging(batch_token);
 '''); seed(c); c.commit(); c.close()
 
 def seed(c):
@@ -231,136 +255,316 @@ def chunk_knowledge_text(text, chunk_size=1800, overlap=250):
     return chunks
 
 
-def extract_knowledge_document(file_path, original_filename):
-    """Return [(page_or_sheet_number, text), ...] for an approved KB file."""
+def iter_knowledge_document(file_path, original_filename):
+    'Yield (page_or_sheet_number, text) incrementally without building the document in RAM.'
     path = Path(file_path)
     ext = path.suffix.lower().lstrip('.')
-    pages = []
 
     if ext == 'pdf':
         if pypdf is None:
-            raise RuntimeError('PDF extraction requires the pypdf package. Add pypdf to requirements.txt and redeploy.')
+            raise RuntimeError('PDF extraction requires pypdf. Add pypdf to requirements.txt and redeploy.')
         reader = pypdf.PdfReader(str(path))
         for number, page in enumerate(reader.pages, start=1):
             text = normalize_kb_text(page.extract_text() or '')
             if text:
-                pages.append((number, text))
-        return pages
+                yield number, text
+        return
 
     if ext == 'docx':
         if DocxDocument is None:
-            raise RuntimeError('DOCX extraction requires the python-docx package. Add python-docx to requirements.txt and redeploy.')
+            raise RuntimeError('DOCX extraction requires python-docx. Add python-docx to requirements.txt and redeploy.')
         doc = DocxDocument(str(path))
-        paragraphs = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
-        table_lines = []
+        buffer = []
+        buffer_chars = 0
+        logical_page = 1
+
+        def flush_buffer():
+            nonlocal buffer, buffer_chars, logical_page
+            if not buffer:
+                return None
+            text = normalize_kb_text('\n'.join(buffer))
+            buffer = []
+            buffer_chars = 0
+            if not text:
+                return None
+            result = (logical_page, text)
+            logical_page += 1
+            return result
+
+        for paragraph in doc.paragraphs:
+            value = (paragraph.text or '').strip()
+            if not value:
+                continue
+            buffer.append(value)
+            buffer_chars += len(value)
+            if buffer_chars >= 12000:
+                result = flush_buffer()
+                if result:
+                    yield result
+
         for table in doc.tables:
             for row in table.rows:
-                values = [cell.text.strip() for cell in row.cells]
+                values = [(cell.text or '').strip() for cell in row.cells]
                 values = [v for v in values if v]
-                if values:
-                    table_lines.append(' | '.join(values))
-        text = '\n'.join(paragraphs + table_lines)
-        if text.strip():
-            pages.append((1, normalize_kb_text(text)))
-        return pages
+                if not values:
+                    continue
+                line = ' | '.join(values)
+                buffer.append(line)
+                buffer_chars += len(line)
+                if buffer_chars >= 12000:
+                    result = flush_buffer()
+                    if result:
+                        yield result
+
+        result = flush_buffer()
+        if result:
+            yield result
+        return
 
     if ext == 'txt':
-        text = path.read_text(encoding='utf-8', errors='replace')
-        if text.strip():
-            pages.append((1, normalize_kb_text(text)))
-        return pages
+        logical_page = 1
+        buffer = []
+        chars = 0
+        with path.open('r', encoding='utf-8', errors='replace') as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                buffer.append(line)
+                chars += len(line)
+                if chars >= 12000:
+                    text = normalize_kb_text('\n'.join(buffer))
+                    if text:
+                        yield logical_page, text
+                        logical_page += 1
+                    buffer = []
+                    chars = 0
+        if buffer:
+            text = normalize_kb_text('\n'.join(buffer))
+            if text:
+                yield logical_page, text
+        return
 
     if ext == 'csv':
-        if pd is None:
-            raise RuntimeError('CSV extraction requires the pandas package. Add pandas to requirements.txt and redeploy.')
-        df = pd.read_csv(path, dtype=str, keep_default_na=False)
-        if not df.empty:
-            pages.append((1, normalize_kb_text(df.to_csv(index=False))))
-        return pages
+        logical_page = 1
+        buffer = []
+        chars = 0
+        with path.open('r', encoding='utf-8-sig', errors='replace', newline='') as fh:
+            reader = csv.reader(fh)
+            for row in reader:
+                values = [str(v).strip() for v in row if str(v).strip()]
+                if not values:
+                    continue
+                line = ' | '.join(values)
+                buffer.append(line)
+                chars += len(line)
+                if chars >= 12000:
+                    text = normalize_kb_text('\n'.join(buffer))
+                    if text:
+                        yield logical_page, text
+                        logical_page += 1
+                    buffer = []
+                    chars = 0
+        if buffer:
+            text = normalize_kb_text('\n'.join(buffer))
+            if text:
+                yield logical_page, text
+        return
 
-    if ext in ('xls', 'xlsx'):
-        if pd is None:
-            raise RuntimeError('Excel extraction requires the pandas package. Add pandas to requirements.txt and redeploy.')
-        sheets = pd.read_excel(path, sheet_name=None, dtype=str)
-        for number, (sheet_name, df) in enumerate(sheets.items(), start=1):
-            if df is None:
-                continue
-            table_text = 'Sheet: ' + str(sheet_name) + '\n' + df.fillna('').to_csv(index=False)
-            if table_text.strip():
-                pages.append((number, normalize_kb_text(table_text)))
-        return pages
+    if ext == 'xlsx':
+        if load_workbook is None:
+            raise RuntimeError('XLSX extraction requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
+        wb = load_workbook(filename=str(path), read_only=True, data_only=True)
+        try:
+            for number, ws in enumerate(wb.worksheets, start=1):
+                buffer = [f'Sheet: {ws.title}']
+                chars = len(buffer[0])
+                for row in ws.iter_rows(values_only=True):
+                    values = []
+                    for value in row:
+                        if value is None:
+                            continue
+                        value = str(value).strip()
+                        if value:
+                            values.append(value)
+                    if not values:
+                        continue
+                    line = ' | '.join(values)
+                    buffer.append(line)
+                    chars += len(line)
+                    if chars >= 12000:
+                        text = normalize_kb_text('\n'.join(buffer))
+                        if text:
+                            yield number, text
+                        buffer = [f'Sheet: {ws.title} (continued)']
+                        chars = len(buffer[0])
+                if len(buffer) > 1:
+                    text = normalize_kb_text('\n'.join(buffer))
+                    if text:
+                        yield number, text
+        finally:
+            wb.close()
+        return
+
+    if ext == 'xls':
+        if xlrd is None:
+            raise RuntimeError('XLS extraction requires xlrd. Add xlrd to requirements.txt and redeploy.')
+        book = xlrd.open_workbook(str(path), on_demand=True)
+        try:
+            for number, sheet in enumerate(book.sheets(), start=1):
+                buffer = [f'Sheet: {sheet.name}']
+                chars = len(buffer[0])
+                for row_index in range(sheet.nrows):
+                    values = []
+                    for col_index in range(sheet.ncols):
+                        value = sheet.cell_value(row_index, col_index)
+                        if value is None:
+                            continue
+                        value = str(value).strip()
+                        if value:
+                            values.append(value)
+                    if not values:
+                        continue
+                    line = ' | '.join(values)
+                    buffer.append(line)
+                    chars += len(line)
+                    if chars >= 12000:
+                        text = normalize_kb_text('\n'.join(buffer))
+                        if text:
+                            yield number, text
+                        buffer = [f'Sheet: {sheet.name} (continued)']
+                        chars = len(buffer[0])
+                if len(buffer) > 1:
+                    text = normalize_kb_text('\n'.join(buffer))
+                    if text:
+                        yield number, text
+        finally:
+            book.release_resources()
+        return
 
     if ext == 'doc':
-        raise RuntimeError('Legacy .doc files are accepted for registration but cannot be indexed automatically. Convert the document to .docx or PDF and upload a new version.')
+        raise RuntimeError('Legacy .doc files are accepted for registration but cannot be indexed automatically. Convert to .docx or PDF and upload a new version.')
 
     raise RuntimeError(f'Unsupported knowledge file type: {ext or "unknown"}')
 
 
-def index_knowledge_version(document_id, version_number):
-    """Extract and index one version. Only call this for an Approved version or immediately before approval."""
+def extract_knowledge_document(file_path, original_filename):
+    'Compatibility wrapper. New indexing code uses the streaming iterator.'
+    return list(iter_knowledge_document(file_path, original_filename))
+
+
+def index_knowledge_version(document_id, version_number, batch_size=50):
+    'Memory-safe KB indexing using streamed extraction and a staging table.'
     c = db()
-    v = c.execute("""SELECT * FROM knowledge_document_versions WHERE document_id=? AND version_number=?""",
-                  (document_id, version_number)).fetchone()
+    v = c.execute(
+        'SELECT * FROM knowledge_document_versions WHERE document_id=? AND version_number=?',
+        (document_id, version_number)
+    ).fetchone()
     if not v:
         c.close()
         raise ValueError('Knowledge document version not found.')
+
     file_path = Path(v['file_path'])
     if not file_path.exists():
         c.close()
         raise FileNotFoundError(f'Knowledge file is missing: {file_path}')
 
-    pages = extract_knowledge_document(file_path, v['original_filename'])
-    all_chunks = []
+    batch_token = uuid.uuid4().hex
+    extracted_at = now()
     chunk_no = 1
-    for page_number, page_text in pages:
-        for chunk in chunk_knowledge_text(page_text):
-            all_chunks.append((chunk_no, page_number, chunk))
-            chunk_no += 1
+    total = 0
+    pending = []
 
-    if not all_chunks:
+    try:
+        for page_number, page_text in iter_knowledge_document(file_path, v['original_filename']):
+            for chunk in chunk_knowledge_text(page_text):
+                pending.append((batch_token, document_id, version_number, chunk_no,
+                                page_number, v['original_filename'], chunk, len(chunk), extracted_at))
+                chunk_no += 1
+                total += 1
+
+                if len(pending) >= batch_size:
+                    c.executemany(
+                        '''INSERT INTO knowledge_chunk_staging
+                           (batch_token,document_id,version_number,chunk_number,page_number,
+                            source_filename,text_content,character_count,extracted_at)
+                           VALUES(?,?,?,?,?,?,?,?,?)''',
+                        pending
+                    )
+                    c.commit()
+                    pending.clear()
+
+        if pending:
+            c.executemany(
+                '''INSERT INTO knowledge_chunk_staging
+                   (batch_token,document_id,version_number,chunk_number,page_number,
+                    source_filename,text_content,character_count,extracted_at)
+                   VALUES(?,?,?,?,?,?,?,?,?)''',
+                pending
+            )
+            c.commit()
+            pending.clear()
+
+        if total == 0:
+            raise ValueError('No readable text could be extracted from this knowledge document.')
+
+        # Replace the live index only after complete extraction succeeds.
+        c.execute('BEGIN')
+        c.execute('DELETE FROM knowledge_chunks WHERE document_id=? AND version_number=?',
+                  (document_id, version_number))
+        c.execute('''
+            INSERT INTO knowledge_chunks
+            (document_id,version_number,chunk_number,page_number,source_filename,
+             text_content,character_count,extracted_at)
+            SELECT document_id,version_number,chunk_number,page_number,source_filename,
+                   text_content,character_count,extracted_at
+            FROM knowledge_chunk_staging
+            WHERE batch_token=?
+            ORDER BY chunk_number
+        ''', (batch_token,))
+        c.execute('DELETE FROM knowledge_chunk_staging WHERE batch_token=?', (batch_token,))
+        c.commit()
+        return total
+
+    except Exception:
+        c.rollback()
+        try:
+            c.execute('DELETE FROM knowledge_chunk_staging WHERE batch_token=?', (batch_token,))
+            c.commit()
+        except Exception:
+            pass
+        raise
+    finally:
         c.close()
-        raise ValueError('No readable text could be extracted from this knowledge document.')
-
-    c.execute('DELETE FROM knowledge_chunks WHERE document_id=? AND version_number=?',
-              (document_id, version_number))
-    extracted = now()
-    for chunk_no, page_number, chunk in all_chunks:
-        c.execute("""INSERT INTO knowledge_chunks
-            (document_id,version_number,chunk_number,page_number,source_filename,text_content,character_count,extracted_at)
-            VALUES(?,?,?,?,?,?,?,?)""",
-            (document_id,version_number,chunk_no,page_number,v['original_filename'],chunk,len(chunk),extracted))
-    c.commit()
-    c.close()
-    return len(all_chunks)
-
-
-def ensure_approved_knowledge_indexed():
-    """Ensure every Approved version has extracted chunks before retrieval."""
-    c = db()
-    approved = c.execute("SELECT document_id, version_number FROM knowledge_document_versions WHERE version_status='Approved'").fetchall()
-    missing = []
-    for row in approved:
-        count = c.execute(
-            'SELECT COUNT(*) FROM knowledge_chunks WHERE document_id=? AND version_number=?',
-            (row['document_id'], row['version_number'])
-        ).fetchone()[0]
-        if count == 0:
-            missing.append((row['document_id'], row['version_number']))
-    c.close()
-    for document_id, version_number in missing:
-        index_knowledge_version(document_id, version_number)
-    return len(missing)
 
 
 def search_approved_knowledge(query, limit=5, case_id=None, analysis_id=None):
-    """Keyword retrieval over APPROVED versions only. Draft/Rejected/Superseded knowledge is never returned."""
+    'Bounded keyword retrieval over APPROVED, already-indexed knowledge only.'
     query = normalize_kb_text(query)
-    ensure_approved_knowledge_indexed()
+    if not query:
+        return []
+
     terms = [x.lower() for x in re.findall(r'[A-Za-z0-9]{3,}', query)]
-    stop = {'the','and','for','with','from','where','this','that','tax','taxes','value','values','period','year','declared','observed'}
-    terms = [t for t in terms if t not in stop]
+    stop = {'the','and','for','with','from','where','this','that','tax','taxes',
+            'value','values','period','year','declared','observed','audit','review'}
+    terms = list(dict.fromkeys(t for t in terms if t not in stop))[:12]
+    if not terms:
+        return []
+
     c = db()
-    rows = c.execute("""
+    like_clauses = []
+    params = []
+    for term in terms:
+        pattern = f'%{term}%'
+        like_clauses.append(
+            '(LOWER(kc.text_content) LIKE ? OR LOWER(kd.title) LIKE ? '
+            'OR LOWER(kd.category) LIKE ? OR LOWER(kd.document_type) LIKE ? '
+            'OR LOWER(COALESCE(kd.tax_type,\'\')) LIKE ? '
+            'OR LOWER(COALESCE(kd.issuing_authority,\'\')) LIKE ?)'
+        )
+        params.extend([pattern] * 6)
+
+    sql = '''
         SELECT kc.*, kd.document_ref, kd.title, kd.category, kd.document_type,
                kd.tax_type, kd.issuing_authority, kv.version_status
         FROM knowledge_chunks kc
@@ -368,32 +572,63 @@ def search_approved_knowledge(query, limit=5, case_id=None, analysis_id=None):
         JOIN knowledge_document_versions kv
           ON kv.document_id=kc.document_id AND kv.version_number=kc.version_number
         WHERE kv.version_status='Approved'
+          AND (''' + ' OR '.join(like_clauses) + ''')
         ORDER BY kc.id DESC
-    """).fetchall()
+        LIMIT ?
+    '''
+    params.append(max(100, min(500, limit * 40)))
 
     scored = []
-    for row in rows:
-        hay = ' '.join([
-            row['title'] or '', row['category'] or '', row['document_type'] or '',
-            row['tax_type'] or '', row['issuing_authority'] or '', row['text_content'] or ''
-        ]).lower()
-        score = sum(hay.count(term) for term in terms)
-        if score > 0:
-            scored.append((score, row))
+    cursor = c.execute(sql, params)
+    while True:
+        batch = cursor.fetchmany(100)
+        if not batch:
+            break
+        for row in batch:
+            hay = ' '.join([
+                row['title'] or '', row['category'] or '', row['document_type'] or '',
+                row['tax_type'] or '', row['issuing_authority'] or '', row['text_content'] or ''
+            ]).lower()
+            score = sum(hay.count(term) for term in terms)
+            if score > 0:
+                scored.append((score, row))
 
     scored.sort(key=lambda x: (-x[0], -int(x[1]['id'])))
-    selected = [row for _, row in scored[:limit]]
+    selected = [row for _, row in scored[:max(1, min(limit, 20))]]
 
-    if case_id is not None:
-        for rank, row in enumerate(selected, start=1):
-            c.execute("""INSERT INTO knowledge_retrievals
-                (case_id,analysis_id,chunk_id,query_text,rank_order,retrieved_at)
-                VALUES(?,?,?,?,?,?)""",
-                (case_id, analysis_id, row['id'], query, rank, now()))
+    if case_id is not None and selected:
+        c.executemany(
+            '''INSERT INTO knowledge_retrievals
+               (case_id,analysis_id,chunk_id,query_text,rank_order,retrieved_at)
+               VALUES(?,?,?,?,?,?)''',
+            [(case_id, analysis_id, row['id'], query, rank, now())
+             for rank, row in enumerate(selected, start=1)]
+        )
         c.commit()
     c.close()
     return selected
 
+
+def ensure_approved_knowledge_indexed():
+    'Report missing indexes without indexing automatically.'
+    c = db()
+    rows = c.execute('''
+        SELECT kv.document_id, kv.version_number, kd.document_ref, kd.title
+        FROM knowledge_document_versions kv
+        JOIN knowledge_documents kd ON kd.id=kv.document_id
+        WHERE kv.version_status='Approved'
+        ORDER BY kv.document_id, kv.version_number
+    ''').fetchall()
+    missing = []
+    for row in rows:
+        count = c.execute(
+            'SELECT COUNT(*) FROM knowledge_chunks WHERE document_id=? AND version_number=?',
+            (row['document_id'], row['version_number'])
+        ).fetchone()[0]
+        if count == 0:
+            missing.append(dict(row))
+    c.close()
+    return missing
 
 def knowledge_context_for_case(c, case_id):
     case = c.execute('SELECT * FROM audit_cases WHERE id=?', (case_id,)).fetchone()
