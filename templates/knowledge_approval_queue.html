@@ -6,84 +6,167 @@
   <b>Knowledge Base Approval Queue</b>
 
   <div class="muted">
-    These Knowledge Base document versions are currently Draft and require
-    human review before they can become approved knowledge for the VTA.
+    Review the Draft Knowledge Base versions below. A human reviewer must
+    approve or reject each version before it can become approved authoritative
+    knowledge for the Virtual Tax Auditor.
   </div>
 </div>
 
-
 <h3 class="section-title">Pending Knowledge Approval Tasks</h3>
-
 
 {% if pending %}
 
   {% for item in pending %}
 
-  <div class="task">
+  <div class="card"
+       style="margin-bottom:20px; border-left:6px solid #c0392b;">
 
     <div>
 
-      <b>
-        {{ item['title'] }} — Version {{ item['version_number'] }}
-      </b>
+      <h3 style="margin-top:0;">
+        {{ item['title'] }}
+      </h3>
 
-      <div class="muted">
-        Reference: {{ item['document_ref'] }}
+      <div class="muted" style="margin-bottom:15px;">
+        <b>Reference:</b> {{ item['document_ref'] }}
+        &nbsp; | &nbsp;
+        <b>Version:</b> v{{ item['version_number'] }}
+        &nbsp; | &nbsp;
+        <b>Status:</b> {{ item['version_status'] }}
       </div>
 
-      <div class="muted">
-        Category: {{ item['category'] }}
-        |
-        Document Type: {{ item['document_type'] }}
-        |
-        Tax Type: {{ item['tax_type'] or 'General' }}
-      </div>
+      <p>
+        <b>Knowledge Category:</b>
+        {{ item['category'] }}
+      </p>
 
-      <div class="muted">
-        Uploaded by: {{ item['uploaded_by'] }}
-        |
-        Uploaded: {{ item['uploaded_at'] }}
-      </div>
+      <p>
+        <b>Document Type:</b>
+        {{ item['document_type'] }}
+      </p>
+
+      <p>
+        <b>Tax Type:</b>
+        {{ item['tax_type'] or 'General' }}
+      </p>
+
+      <p>
+        <b>Issuing Authority / Source:</b>
+        {{ item['issuing_authority'] or 'Not specified' }}
+      </p>
+
+      <p>
+        <b>Effective Date:</b>
+        {{ item['effective_date'] or 'Not specified' }}
+      </p>
+
+      <p>
+        <b>Expiry / End Date:</b>
+        {{ item['expiry_date'] or 'Not specified' }}
+      </p>
+
+      <p>
+        <b>Description:</b>
+        {{ item['description'] or 'Not specified' }}
+      </p>
+
+      <p>
+        <b>Original File:</b>
+        {{ item['original_filename'] }}
+      </p>
+
+      <p>
+        <b>Uploaded By:</b>
+        {{ item['uploaded_by'] }}
+        &nbsp; | &nbsp;
+        <b>Uploaded At:</b>
+        {{ item['uploaded_at'] }}
+      </p>
 
       {% if item['change_summary'] %}
-
-      <div class="muted">
-        Change Summary: {{ item['change_summary'] }}
-      </div>
-
+      <p>
+        <b>Change Summary:</b>
+        {{ item['change_summary'] }}
+      </p>
       {% endif %}
 
+      <p>
+        <a href="{{ url_for(
+            'knowledge_base_version_download',
+            document_id=item['id'],
+            version_number=item['version_number']
+        ) }}">
+          Download document for review
+        </a>
+
+        &nbsp; | &nbsp;
+
+        <a href="{{ url_for(
+            'knowledge_base_versions',
+            document_id=item['id']
+        ) }}">
+          View version history
+        </a>
+      </p>
+
     </div>
 
+    <hr style="margin:20px 0;">
 
-    <div>
+    <form method="post"
+          action="{{ url_for(
+              'knowledge_base_review',
+              document_id=item['id']
+          ) }}">
 
-      <a class="button"
-         href="{{ url_for('knowledge_base_versions', document_id=item['id']) }}">
+      <label for="comments_{{ item['id'] }}">
+        <b>Reviewer Comments / Decision Rationale *</b>
+      </label>
 
-        Review →
+      <textarea
+        id="comments_{{ item['id'] }}"
+        name="comments"
+        rows="5"
+        required
+        style="width:100%; box-sizing:border-box; margin-top:8px;"
+        placeholder="Enter the reason for approving or rejecting this Knowledge Base version."></textarea>
 
-      </a>
+      <div style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap;">
 
-    </div>
+        <button
+          type="submit"
+          name="decision"
+          value="Approve"
+          onclick="return confirm('Approve this Knowledge Base version?');">
+          ✓ Approve Version
+        </button>
+
+        <button
+          type="submit"
+          name="decision"
+          value="Reject"
+          onclick="return confirm('Reject this Knowledge Base version?');">
+          ✕ Reject Version
+        </button>
+
+      </div>
+
+    </form>
 
   </div>
 
   {% endfor %}
-
 
 {% else %}
 
   <div class="task" style="opacity:.65">
 
     <div>
-
       <b>No pending Knowledge Base approvals</b>
 
       <div class="muted">
         There are currently no Draft Knowledge Base versions requiring review.
       </div>
-
     </div>
 
     <div class="arrow">
@@ -94,28 +177,25 @@
 
 {% endif %}
 
-
 <div class="notice">
 
   <b>Governance rule:</b>
 
   Draft knowledge is not treated as approved authoritative knowledge.
-  A human reviewer must approve the specific version before it can be used
-  as approved VTA knowledge.
+  Only a human-approved version may be treated as approved VTA Knowledge Base
+  content. Rejected versions remain in the audit history and cannot be used
+  as approved knowledge.
 
 </div>
-
 
 <a class="task" href="{{ url_for('knowledge_base') }}">
 
   <div>
-
     <b>← Back to Knowledge Base</b>
 
     <div class="muted">
       Return to the Knowledge Base document registry.
     </div>
-
   </div>
 
   <div class="arrow">
