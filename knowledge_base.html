@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="notice">
+  <b>Knowledge Base — Step 1C</b><br>
+  Controlled document registration, versioning and human governance. Only an <b>Approved</b> current version will be eligible for later VTA AI/Risk use.
+</div>
+
+<h3 class="section-title">Register Knowledge Document</h3>
+<form method="post" action="{{ url_for('knowledge_base_register') }}" enctype="multipart/form-data" class="card">
+  <div class="grid">
+    <div><label>Document Title *</label><input name="title" required placeholder="e.g. Value Added Tax Act"></div>
+    <div><label>Knowledge Category *</label><select name="category" required><option value="">Select category</option>{% for x in categories %}<option value="{{ x }}">{{ x }}</option>{% endfor %}</select></div>
+    <div><label>Document Type *</label><select name="document_type" required><option value="">Select type</option>{% for x in document_types %}<option value="{{ x }}">{{ x }}</option>{% endfor %}</select></div>
+    <div><label>Tax Type</label><select name="tax_type">{% for x in tax_types %}<option value="{{ x }}">{{ x }}</option>{% endfor %}</select></div>
+    <div><label>Issuing Authority / Source</label><input name="issuing_authority" placeholder="e.g. Uganda Revenue Authority / Ministry of Finance"></div>
+    <div><label>Effective Date</label><input type="date" name="effective_date"></div>
+    <div><label>Expiry / End Date</label><input type="date" name="expiry_date"></div>
+    <div><label>Document File *</label><input type="file" name="document_file" required accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"><div class="muted">Allowed: PDF, DOC, DOCX, TXT, CSV, XLS, XLSX.</div></div>
+  </div>
+  <div style="margin-top:14px"><label>Description</label><textarea name="description" rows="3" placeholder="What does this document cover and why is it relevant to the VTA Knowledge Base?"></textarea></div>
+  <div style="margin-top:14px"><label>Version / Change Summary</label><textarea name="change_summary" rows="2" placeholder="For a first registration, describe the document or source version being loaded."></textarea></div>
+  <button type="submit" class="btn" style="margin-top:14px">Register &amp; Upload Document</button>
+</form>
+
+<h3 class="section-title">Registered Knowledge Documents</h3>
+{% if documents %}
+<table class="table">
+<thead><tr><th>Reference</th><th>Document</th><th>Category</th><th>Tax Type</th><th>Version</th><th>Status</th><th>Uploaded</th><th>Actions</th></tr></thead>
+<tbody>
+{% for d in documents %}
+<tr>
+<td><b>{{ d.document_ref }}</b></td>
+<td><b>{{ d.title }}</b><br><span class="muted">{{ d.document_type }}{% if d.issuing_authority %} · {{ d.issuing_authority }}{% endif %}</span></td>
+<td>{{ d.category }}</td><td>{{ d.tax_type or '—' }}</td><td>v{{ d.version_number }}</td>
+<td><span class="pill {% if d.status == 'Approved' %}human{% elif d.status in ['Rejected','Retired'] %}high{% endif %}">{{ d.status }}</span></td>
+<td>{{ d.uploaded_at }}</td>
+<td><a href="{{ url_for('knowledge_base_download', document_id=d.id) }}">Download</a><br><a href="{{ url_for('knowledge_base_versions', document_id=d.id) }}">Review / Version history</a></td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% else %}<div class="task"><b>No knowledge documents have been registered yet.</b><div class="muted">Use the form above to create the first controlled Knowledge Base document record.</div></div>{% endif %}
+
+<div style="margin-top:20px"><a class="task" href="{{ url_for('tasks') }}"><div><b>← Back to VTA Dashboard</b><div class="muted">Return to the main Virtual Tax Auditor workflow.</div></div><div class="arrow">→</div></a></div>
+{% endblock %}

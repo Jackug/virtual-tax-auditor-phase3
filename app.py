@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS knowledge_document_versions(
     FOREIGN KEY(document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
     UNIQUE(document_id, version_number)
 );
+CREATE TABLE IF NOT EXISTS knowledge_reviews(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL,
+    version_number INTEGER NOT NULL,
+    decision TEXT NOT NULL,
+    comments TEXT,
+    reviewed_by TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    FOREIGN KEY(document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+);
 '''); seed(c); c.commit(); c.close()
 
 def seed(c):
@@ -363,6 +373,11 @@ def knowledge_base_new_version(document_id):
     file.save(file_path)
     try:
         c.execute('''
+            UPDATE knowledge_document_versions
+            SET version_status='Superseded'
+            WHERE document_id=? AND version_number=? AND version_status='Approved'
+        ''', (document_id, doc['current_version']))
+        c.execute('''
             INSERT INTO knowledge_document_versions
             (document_id,version_number,original_filename,stored_filename,mime_type,size_bytes,
              file_path,uploaded_by,uploaded_at,version_status,change_summary)
@@ -410,6 +425,83 @@ def knowledge_base_versions(document_id):
     if not doc:
         abort(404)
     return render_template('knowledge_base_versions.html', document=doc, versions=versions)
+
+@app.route('/knowledge-base/<int:document_id>/version/<int:version_number>/download')
+@login_required
+def knowledge_base_version_download(document_id, version_number):
+    c = db()
+    v = c.execute('''
+        SELECT d.document_ref, v.original_filename, v.stored_filename
+        FROM knowledge_documents d
+        JOIN knowledge_document_versions v ON v.document_id=d.id
+        WHERE d.id=? AND v.version_number=?
+    ''', (document_id, version_number)).fetchone()
+    c.close()
+    if not v:
+        abort(404)
+    return send_from_directory(str(UPLOAD / 'knowledge_base'), v['stored_filename'],
+                               as_attachment=True, download_name=v['original_filename'])
+
+@app.route('/knowledge-base/<int:document_id>/review', methods=['POST'])
+@login_required
+def knowledge_base_review(document_id):
+    decision = request.form.get('decision','').strip()
+    comments = request.form.get('comments','').strip()
+    if decision not in ('Approve','Reject','Retire'):
+        flash('Invalid Knowledge Base review decision.', 'error')
+        return redirect(url_for('knowledge_base_versions', document_id=document_id))
+
+    c = db()
+    doc = c.execute('SELECT * FROM knowledge_documents WHERE id=?', (document_id,)).fetchone()
+    if not doc:
+        c.close()
+        abort(404)
+    v = c.execute('SELECT * FROM knowledge_document_versions WHERE document_id=? AND version_number=?',
+                  (document_id, doc['current_version'])).fetchone()
+    if not v:
+        c.close()
+        abort(404)
+
+    current_status = v['version_status']
+    if decision == 'Approve' and current_status != 'Draft':
+        c.close()
+        flash('Only a Draft current version can be approved.', 'error')
+        return redirect(url_for('knowledge_base_versions', document_id=document_id))
+    if decision == 'Reject' and current_status != 'Draft':
+        c.close()
+        flash('Only a Draft current version can be rejected.', 'error')
+        return redirect(url_for('knowledge_base_versions', document_id=document_id))
+    if decision == 'Retire' and current_status != 'Approved':
+        c.close()
+        flash('Only an Approved current version can be retired.', 'error')
+        return redirect(url_for('knowledge_base_versions', document_id=document_id))
+
+    new_status = {'Approve':'Approved', 'Reject':'Rejected', 'Retire':'Retired'}[decision]
+    doc_status = new_status
+    c.execute('UPDATE knowledge_document_versions SET version_status=? WHERE id=?', (new_status, v['id']))
+    c.execute('UPDATE knowledge_documents SET status=?, updated_at=? WHERE id=?', (doc_status, now(), document_id))
+    c.execute('''INSERT INTO knowledge_reviews
+                 (document_id,version_number,decision,comments,reviewed_by,reviewed_at)
+                 VALUES(?,?,?,?,?,?)''',
+              (document_id, v['version_number'], decision, comments, email(), now()))
+    c.commit()
+    c.close()
+    log('KNOWLEDGE_GOVERNANCE_DECISION',
+        f"{doc['document_ref']}: v{v['version_number']} {decision}; status={new_status}; comments={comments or 'None'}")
+    flash(f"{doc['document_ref']} v{v['version_number']} is now {new_status}.", 'success')
+    return redirect(url_for('knowledge_base_versions', document_id=document_id))
+
+@app.route('/knowledge-base/<int:document_id>/reviews')
+@login_required
+def knowledge_base_reviews(document_id):
+    c = db()
+    doc = c.execute('SELECT * FROM knowledge_documents WHERE id=?', (document_id,)).fetchone()
+    reviews = c.execute('''SELECT * FROM knowledge_reviews
+                           WHERE document_id=? ORDER BY id DESC''', (document_id,)).fetchall()
+    c.close()
+    if not doc:
+        abort(404)
+    return render_template('knowledge_base_reviews.html', document=doc, reviews=reviews)
 
 @app.route('/data-sources')
 @login_required

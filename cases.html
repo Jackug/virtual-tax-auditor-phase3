@@ -1,8 +1,1 @@
-{% extends 'base.html' %}
-{% block content %}
-<div class="card"><h3>Virtual Audit Case Queue</h3><p class="muted">All Virtual Audit cases. Open cases remain under controlled workflow; closed cases are retained for audit history.</p>
-<table class="table"><tr><th>Case</th><th>Taxpayer</th><th>Status</th><th>Assigned</th><th>Created</th><th></th></tr>
-{% for r in rows %}<tr><td><b>{{ r.case_ref }}</b></td><td>{{ r.taxpayer_name }}<br>{{ r.tin }}</td><td><span class="pill {{ 'human' if r.status=='Closed' else 'pending' }}">{{ r.status }}</span></td><td>{{ r.assigned_to or '—' }}</td><td>{{ r.created_at }}</td><td><a class="btn secondary" href="{{ url_for('case_detail',cid=r.id) }}">Open Case →</a></td></tr>
-{% else %}<tr><td colspan="6">No cases yet. Select a High/Critical taxpayer from the Risk Universe.</td></tr>{% endfor %}
-</table></div>
-{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="card"><div class="label">VIRTUAL AUDIT CASES</div><h2>Cases</h2></div><div class="card" style="margin-top:15px"><table class="table"><tr><th>Case</th><th>TIN</th><th>Taxpayer</th><th>Sector</th><th>Status</th><th>Assigned</th><th></th></tr>{% for r in rows %}<tr><td>{{ r.case_ref }}</td><td>{{ r.tin }}</td><td>{{ r.taxpayer_name }}</td><td>{{ r.sector }}</td><td>{{ r.status }}</td><td>{{ r.assigned_to }}</td><td><a class="btn secondary" href="{{ url_for('case_detail',cid=r.id) }}">Open</a></td></tr>{% else %}<tr><td colspan="7">No cases.</td></tr>{% endfor %}</table></div>{% endblock %}

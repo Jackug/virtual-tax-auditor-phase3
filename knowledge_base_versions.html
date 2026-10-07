@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="notice">
+  <b>Knowledge Governance — {{ document.document_ref }}</b><br>
+  {{ document.title }} · Current version: <b>v{{ document.current_version }}</b> · Document status: <b>{{ document.status }}</b>
+</div>
+
+<h3 class="section-title">Document Metadata</h3>
+<div class="card">
+  <div class="two">
+    <div><b>Category:</b> {{ document.category }}</div><div><b>Document Type:</b> {{ document.document_type }}</div>
+    <div><b>Tax Type:</b> {{ document.tax_type or '—' }}</div><div><b>Issuing Authority:</b> {{ document.issuing_authority or '—' }}</div>
+    <div><b>Effective Date:</b> {{ document.effective_date or '—' }}</div><div><b>Expiry / End Date:</b> {{ document.expiry_date or '—' }}</div>
+  </div>
+  <div style="margin-top:10px"><b>Description:</b> {{ document.description or '—' }}</div>
+</div>
+
+<h3 class="section-title">Human Governance Decision</h3>
+<div class="card">
+{% set current = versions|selectattr('version_number','equalto',document.current_version)|list|first %}
+{% if current and current.version_status == 'Draft' %}
+  <div class="notice"><b>Action required:</b> Current version v{{ current.version_number }} is Draft and is not eligible for authoritative VTA use until a human reviewer approves it.</div>
+  <form method="post" action="{{ url_for('knowledge_base_review', document_id=document.id) }}">
+    <label>Reviewer Comments</label>
+    <textarea name="comments" rows="3" placeholder="Record the basis for approval or rejection."></textarea>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" name="decision" value="Approve" type="submit">Approve Current Version</button>
+      <button class="btn secondary" name="decision" value="Reject" type="submit">Reject Current Version</button>
+    </div>
+  </form>
+{% elif current and current.version_status == 'Approved' %}
+  <div class="notice"><b>Approved:</b> v{{ current.version_number }} is the current approved knowledge version.</div>
+  <form method="post" action="{{ url_for('knowledge_base_review', document_id=document.id) }}">
+    <label>Retirement Reason</label>
+    <textarea name="comments" rows="2" placeholder="Explain why this approved version is being retired."></textarea>
+    <button class="btn secondary" name="decision" value="Retire" type="submit" style="margin-top:10px">Retire Current Version</button>
+  </form>
+{% else %}
+  <div class="notice"><b>No approval action is available for the current status:</b> {{ current.version_status if current else document.status }}</div>
+{% endif %}
+</div>
+
+<h3 class="section-title">Version History</h3>
+<table class="table">
+<thead><tr><th>Version</th><th>Original File</th><th>Status</th><th>Uploaded By</th><th>Uploaded At</th><th>Change Summary</th><th>File</th></tr></thead>
+<tbody>
+{% for v in versions %}
+<tr>
+<td><b>v{{ v.version_number }}</b>{% if v.version_number == document.current_version %}<br><span class="muted">Current</span>{% endif %}</td>
+<td>{{ v.original_filename }}</td><td><span class="pill {% if v.version_status == 'Approved' %}human{% elif v.version_status in ['Rejected','Retired'] %}high{% endif %}">{{ v.version_status }}</span></td>
+<td>{{ v.uploaded_by }}</td><td>{{ v.uploaded_at }}</td><td>{{ v.change_summary or '—' }}</td>
+<td><a href="{{ url_for('knowledge_base_version_download', document_id=document.id, version_number=v.version_number) }}">Download v{{ v.version_number }}</a></td>
+</tr>
+{% endfor %}
+</tbody></table>
+
+<h3 class="section-title">Upload New Version</h3>
+<form method="post" action="{{ url_for('knowledge_base_new_version', document_id=document.id) }}" enctype="multipart/form-data" class="card">
+  <div class="notice">Uploading a new version creates a new Draft version. An approved previous version remains retained as historical evidence and is marked Superseded when replaced.</div>
+  <label>New Document File</label><input type="file" name="document_file" required accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx">
+  <label>Change Summary</label><textarea name="change_summary" rows="3" placeholder="Describe what changed in this version."></textarea>
+  <button type="submit" class="btn" style="margin-top:12px">Upload New Version</button>
+</form>
+
+<div style="margin-top:14px"><a href="{{ url_for('knowledge_base_reviews', document_id=document.id) }}">View governance decision history →</a></div>
+<div style="margin-top:20px"><a class="task" href="{{ url_for('knowledge_base') }}"><b>← Back to Knowledge Base</b><span class="arrow">→</span></a></div>
+{% endblock %}

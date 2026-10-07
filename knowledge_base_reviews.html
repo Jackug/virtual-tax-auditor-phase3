@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="notice"><b>Knowledge Governance History</b><br>{{ document.document_ref }} · {{ document.title }}</div>
+<h3 class="section-title">Human Review Decisions</h3>
+{% if reviews %}
+<table class="table">
+<thead><tr><th>Version</th><th>Decision</th><th>Reviewer</th><th>Date / Time</th><th>Comments</th></tr></thead>
+<tbody>
+{% for r in reviews %}
+<tr><td>v{{ r.version_number }}</td><td><b>{{ r.decision }}</b></td><td>{{ r.reviewed_by }}</td><td>{{ r.reviewed_at }}</td><td>{{ r.comments or '—' }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% else %}
+<div class="task"><b>No governance decisions recorded yet.</b><div class="muted">A decision will appear here when a human approves, rejects or retires a version.</div></div>
+{% endif %}
+<div style="margin-top:20px"><a class="task" href="{{ url_for('knowledge_base_versions', document_id=document.id) }}"><b>← Back to Version Governance</b><span class="arrow">→</span></a></div>
+{% endblock %}
