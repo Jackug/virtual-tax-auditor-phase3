@@ -3,243 +3,439 @@
 {% block content %}
 
 <div class="notice">
-  <b>Knowledge Base — Edit Before Approval</b>
+  <b>Knowledge Base — Version History</b>
 
   <div class="muted">
-    You are reviewing <b>{{ document.document_ref }}</b>,
-    currently version <b>v{{ version.version_number }}</b>.
-    Make the required amendments below before approval.
+    Document:
+    <b>{{ document.title }}</b>
+    |
+    Reference:
+    <b>{{ document.document_ref }}</b>
+  </div>
+
+  <div class="muted" style="margin-top:6px;">
+    Current Version:
+    <b>v{{ document.current_version }}</b>
+    |
+    Document Status:
+    <b>{{ document.status }}</b>
   </div>
 </div>
+
+
+<!-- DOCUMENT INFORMATION -->
 
 <div class="card" style="margin-bottom:20px;">
 
-  <h3 style="margin-top:0;">Current Version</h3>
+  <h3 style="margin-top:0;">Document Information</h3>
 
   <p>
-    <b>Version:</b> v{{ version.version_number }}
-    &nbsp; | &nbsp;
-    <b>Status:</b> {{ version.version_status }}
+    <b>Title:</b>
+    {{ document.title }}
   </p>
 
   <p>
-    <b>Current File:</b> {{ version.original_filename }}
+    <b>Category:</b>
+    {{ document.category }}
   </p>
 
   <p>
-    <a href="{{ url_for(
-        'knowledge_base_version_download',
-        document_id=document.id,
-        version_number=version.version_number
-    ) }}">
-      Download current document
-    </a>
+    <b>Document Type:</b>
+    {{ document.document_type }}
   </p>
+
+  <p>
+    <b>Tax Type:</b>
+    {{ document.tax_type or 'General' }}
+  </p>
+
+  <p>
+    <b>Issuing Authority:</b>
+    {{ document.issuing_authority or 'Not specified' }}
+  </p>
+
+  {% if document.description %}
+  <p>
+    <b>Description:</b><br>
+    {{ document.description }}
+  </p>
+  {% endif %}
 
 </div>
 
-<form method="post"
-      enctype="multipart/form-data"
-      action="{{ url_for(
-          'knowledge_base_edit',
-          document_id=document.id
-      ) }}">
 
-  <div class="card">
+<!-- VERSION HISTORY -->
 
-    <h3 style="margin-top:0;">Amend Knowledge Base Document</h3>
+<h3 class="section-title">
+  Version History
+</h3>
 
-    <p class="muted">
-      You may amend the metadata and, where necessary, upload an amended
-      document. Saving creates a new Draft version. The previous version
-      remains permanently available in the version history.
-    </p>
 
-    <label for="title"><b>Document Title *</b></label>
+{% if versions %}
 
-    <input
-      id="title"
-      name="title"
-      type="text"
-      required
-      value="{{ document.title }}"
-      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
-    >
+  {% for version in versions %}
 
-    <label for="category"><b>Knowledge Category *</b></label>
+  <div class="task"
+       style="
+         margin-bottom:15px;
+         {% if version.version_number == document.current_version %}
+         border-left:5px solid;
+         {% endif %}
+       ">
 
-    <select
-      id="category"
-      name="category"
-      required
-      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
-    >
+    <div style="width:100%;">
 
-      {% for x in categories %}
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+        flex-wrap:wrap;
+      ">
 
-      <option
-        value="{{ x }}"
-        {% if document.category == x %}selected{% endif %}
-      >
-        {{ x }}
-      </option>
+        <div>
 
-      {% endfor %}
+          <b>
+            Version {{ version.version_number }}
+          </b>
 
-    </select>
+          {% if version.version_number == document.current_version %}
 
-    <label for="document_type"><b>Document Type *</b></label>
+            <span style="
+              margin-left:8px;
+              padding:4px 8px;
+              border-radius:4px;
+              font-size:12px;
+              font-weight:bold;
+            ">
+              CURRENT VERSION
+            </span>
 
-    <select
-      id="document_type"
-      name="document_type"
-      required
-      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
-    >
+          {% endif %}
 
-      {% for x in document_types %}
+        </div>
 
-      <option
-        value="{{ x }}"
-        {% if document.document_type == x %}selected{% endif %}
-      >
-        {{ x }}
-      </option>
 
-      {% endfor %}
+        <div>
 
-    </select>
+          {% if version.version_status == 'Approved' %}
 
-    <label for="tax_type"><b>Tax Type</b></label>
+            <span style="font-weight:bold;">
+              ✓ APPROVED
+            </span>
 
-    <select
-      id="tax_type"
-      name="tax_type"
-      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
-    >
+          {% elif version.version_status == 'Draft' %}
 
-      {% for x in tax_types %}
+            <span style="font-weight:bold;">
+              ⏳ DRAFT — APPROVAL REQUIRED
+            </span>
 
-      <option
-        value="{{ x }}"
-        {% if document.tax_type == x %}selected{% endif %}
-      >
-        {{ x }}
-      </option>
+          {% elif version.version_status == 'Rejected' %}
 
-      {% endfor %}
+            <span style="font-weight:bold;">
+              ✕ REJECTED
+            </span>
 
-    </select>
+          {% elif version.version_status == 'Superseded' %}
 
-    <label for="issuing_authority">
-      <b>Issuing Authority / Source</b>
-    </label>
+            <span style="font-weight:bold;">
+              ↗ SUPERSEDED
+            </span>
 
-    <input
-      id="issuing_authority"
-      name="issuing_authority"
-      type="text"
-      value="{{ document.issuing_authority or '' }}"
-      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
-    >
+          {% elif version.version_status == 'Retired' %}
 
-    <label for="effective_date">
-      <b>Effective Date</b>
-    </label>
+            <span style="font-weight:bold;">
+              RETIRED
+            </span>
 
-    <input
-      id="effective_date"
-      name="effective_date"
-      type="date"
-      value="{{ document.effective_date or '' }}"
-      style="margin:8px 0 16px;"
-    >
+          {% else %}
 
-    <label for="expiry_date">
-      <b>Expiry / End Date</b>
-    </label>
+            <span>
+              {{ version.version_status }}
+            </span>
 
-    <input
-      id="expiry_date"
-      name="expiry_date"
-      type="date"
-      value="{{ document.expiry_date or '' }}"
-      style="margin:8px 0 16px;"
-    >
+          {% endif %}
 
-    <label for="description">
-      <b>Description</b>
-    </label>
+        </div>
 
-    <textarea
-      id="description"
-      name="description"
-      rows="6"
-      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
-    >{{ document.description or '' }}</textarea>
+      </div>
 
-    <label for="document_file">
-      <b>Upload Amended Document</b>
-    </label>
 
-    <div class="muted" style="margin:6px 0 8px;">
-      Optional. If you upload a file, it becomes the document for the new
-      Draft version. If you do not upload one, the current file is carried
-      forward unchanged into the new version.
-    </div>
+      <div class="muted" style="margin-top:10px;">
 
-    <input
-      id="document_file"
-      name="document_file"
-      type="file"
-      accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
-      style="margin:8px 0 20px;"
-    >
+        <b>File:</b>
+        {{ version.original_filename }}
 
-    <label for="change_summary">
-      <b>Amendment / Change Summary *</b>
-    </label>
+      </div>
 
-    <textarea
-      id="change_summary"
-      name="change_summary"
-      rows="6"
-      required
-      placeholder="Describe exactly what you changed, added, removed or corrected before approval."
-      style="width:100%; box-sizing:border-box; margin:8px 0 20px;"
-    ></textarea>
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <div class="muted">
 
-      <button
-        type="submit"
-        onclick="return confirm('Save these amendments as a new Draft version?');"
-      >
-        ✓ Save Amendments as New Draft Version
-      </button>
+        <b>Uploaded by:</b>
+        {{ version.uploaded_by or 'Not recorded' }}
 
-      <a
-        class="button"
-        href="{{ url_for(
-            'knowledge_base_versions',
-            document_id=document.id
-        ) }}"
-      >
-        Cancel
-      </a>
+        &nbsp; | &nbsp;
+
+        <b>Uploaded:</b>
+        {{ version.uploaded_at or 'Not recorded' }}
+
+      </div>
+
+
+      {% if version.change_summary %}
+
+      <div class="muted" style="margin-top:8px;">
+
+        <b>Change Summary:</b>
+
+        {{ version.change_summary }}
+
+      </div>
+
+      {% endif %}
+
+
+      <!-- VERSION ACTIONS -->
+
+      <div style="
+        margin-top:15px;
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+      ">
+
+
+        <!-- DOWNLOAD -->
+
+        <a
+          class="button"
+          href="{{ url_for(
+              'knowledge_base_version_download',
+              document_id=document.id,
+              version_number=version.version_number
+          ) }}"
+        >
+          Download Version
+        </a>
+
+
+        <!-- EDIT CURRENT DRAFT -->
+
+        {% if
+          version.version_number == document.current_version
+          and version.version_status == 'Draft'
+        %}
+
+        <a
+          class="button"
+          href="{{ url_for(
+              'knowledge_base_edit',
+              document_id=document.id
+          ) }}"
+        >
+          Edit Before Approval
+        </a>
+
+        {% endif %}
+
+
+        <!-- APPROVAL -->
+
+        {% if
+          version.version_number == document.current_version
+          and version.version_status == 'Draft'
+        %}
+
+        <form
+          method="post"
+          action="{{ url_for(
+              'knowledge_base_review',
+              document_id=document.id
+          ) }}"
+          style="display:inline;"
+        >
+
+          <input
+            type="hidden"
+            name="decision"
+            value="Approve"
+          >
+
+          <input
+            type="hidden"
+            name="comments"
+            value=""
+          >
+
+          <button
+            type="submit"
+            onclick="
+              return confirm(
+                'Approve Knowledge Base version {{ version.version_number }}?'
+              );
+            "
+          >
+            ✓ Approve Version
+          </button>
+
+        </form>
+
+
+        <!-- REJECT -->
+
+        <form
+          method="post"
+          action="{{ url_for(
+              'knowledge_base_review',
+              document_id=document.id
+          ) }}"
+          style="display:inline;"
+        >
+
+          <input
+            type="hidden"
+            name="decision"
+            value="Reject"
+          >
+
+          <input
+            type="hidden"
+            name="comments"
+            value=""
+          >
+
+          <button
+            type="submit"
+            onclick="
+              return confirm(
+                'Reject Knowledge Base version {{ version.version_number }}?'
+              );
+            "
+          >
+            ✕ Reject Version
+          </button>
+
+        </form>
+
+        {% endif %}
+
+
+        <!-- RETIRE APPROVED CURRENT VERSION -->
+
+        {% if
+          version.version_number == document.current_version
+          and version.version_status == 'Approved'
+        %}
+
+        <form
+          method="post"
+          action="{{ url_for(
+              'knowledge_base_review',
+              document_id=document.id
+          ) }}"
+          style="display:inline;"
+        >
+
+          <input
+            type="hidden"
+            name="decision"
+            value="Retire"
+          >
+
+          <input
+            type="hidden"
+            name="comments"
+            value=""
+          >
+
+          <button
+            type="submit"
+            onclick="
+              return confirm(
+                'Retire the current approved Knowledge Base version?'
+              );
+            "
+          >
+            Retire Version
+          </button>
+
+        </form>
+
+        {% endif %}
+
+      </div>
 
     </div>
 
   </div>
 
-</form>
+  {% endfor %}
+
+
+{% else %}
+
+<div class="task" style="opacity:.65;">
+
+  <div>
+
+    <b>No version history available</b>
+
+    <div class="muted">
+      No versions have been registered for this Knowledge Base document.
+    </div>
+
+  </div>
+
+</div>
+
+{% endif %}
+
+
+<!-- GOVERNANCE NOTICE -->
 
 <div class="notice" style="margin-top:20px;">
 
-  <b>Governance control:</b>
+  <b>Knowledge Governance</b>
 
-  This action does not approve the document. It creates a new Draft version
-  that must return to the Knowledge Approval Queue for human approval.
+  <div class="muted" style="margin-top:6px;">
+
+    Each Knowledge Base version is retained for auditability.
+
+    Editing a Draft creates a new version rather than silently overwriting
+    the previous version.
+
+    Only the current Draft version can be approved or rejected.
+
+    Approved knowledge is treated as authoritative only after human approval.
+
+  </div>
+
+</div>
+
+
+<!-- NAVIGATION -->
+
+<div style="
+  margin-top:20px;
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+">
+
+  <a
+    class="button"
+    href="{{ url_for('knowledge_base') }}"
+  >
+    ← Back to Knowledge Base
+  </a>
+
+
+  <a
+    class="button"
+    href="{{ url_for('knowledge_approval_queue') }}"
+  >
+    Knowledge Approval Queue
+  </a>
 
 </div>
 
