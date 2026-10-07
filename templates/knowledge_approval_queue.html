@@ -7,12 +7,14 @@
 
   <div class="muted">
     Review the Draft Knowledge Base versions below. A human reviewer must
-    approve or reject each version before it can become approved authoritative
-    knowledge for the Virtual Tax Auditor.
+    approve, reject, or edit each version before it can become approved
+    authoritative knowledge for the Virtual Tax Auditor.
   </div>
 </div>
 
+
 <h3 class="section-title">Pending Knowledge Approval Tasks</h3>
+
 
 {% if pending %}
 
@@ -27,70 +29,96 @@
         {{ item['title'] }}
       </h3>
 
+
       <div class="muted" style="margin-bottom:15px;">
-        <b>Reference:</b> {{ item['document_ref'] }}
+
+        <b>Reference:</b>
+        {{ item['document_ref'] }}
+
         &nbsp; | &nbsp;
-        <b>Version:</b> v{{ item['version_number'] }}
+
+        <b>Version:</b>
+        v{{ item['version_number'] }}
+
         &nbsp; | &nbsp;
-        <b>Status:</b> {{ item['version_status'] }}
+
+        <b>Status:</b>
+        {{ item['version_status'] }}
+
       </div>
+
 
       <p>
         <b>Knowledge Category:</b>
         {{ item['category'] }}
       </p>
 
+
       <p>
         <b>Document Type:</b>
         {{ item['document_type'] }}
       </p>
+
 
       <p>
         <b>Tax Type:</b>
         {{ item['tax_type'] or 'General' }}
       </p>
 
+
       <p>
         <b>Issuing Authority / Source:</b>
         {{ item['issuing_authority'] or 'Not specified' }}
       </p>
+
 
       <p>
         <b>Effective Date:</b>
         {{ item['effective_date'] or 'Not specified' }}
       </p>
 
+
       <p>
         <b>Expiry / End Date:</b>
         {{ item['expiry_date'] or 'Not specified' }}
       </p>
+
 
       <p>
         <b>Description:</b>
         {{ item['description'] or 'Not specified' }}
       </p>
 
+
       <p>
         <b>Original File:</b>
         {{ item['original_filename'] }}
       </p>
 
+
       <p>
         <b>Uploaded By:</b>
         {{ item['uploaded_by'] }}
+
         &nbsp; | &nbsp;
+
         <b>Uploaded At:</b>
         {{ item['uploaded_at'] }}
       </p>
 
+
       {% if item['change_summary'] %}
+
       <p>
         <b>Change Summary:</b>
         {{ item['change_summary'] }}
       </p>
+
       {% endif %}
 
+
       <p>
+
         <a href="{{ url_for(
             'knowledge_base_version_download',
             document_id=item['id'],
@@ -107,11 +135,16 @@
         ) }}">
           View version history
         </a>
+
       </p>
 
     </div>
 
+
     <hr style="margin:20px 0;">
+
+
+    <!-- REVIEW COMMENTS -->
 
     <form method="post"
           action="{{ url_for(
@@ -120,8 +153,13 @@
           ) }}">
 
       <label for="comments_{{ item['id'] }}">
-        <b>Reviewer Comments / Decision Rationale *</b>
+
+        <b>
+          Reviewer Comments / Decision Rationale *
+        </b>
+
       </label>
+
 
       <textarea
         id="comments_{{ item['id'] }}"
@@ -129,44 +167,127 @@
         rows="5"
         required
         style="width:100%; box-sizing:border-box; margin-top:8px;"
-        placeholder="Enter the reason for approving or rejecting this Knowledge Base version."></textarea>
+        placeholder="Enter the reason for approving or rejecting this Knowledge Base version."
+      ></textarea>
 
-      <div style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap;">
+
+      <!-- ACTIONS -->
+
+      <div
+        style="
+          margin-top:15px;
+          display:flex;
+          gap:10px;
+          flex-wrap:wrap;
+          align-items:center;
+        "
+      >
+
+
+        <!-- EDIT BEFORE APPROVAL -->
+
+        <a
+          href="{{ url_for(
+              'knowledge_base_edit',
+              document_id=item['id']
+          ) }}"
+          style="
+            display:inline-block;
+            padding:6px 12px;
+            text-decoration:none;
+            border:1px solid #999;
+            border-radius:3px;
+            background:#f5f5f5;
+            color:#111;
+          "
+        >
+          ✎ Edit Before Approval
+        </a>
+
+
+        <!-- APPROVE -->
 
         <button
           type="submit"
           name="decision"
           value="Approve"
-          onclick="return confirm('Approve this Knowledge Base version?');">
+          onclick="
+            return confirm(
+              'Approve this Knowledge Base version?'
+            );
+          "
+        >
           ✓ Approve Version
         </button>
+
+
+        <!-- REJECT -->
 
         <button
           type="submit"
           name="decision"
           value="Reject"
-          onclick="return confirm('Reject this Knowledge Base version?');">
+          onclick="
+            return confirm(
+              'Reject this Knowledge Base version?'
+            );
+          "
+        >
           ✕ Reject Version
         </button>
 
+
       </div>
 
+
     </form>
+
+
+    <!-- EDITING EXPLANATION -->
+
+    <div
+      class="muted"
+      style="
+        margin-top:15px;
+        padding:10px;
+        border-left:3px solid #777;
+      "
+    >
+
+      <b>Edit Before Approval:</b>
+
+      If the reviewer identifies an error, omission or amendment that should
+      be made before approval, select this option. The system will open the
+      controlled Knowledge Base editing page.
+
+      <br><br>
+
+      The original version will not be overwritten. The amendment will be
+      saved as a new Draft version and will require human approval again.
+
+    </div>
+
 
   </div>
 
   {% endfor %}
 
+
 {% else %}
+
 
   <div class="task" style="opacity:.65">
 
     <div>
-      <b>No pending Knowledge Base approvals</b>
+
+      <b>
+        No pending Knowledge Base approvals
+      </b>
 
       <div class="muted">
         There are currently no Draft Knowledge Base versions requiring review.
       </div>
+
     </div>
 
     <div class="arrow">
@@ -175,33 +296,85 @@
 
   </div>
 
+
 {% endif %}
+
+
+<!-- GOVERNANCE -->
 
 <div class="notice">
 
   <b>Governance rule:</b>
 
   Draft knowledge is not treated as approved authoritative knowledge.
+
   Only a human-approved version may be treated as approved VTA Knowledge Base
-  content. Rejected versions remain in the audit history and cannot be used
-  as approved knowledge.
+  content.
+
+  Rejected versions remain in the audit history and cannot be used as approved
+  knowledge.
+
+  Edited versions create a new Draft version and must go through the approval
+  process again.
 
 </div>
 
-<a class="task" href="{{ url_for('knowledge_base') }}">
+
+<!-- VERSION CONTROL EXPLANATION -->
+
+<div class="notice">
+
+  <b>Version control:</b>
+
+  <br><br>
+
+  If a reviewer edits the document:
+
+  <br><br>
+
+  <b>Current Draft Version</b>
+  →
+  <b>Edit Before Approval</b>
+  →
+  <b>New Draft Version</b>
+  →
+  <b>Human Review</b>
+  →
+  <b>Approve / Reject</b>
+
+  <br><br>
+
+  The previous version remains retained in the Knowledge Base version history
+  and is not deleted or silently overwritten.
+
+</div>
+
+
+<!-- BACK TO KNOWLEDGE BASE -->
+
+<a
+  class="task"
+  href="{{ url_for('knowledge_base') }}"
+>
 
   <div>
-    <b>← Back to Knowledge Base</b>
+
+    <b>
+      ← Back to Knowledge Base
+    </b>
 
     <div class="muted">
       Return to the Knowledge Base document registry.
     </div>
+
   </div>
+
 
   <div class="arrow">
     →
   </div>
 
 </a>
+
 
 {% endblock %}
