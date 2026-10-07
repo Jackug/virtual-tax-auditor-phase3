@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card"><h3>AI Findings Queue</h3><p class="muted">AI-generated findings require human validation before they can drive taxpayer communication.</p>
+<table class="table"><tr><th>Finding</th><th>Taxpayer</th><th>Case</th><th>Issue</th><th>Variance</th><th>Status</th><th></th></tr>
+{% for r in rows %}<tr><td><b>{{ r.finding_ref }}</b></td><td>{{ r.taxpayer_name }}<br>{{ r.tin }}</td><td>{{ r.case_ref }}</td><td>{{ r.description }}</td><td>UGX {{ '{:,.0f}'.format(r.variance) }} ({{ '{:.2f}'.format(r.variance_pct) }}%)</td><td><span class="pill {{ 'ai' if r.status=='AI Generated' else 'human' if r.status=='Human Validated' else 'pending' }}">{{ r.status }}</span></td><td><a class="btn secondary" href="{{ url_for('finding',fid=r.id) }}">Review →</a></td></tr>
+{% else %}<tr><td colspan="7">No AI findings have been generated.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}
