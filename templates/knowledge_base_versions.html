@@ -1,46 +1,666 @@
 {% extends 'base.html' %}
+
 {% block content %}
+
 <div class="notice">
-  <b>Knowledge Base — Version History</b><br>
-  <b>{{ document.document_ref }}</b> · {{ document.title }} · Current version: <b>v{{ document.current_version }}</b> · Status: <b>{{ document.status }}</b>
+
+  <b>Knowledge Base</b>
+
+  <div class="muted">
+    Controlled repository for tax laws, regulations, procedures, audit
+    guidance, sector knowledge and risk knowledge used by the Virtual Tax
+    Auditor.
+  </div>
+
 </div>
 
-<h3 class="section-title">Document Metadata</h3>
+
+<h3 class="section-title">
+  Knowledge Base Documents
+</h3>
+
+
+<!-- ========================================================= -->
+<!-- PENDING APPROVAL TASK -->
+<!-- ========================================================= -->
+
+{% set pending_count = documents
+   | selectattr('version_status', 'equalto', 'Draft')
+   | list
+   | length
+%}
+
+
+{% if pending_count > 0 %}
+
+<div
+  class="task"
+  style="
+    border-left:6px solid #c0392b;
+    margin-bottom:20px;
+  "
+>
+
+  <div>
+
+    <b>
+      ⚠ Knowledge Approval Required
+    </b>
+
+    <div class="muted">
+
+      {{ pending_count }}
+      Knowledge Base document(s) currently require human approval.
+
+    </div>
+
+  </div>
+
+
+  <div>
+
+    <a
+      class="button"
+      href="{{ url_for('knowledge_approval_queue') }}"
+    >
+      Review Approval Tasks →
+    </a>
+
+  </div>
+
+</div>
+
+{% endif %}
+
+
+
+<!-- ========================================================= -->
+<!-- REGISTER NEW KNOWLEDGE -->
+<!-- ========================================================= -->
+
+<h3 class="section-title">
+  Register New Knowledge
+</h3>
+
+
 <div class="card">
-  <div><b>Category:</b> {{ document.category }}</div>
-  <div><b>Document Type:</b> {{ document.document_type }}</div>
-  <div><b>Tax Type:</b> {{ document.tax_type or '—' }}</div>
-  <div><b>Issuing Authority:</b> {{ document.issuing_authority or '—' }}</div>
-  <div><b>Effective Date:</b> {{ document.effective_date or '—' }}</div>
-  <div><b>Expiry / End Date:</b> {{ document.expiry_date or '—' }}</div>
-  <div style="margin-top:8px"><b>Description:</b> {{ document.description or '—' }}</div>
-</div>
 
-<h3 class="section-title">Version History</h3>
-<table>
-<thead><tr><th>Version</th><th>Original File</th><th>Status</th><th>Uploaded By</th><th>Uploaded At</th><th>Change Summary</th><th>Action</th></tr></thead>
-<tbody>
-{% for v in versions %}
-<tr>
-  <td><b>v{{ v.version_number }}</b>{% if v.version_number == document.current_version %}<br><span class="muted">Current</span>{% endif %}</td>
-  <td>{{ v.original_filename }}</td>
-  <td>{{ v.version_status }}</td>
-  <td>{{ v.uploaded_by }}</td>
-  <td>{{ v.uploaded_at }}</td>
-  <td>{{ v.change_summary or '—' }}</td>
-  <td><a href="{{ url_for('knowledge_base_download', document_id=document.id) }}">Download current</a></td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
+<form
+  method="post"
+  enctype="multipart/form-data"
+  action="{{ url_for('knowledge_base_register') }}"
+>
 
-<h3 class="section-title">Upload New Version</h3>
-<form method="post" action="{{ url_for('knowledge_base_new_version', document_id=document.id) }}" enctype="multipart/form-data" class="card">
-  <label>New Document File</label>
-  <input type="file" name="document_file" required accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx">
-  <div style="margin-top:12px"><label>Change Summary</label><textarea name="change_summary" rows="3" placeholder="Describe what changed in this version."></textarea></div>
-  <button type="submit" class="button" style="margin-top:14px">Upload New Version</button>
+
+  <label>
+    <b>Document Title *</b>
+  </label>
+
+  <input
+    type="text"
+    name="title"
+    required
+    placeholder="e.g. Income Tax Act"
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  >
+
+
+  <br><br>
+
+
+  <label>
+    <b>Knowledge Category *</b>
+  </label>
+
+  <select
+    name="category"
+    required
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  >
+
+    <option value="">
+      Select Knowledge Category
+    </option>
+
+    {% for category in categories %}
+
+    <option value="{{ category }}">
+      {{ category }}
+    </option>
+
+    {% endfor %}
+
+  </select>
+
+
+  <br><br>
+
+
+  <label>
+    <b>Document Type *</b>
+  </label>
+
+  <select
+    name="document_type"
+    required
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  >
+
+    <option value="">
+      Select Document Type
+    </option>
+
+    {% for document_type in document_types %}
+
+    <option value="{{ document_type }}">
+      {{ document_type }}
+    </option>
+
+    {% endfor %}
+
+  </select>
+
+
+  <br><br>
+
+
+  <label>
+    <b>Tax Type</b>
+  </label>
+
+  <select
+    name="tax_type"
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  >
+
+    {% for tax_type in tax_types %}
+
+    <option value="{{ tax_type }}">
+      {{ tax_type }}
+    </option>
+
+    {% endfor %}
+
+  </select>
+
+
+  <br><br>
+
+
+  <label>
+    <b>Issuing Authority / Source</b>
+  </label>
+
+  <input
+    type="text"
+    name="issuing_authority"
+    placeholder="e.g. Parliament of Uganda"
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  >
+
+
+  <br><br>
+
+
+  <label>
+    <b>Effective Date</b>
+  </label>
+
+  <input
+    type="date"
+    name="effective_date"
+  >
+
+
+  <br><br>
+
+
+  <label>
+    <b>Expiry / End Date</b>
+  </label>
+
+  <input
+    type="date"
+    name="expiry_date"
+  >
+
+
+  <br><br>
+
+
+  <label>
+    <b>Description</b>
+  </label>
+
+  <textarea
+    name="description"
+    rows="5"
+    placeholder="Describe the content and purpose of this knowledge source."
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  ></textarea>
+
+
+  <br><br>
+
+
+  <label>
+    <b>Knowledge Document *</b>
+  </label>
+
+  <div class="muted">
+    Allowed formats:
+    PDF, DOC, DOCX, TXT, CSV, XLS, XLSX
+  </div>
+
+  <br>
+
+  <input
+    type="file"
+    name="document_file"
+    required
+  >
+
+
+  <br><br>
+
+
+  <label>
+    <b>Registration / Change Summary</b>
+  </label>
+
+  <textarea
+    name="change_summary"
+    rows="4"
+    placeholder="Describe why this document is being added to the Knowledge Base."
+    style="
+      width:100%;
+      box-sizing:border-box;
+    "
+  ></textarea>
+
+
+  <br><br>
+
+
+  <button type="submit">
+    Register Knowledge Document
+  </button>
+
+
 </form>
 
-<div style="margin-top:20px"><a class="task" href="{{ url_for('knowledge_base') }}"><b>← Back to Knowledge Base</b><span class="arrow">→</span></a></div>
+</div>
+
+
+
+<!-- ========================================================= -->
+<!-- REGISTERED KNOWLEDGE -->
+<!-- ========================================================= -->
+
+<h3 class="section-title">
+  Registered Knowledge
+</h3>
+
+
+{% if documents %}
+
+
+  {% for document in documents %}
+
+  <div
+    class="card"
+    style="
+      margin-bottom:20px;
+      border-left:6px solid
+      {% if document['version_status'] == 'Approved' %}
+        #2e7d32
+      {% elif document['version_status'] == 'Draft' %}
+        #c0392b
+      {% elif document['version_status'] == 'Rejected' %}
+        #777
+      {% else %}
+        #999
+      {% endif %};
+    "
+  >
+
+
+    <h3 style="margin-top:0;">
+      {{ document['title'] }}
+    </h3>
+
+
+    <div class="muted">
+
+      <b>Reference:</b>
+      {{ document['document_ref'] }}
+
+      &nbsp; | &nbsp;
+
+      <b>Version:</b>
+      v{{ document['version_number'] }}
+
+      &nbsp; | &nbsp;
+
+      <b>Status:</b>
+      {{ document['version_status'] }}
+
+    </div>
+
+
+    <p>
+      <b>Category:</b>
+      {{ document['category'] }}
+    </p>
+
+
+    <p>
+      <b>Document Type:</b>
+      {{ document['document_type'] }}
+    </p>
+
+
+    <p>
+      <b>Tax Type:</b>
+      {{ document['tax_type'] or 'General' }}
+    </p>
+
+
+    <p>
+      <b>Issuing Authority:</b>
+      {{ document['issuing_authority'] or 'Not specified' }}
+    </p>
+
+
+    <p>
+      <b>Effective Date:</b>
+      {{ document['effective_date'] or 'Not specified' }}
+    </p>
+
+
+    <p>
+      <b>Expiry / End Date:</b>
+      {{ document['expiry_date'] or 'Not specified' }}
+    </p>
+
+
+    <p>
+      <b>Description:</b>
+      {{ document['description'] or 'Not specified' }}
+    </p>
+
+
+    <p>
+      <b>Current File:</b>
+      {{ document['original_filename'] }}
+    </p>
+
+
+    <p>
+      <b>Uploaded By:</b>
+      {{ document['uploaded_by'] }}
+
+      &nbsp; | &nbsp;
+
+      <b>Uploaded:</b>
+      {{ document['uploaded_at'] }}
+    </p>
+
+
+    <!-- ===================================================== -->
+    <!-- DOCUMENT ACTIONS -->
+    <!-- ===================================================== -->
+
+    <div
+      style="
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        margin-top:15px;
+      "
+    >
+
+
+      <!-- DOWNLOAD -->
+
+      <a
+        class="button"
+        href="{{ url_for(
+            'knowledge_base_download',
+            document_id=document['id']
+        ) }}"
+      >
+        Download Current Version
+      </a>
+
+
+      <!-- VERSION HISTORY -->
+
+      <a
+        class="button"
+        href="{{ url_for(
+            'knowledge_base_versions',
+            document_id=document['id']
+        ) }}"
+      >
+        View Version History
+      </a>
+
+
+      <!-- EDIT DRAFT -->
+
+      {% if document['version_status'] == 'Draft' %}
+
+      <a
+        class="button"
+        href="{{ url_for(
+            'knowledge_base_edit',
+            document_id=document['id']
+        ) }}"
+      >
+        ✎ Edit Before Approval
+      </a>
+
+      {% endif %}
+
+
+      <!-- REVIEW -->
+
+      {% if document['version_status'] == 'Draft' %}
+
+      <a
+        class="button"
+        href="{{ url_for(
+            'knowledge_base_versions',
+            document_id=document['id']
+        ) }}"
+      >
+        Review / Approve
+      </a>
+
+      {% endif %}
+
+
+      <!-- REVIEW HISTORY -->
+
+      <a
+        class="button"
+        href="{{ url_for(
+            'knowledge_base_reviews',
+            document_id=document['id']
+        ) }}"
+      >
+        Governance History
+      </a>
+
+
+    </div>
+
+
+    <!-- ===================================================== -->
+    <!-- DRAFT WARNING -->
+    <!-- ===================================================== -->
+
+    {% if document['version_status'] == 'Draft' %}
+
+    <div
+      class="notice"
+      style="margin-top:15px;"
+    >
+
+      <b>⚠ Draft — Approval Required</b>
+
+      <div class="muted">
+
+        This document has not yet been approved as authoritative VTA
+        knowledge. It must pass human review before it can be used as
+        approved knowledge.
+
+      </div>
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- ===================================================== -->
+    <!-- APPROVED -->
+    <!-- ===================================================== -->
+
+    {% if document['version_status'] == 'Approved' %}
+
+    <div
+      class="notice"
+      style="margin-top:15px;"
+    >
+
+      <b>✓ Approved Knowledge</b>
+
+      <div class="muted">
+
+        Version {{ document['version_number'] }} is currently the approved
+        authoritative version of this Knowledge Base document.
+
+      </div>
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- ===================================================== -->
+    <!-- REJECTED -->
+    <!-- ===================================================== -->
+
+    {% if document['version_status'] == 'Rejected' %}
+
+    <div
+      class="notice"
+      style="margin-top:15px;"
+    >
+
+      <b>✕ Rejected</b>
+
+      <div class="muted">
+
+        This version was rejected during human Knowledge Base governance.
+        It remains retained for audit history.
+
+      </div>
+
+    </div>
+
+    {% endif %}
+
+
+  </div>
+
+  {% endfor %}
+
+
+{% else %}
+
+
+  <div
+    class="task"
+    style="opacity:.65"
+  >
+
+    <div>
+
+      <b>
+        No Knowledge Base documents registered
+      </b>
+
+      <div class="muted">
+        Register the first controlled knowledge source above.
+      </div>
+
+    </div>
+
+    <div class="arrow">
+      —
+    </div>
+
+  </div>
+
+
+{% endif %}
+
+
+
+<!-- ========================================================= -->
+<!-- GOVERNANCE PRINCIPLE -->
+<!-- ========================================================= -->
+
+<div class="notice">
+
+  <b>Knowledge Governance Principle</b>
+
+  <br><br>
+
+  The Knowledge Base maintains controlled versions of authoritative
+  information.
+
+  <br><br>
+
+  <b>
+    Registration → Draft → Human Review → Approval → Controlled Use
+  </b>
+
+  <br><br>
+
+  Where a reviewer identifies an error or required amendment:
+
+  <br><br>
+
+  <b>
+    Draft → Edit → New Draft Version → Human Review → Approval
+  </b>
+
+  <br><br>
+
+  Previous versions are retained and are not silently overwritten.
+
+</div>
+
+
 {% endblock %}
