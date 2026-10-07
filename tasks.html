@@ -32,12 +32,32 @@
   <div>
     <b>Knowledge Base</b>
     <div class="muted">
-      Open the Knowledge Base foundation for tax laws, regulations, procedures,
+      Open the Knowledge Base for tax laws, regulations, procedures,
       audit guidance and other controlled knowledge sources.
     </div>
   </div>
   <div class="arrow">→</div>
 </a>
+
+{% if counts.knowledge_pending > 0 %}
+<a class="task" href="{{ url_for('knowledge_approval_queue') }}" style="border-left:5px solid #c47f00">
+  <div>
+    <b>Knowledge Approval Task — {{ counts.knowledge_pending }} Pending</b>
+    <div class="muted">
+      Review and approve or reject Draft Knowledge Base documents before they can be used by the VTA.
+    </div>
+  </div>
+  <div class="arrow">Review →</div>
+</a>
+{% else %}
+<div class="task" style="opacity:.75">
+  <div>
+    <b>Knowledge Approval</b>
+    <div class="muted">No Knowledge Base approval tasks are currently pending.</div>
+  </div>
+  <div class="arrow">✓</div>
+</div>
+{% endif %}
 
 <h3 class="section-title">Phase 3 closed-loop workflow</h3>
 

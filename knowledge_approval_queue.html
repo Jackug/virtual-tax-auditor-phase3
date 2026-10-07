@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="notice">
+  <b>Knowledge Approval Tasks</b><br>
+  These documents are currently <b>Draft</b>. A human reviewer must approve a version before it becomes eligible for later VTA AI/Risk use.
+</div>
+
+<h3 class="section-title">Pending Knowledge Reviews</h3>
+{% if pending %}
+<table class="table">
+<thead><tr><th>Reference</th><th>Document</th><th>Category</th><th>Version</th><th>Uploaded By</th><th>Uploaded At</th><th>Action</th></tr></thead>
+<tbody>
+{% for d in pending %}
+<tr>
+<td><b>{{ d.document_ref }}</b></td>
+<td><b>{{ d.title }}</b><br><span class="muted">{{ d.document_type }}{% if d.issuing_authority %} · {{ d.issuing_authority }}{% endif %}</span></td>
+<td>{{ d.category }}</td>
+<td>v{{ d.version_number }}</td>
+<td>{{ d.uploaded_by or '—' }}</td>
+<td>{{ d.uploaded_at }}</td>
+<td><a href="{{ url_for('knowledge_base_versions', document_id=d.id) }}">Review &amp; Decide →</a></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}
+<div class="task"><b>No pending approval tasks.</b><div class="muted">All current Knowledge Base versions have already received a governance decision.</div></div>
+{% endif %}
+
+<div style="margin-top:20px"><a class="task" href="{{ url_for('tasks') }}"><div><b>← Back to VTA Dashboard</b><div class="muted">Return to the main Virtual Tax Auditor workflow.</div></div><div class="arrow">→</div></a></div>
+{% endblock %}

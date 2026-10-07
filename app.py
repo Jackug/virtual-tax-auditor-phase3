@@ -214,7 +214,8 @@ def tasks():
         'high':"SELECT COUNT(*) FROM risk_assessments WHERE band IN('High','Critical')",
         'cases':"SELECT COUNT(*) FROM audit_cases WHERE status NOT IN('Closed','Rejected')",
         'findings':"SELECT COUNT(*) FROM findings WHERE status='AI Generated'",
-        'responses':'SELECT COUNT(*) FROM taxpayer_responses'
+        'responses':'SELECT COUNT(*) FROM taxpayer_responses',
+        'knowledge_pending':"SELECT COUNT(*) FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft'"
     }.items()}
     case=c.execute("SELECT * FROM audit_cases WHERE status NOT IN ('Closed','Rejected') ORDER BY id DESC LIMIT 1").fetchone()
     analysis_count_case=0
@@ -502,6 +503,22 @@ def knowledge_base_reviews(document_id):
     if not doc:
         abort(404)
     return render_template('knowledge_base_reviews.html', document=doc, reviews=reviews)
+
+@app.route('/knowledge-base/approvals')
+@login_required
+def knowledge_approval_queue():
+    c = db()
+    pending = c.execute('''
+        SELECT d.*, v.version_number, v.original_filename, v.uploaded_by, v.uploaded_at,
+               v.change_summary, v.version_status
+        FROM knowledge_documents d
+        JOIN knowledge_document_versions v
+          ON v.document_id=d.id AND v.version_number=d.current_version
+        WHERE v.version_status='Draft'
+        ORDER BY v.uploaded_at ASC, d.id ASC
+    ''').fetchall()
+    c.close()
+    return render_template('knowledge_approval_queue.html', pending=pending)
 
 @app.route('/data-sources')
 @login_required
