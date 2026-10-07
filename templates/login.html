@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block content %}
+<div class="login-card">
+<h1>Virtual Tax Auditor</h1><p class="muted">Controlled digital audit workflow — Phase 2 test environment</p>
+<div class="notice"><strong>Test environment</strong><br>This build uses synthetic taxpayer data. No production taxpayer data is included.</div>
+<a class="button primary" href="{{ url_for('authorize') }}">Sign in with Google</a>
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123B63">
+  <title>{% block title %}Virtual Tax Auditor{% endblock %} · Phase 3</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="{% if session.get('email') %}authenticated{% else %}unauthenticated{% endif %}">
+{% if session.get('email') %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('tasks') }}" aria-label="Virtual Tax Auditor home"><span class="brandmark">VTA</span><span class="brand-copy"><strong>Virtual Tax Auditor</strong><small>Domestic Taxes · Phase 3</small></span></a>
+    <div class="env-badge"><span></span> Test environment</div>
+    <nav class="side-nav" aria-label="Primary navigation">
+      <div class="nav-label">WORKSPACE</div>
+      <a class="nav-item {% if request.endpoint == 'tasks' %}active{% endif %}" href="{{ url_for('tasks') }}"><span class="nav-icon">⌂</span><span>My Tasks</span></a>
+      <a class="nav-item {% if request.endpoint == 'data_sources' %}active{% endif %}" href="{{ url_for('data_sources') }}"><span class="nav-icon">▣</span><span>Data &amp; Rules</span></a>
+      <a class="nav-item {% if request.endpoint == 'risk_assessment' %}active{% endif %}" href="{{ url_for('risk_assessment') }}"><span class="nav-icon">◈</span><span>Risk Assessment</span></a>
+      <a class="nav-item {% if request.endpoint in ['risk_universe','taxpayer_360'] %}active{% endif %}" href="{{ url_for('risk_universe') }}"><span class="nav-icon">◎</span><span>Risk Universe</span></a>
+      <div class="nav-label nav-label-spaced">CASE MANAGEMENT</div>
+      <a class="nav-item {% if request.endpoint in ['case_detail','finding_detail','communication','sent','taxpayer_response','response_detail','case_outcome'] %}active{% endif %}" href="{{ url_for('risk_universe') }}"><span class="nav-icon">▤</span><span>Virtual Audits</span></a>
+      <a class="nav-item {% if request.endpoint == 'audit_log' %}active{% endif %}" href="{{ url_for('audit_log') }}"><span class="nav-icon">◷</span><span>Audit Trail</span></a>
+    </nav>
+    <div class="sidebar-bottom"><div class="user-card"><div class="avatar">{{ session.get('email','U')[0]|upper }}</div><div class="user-copy"><strong>{{ session.get('email','User') }}</strong><small>Signed in</small></div></div><a class="logout-link" href="{{ url_for('logout') }}">↪&nbsp; Sign out</a></div>
+  </aside>
+  <div class="main-shell">
+    <header class="topbar"><div><div class="eyebrow">DOMESTIC TAXES · VIRTUAL TAX AUDIT</div><div class="top-title">{{ self.title() }}</div></div><div class="top-actions"><span class="status-dot"><i></i> System online</span></div></header>
+    <main class="container" id="main-content">
+{% else %}
+<main class="public-shell" id="main-content">
+{% endif %}
+      {% with messages=get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-container">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+{% if session.get('email') %}
+    <footer class="footer">Virtual Tax Auditor · Controlled test environment · AI assists, human auditor validates and decides.</footer>
+  </div>
+</div>
+{% endif %}
+</body>
+</html>

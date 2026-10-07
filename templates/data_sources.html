@@ -1,0 +1,10 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-head"><div><h1>Data & Approved Rules</h1><p class="muted">Synthetic Phase 2 evidence base</p></div></div>
+{% if taxpayer %}<div class="card"><h2>{{ taxpayer.name }}</h2><div class="meta">TIN {{ taxpayer.tin }} · {{ taxpayer.sector }} · {{ taxpayer.station }} · FY {{ taxpayer.financial_year }}</div>
+<table><thead><tr><th>Metric</th><th>Declared</th><th>Observed</th><th>Source</th></tr></thead><tbody>
+{% for m in metrics %}<tr><td>{{ m.metric_name }}</td><td>UGX {{ '{:,.0f}'.format(m.declared_value) }}</td><td>{% if m.observed_value is not none %}UGX {{ '{:,.0f}'.format(m.observed_value) }}{% else %}—{% endif %}</td><td>{{ m.source }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+<div class="card"><h2>Approved risk rules</h2>
+{% for r in rules %}<div class="rule"><div class="pill approved">Approved</div><h3>{{ r.name }}</h3><p><b>Natural language:</b> {{ r.natural_language }}</p><p><b>Structured logic:</b> <code>{{ r.structured_logic }}</code></p><p class="muted">Category: {{ r.category }}</p></div>{% endfor %}
+</div>
+{% endblock %}

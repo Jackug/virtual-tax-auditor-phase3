@@ -1,0 +1,10 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-head"><div><h1>Taxpayer Communication</h1><p class="muted">Human-reviewed email test. The signed-in Google account is the sender.</p></div></div>
+<div class="card"><form method="post">
+<label>Recipient<input name="recipient" value="{{ recipient }}" required></label>
+<label>Subject<input name="subject" value="{{ subject }}" required></label>
+<label>Message<textarea name="body" required>{{ body }}</textarea></label>
+<div class="notice"><b>Human approval required:</b> Review and edit the message before clicking Send.</div>
+<button class="button primary">Approve & Send Email</button>
+</form></div>
+{% endblock %}
