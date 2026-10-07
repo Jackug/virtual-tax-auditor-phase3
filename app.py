@@ -111,7 +111,41 @@ def logout(): session.clear(); return redirect(url_for('login'))
 @app.route('/tasks')
 @login_required
 def tasks():
-    c=db(); counts={k:c.execute(q).fetchone()[0] for k,q in {'taxpayers':'SELECT COUNT(*) FROM taxpayers','high':"SELECT COUNT(*) FROM risk_assessments WHERE band IN('High','Critical')",'cases':"SELECT COUNT(*) FROM audit_cases WHERE status NOT IN('Closed','Rejected')",'findings':"SELECT COUNT(*) FROM findings WHERE status='AI Generated'",'responses':'SELECT COUNT(*) FROM taxpayer_responses'}.items()}; c.close(); return render_template('tasks.html',counts=counts)
+    c=db()
+    counts={k:c.execute(q).fetchone()[0] for k,q in {
+        'taxpayers':'SELECT COUNT(*) FROM taxpayers',
+        'high':"SELECT COUNT(*) FROM risk_assessments WHERE band IN('High','Critical')",
+        'cases':"SELECT COUNT(*) FROM audit_cases WHERE status NOT IN('Closed','Rejected')",
+        'findings':"SELECT COUNT(*) FROM findings WHERE status='AI Generated'",
+        'responses':'SELECT COUNT(*) FROM taxpayer_responses'
+    }.items()}
+    case=c.execute("SELECT * FROM audit_cases WHERE status NOT IN ('Closed','Rejected') ORDER BY id DESC LIMIT 1").fetchone()
+    validated_count=0
+    sent_count=0
+    response_count=0
+    analysis_count=0
+    validation_count=0
+    latest_finding_id=None
+    if case:
+        validated_count=c.execute("SELECT COUNT(*) FROM findings WHERE case_id=? AND status='Human Validated'",(case['id'],)).fetchone()[0]
+        sent_count=c.execute("SELECT COUNT(*) FROM communications WHERE case_id=? AND status='Sent'",(case['id'],)).fetchone()[0]
+        response_count=c.execute("SELECT COUNT(*) FROM taxpayer_responses WHERE case_id=?",(case['id'],)).fetchone()[0]
+        analysis_count=c.execute("SELECT COUNT(*) FROM response_analyses WHERE case_id=?",(case['id'],)).fetchone()[0]
+        validation_count=c.execute("SELECT COUNT(*) FROM second_validations WHERE case_id=?",(case['id'],)).fetchone()[0]
+    latest_finding=c.execute("SELECT id FROM findings ORDER BY id DESC LIMIT 1").fetchone()
+    latest_finding_id=latest_finding['id'] if latest_finding else None
+    c.close()
+    workflow={
+        'case_id': case['id'] if case else None,
+        'case_ref': case['case_ref'] if case else None,
+        'validated': validated_count > 0,
+        'sent': sent_count > 0,
+        'response': response_count > 0,
+        'response_analysis': analysis_count > 0,
+        'second_validation': validation_count > 0,
+        'latest_finding_id': latest_finding_id,
+    }
+    return render_template('tasks.html',counts=counts,workflow=workflow)
 @app.route('/data-sources')
 @login_required
 def data_sources():
@@ -179,6 +213,9 @@ def communication():
 @login_required
 def response(cid):
     c=db(); case=getcase(c,cid)
+    sent=c.execute("SELECT COUNT(*) FROM communications WHERE case_id=? AND status='Sent'",(cid,)).fetchone()[0]
+    if sent == 0:
+        c.close(); flash('Taxpayer response is available only after an approved communication has been sent.','error'); return redirect(url_for('case_detail',cid=cid))
     if request.method=='POST':
         text=request.form.get('response_text','').strip();
         if not text: c.close(); flash('Response text is required.','error'); return redirect(url_for('response',cid=cid))
@@ -191,11 +228,16 @@ def response(cid):
 @app.route('/evidence/<path:name>')
 @login_required
 def evidence(name): return send_from_directory(str(UPLOAD),name,as_attachment=True)
-@app.route('/case/<int:cid>/response-analysis',methods=['POST'])
+@app.route('/case/<int:cid>/response-analysis',methods=['GET','POST'])
 @login_required
 def response_analysis(cid):
     c=db(); case=getcase(c,cid); r=c.execute('SELECT * FROM taxpayer_responses WHERE case_id=? ORDER BY id DESC LIMIT 1',(cid,)).fetchone(); fs=c.execute("SELECT * FROM findings WHERE case_id=? AND status='Human Validated'",(cid,)).fetchall(); es=c.execute('SELECT * FROM evidence WHERE response_id=?',(r['id'],)).fetchall() if r else []
-    if not r: c.close(); flash('Record a taxpayer response first.','error'); return redirect(url_for('case_detail',cid=cid))
+    if not r:
+        c.close(); flash('Record a taxpayer response first.','error'); return redirect(url_for('case_detail',cid=cid))
+    if request.method == 'GET':
+        latest=c.execute('SELECT * FROM response_analyses WHERE case_id=? ORDER BY id DESC LIMIT 1',(cid,)).fetchone()
+        c.close()
+        return render_template('response_analysis.html',case=case,response=r,evidence=es,analysis=latest)
     text=r['response_text'].lower(); support=[]; missing=[]
     for f in fs:
         terms=['timing','credit note','return','invoice','reversal','excluded'] if 'sales' in f['description'].lower() else ['inventory','stock','timing','goods in transit','classification','capital']
@@ -214,7 +256,10 @@ def second_validation(cid):
 @app.route('/case/<int:cid>/further-action',methods=['POST'])
 @login_required
 def further_action(cid):
-    typ=request.form.get('action_type'); instruction=request.form.get('instruction','').strip(); c=db(); case=getcase(c,cid); c.execute('INSERT INTO further_actions(case_id,action_type,instruction,created_by,created_at) VALUES(?,?,?,?,?)',(cid,typ,instruction,email(),now())); c.execute("UPDATE audit_cases SET status='Further Action Open',updated_at=? WHERE id=?",(now(),cid)); c.commit(); c.close(); log('FURTHER_ACTION_CREATED',f'{typ}: {instruction}',case['case_ref']); flash('Further action recorded.','success'); return redirect(url_for('case_detail',cid=cid))
+    typ=request.form.get('action_type'); instruction=request.form.get('instruction','').strip(); c=db(); case=getcase(c,cid); second=c.execute('SELECT COUNT(*) FROM second_validations WHERE case_id=?',(cid,)).fetchone()[0]
+    if second == 0:
+        c.close(); flash('Further Action requires Second Human Validation first.','error'); return redirect(url_for('case_detail',cid=cid))
+    c.execute('INSERT INTO further_actions(case_id,action_type,instruction,created_by,created_at) VALUES(?,?,?,?,?)',(cid,typ,instruction,email(),now())); c.execute("UPDATE audit_cases SET status='Further Action Open',updated_at=? WHERE id=?",(now(),cid)); c.commit(); c.close(); log('FURTHER_ACTION_CREATED',f'{typ}: {instruction}',case['case_ref']); flash('Further action recorded.','success'); return redirect(url_for('case_detail',cid=cid))
 @app.route('/case/<int:cid>/outcome',methods=['POST'])
 @login_required
 def outcome(cid):
