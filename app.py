@@ -206,8 +206,8 @@ def tasks():
 @app.route('/knowledge-base')
 @login_required
 def knowledge_base():
-    c=db()
-    documents=[]
+    c = db()
+    documents = []
 
     # Step 1A foundation.
     # Document storage, metadata, search and retrieval will be added
@@ -218,7 +218,6 @@ def knowledge_base():
         'knowledge_base.html',
         documents=documents
     )
-
 
 @app.route('/data-sources')
 @login_required
