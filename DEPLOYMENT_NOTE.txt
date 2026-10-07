@@ -1,0 +1,24 @@
+VTA STEP 1C — DASHBOARD APPROVAL TASK FIX
+
+IMPORTANT: This ZIP has app.py and templates/ at the ROOT.
+Do not upload the enclosing folder as a nested directory.
+
+Replace:
+  app.py
+  templates/tasks.html
+  templates/knowledge_approval_queue.html
+  templates/knowledge_base.html
+  templates/knowledge_base_versions.html
+  templates/knowledge_base_reviews.html
+  and the other templates included here
+
+DO NOT replace/reset the SQLite database.
+
+After deployment:
+1. Log in.
+2. Open Dashboard.
+3. A Draft knowledge document should produce:
+   "Action required: 1 Knowledge Base approval task pending."
+4. Click "Open Knowledge Approval Tasks".
+5. Review the document and approve/reject it.
+6. Return to Dashboard. The pending task should disappear after approval/rejection.
