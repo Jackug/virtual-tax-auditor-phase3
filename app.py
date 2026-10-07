@@ -203,6 +203,23 @@ def tasks():
         'latest_finding_id': latest_finding_id,
     }
     return render_template('tasks.html',counts=counts,workflow=workflow)
+@app.route('/knowledge-base')
+@login_required
+def knowledge_base():
+    c=db()
+    documents=[]
+
+    # Step 1A foundation.
+    # Document storage, metadata, search and retrieval will be added
+    # in the next Knowledge Base build step.
+    c.close()
+
+    return render_template(
+        'knowledge_base.html',
+        documents=documents
+    )
+
+
 @app.route('/data-sources')
 @login_required
 def data_sources():
