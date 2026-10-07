@@ -1,231 +1,37 @@
 {% extends 'base.html' %}
 {% block content %}
-
 <div class="grid">
-
-  <a class="card kpi-card" href="{{ url_for('risk_universe') }}" title="Open Risk Universe">
-    <div class="label">Taxpayers</div>
-    <div class="kpi">{{ counts.taxpayers }}</div>
-    <div class="card-action">View taxpayers →</div>
-  </a>
-
-  <a class="card kpi-card" href="{{ url_for('risk_universe', band='HighCritical') }}" title="Open High / Critical Risk Universe">
-    <div class="label">High / Critical</div>
-    <div class="kpi">{{ counts.high }}</div>
-    <div class="card-action">View high-risk taxpayers →</div>
-  </a>
-
-  <a class="card kpi-card" href="{{ url_for('cases') }}" title="Open case queue">
-    <div class="label">Open Cases</div>
-    <div class="kpi">{{ counts.cases }}</div>
-    <div class="card-action">Open case queue →</div>
-  </a>
-
-  <a class="card kpi-card" href="{{ url_for('findings_queue') }}" title="Open AI findings queue">
-    <div class="label">AI Findings</div>
-    <div class="kpi">{{ counts.findings }}</div>
-    <div class="card-action">Open findings queue →</div>
-  </a>
-
+  <a class="card" href="{{ url_for('risk_universe') }}"><div class="label">Taxpayers</div><div class="kpi">{{ counts.taxpayers }}</div><div class="muted">Open Risk Universe</div></a>
+  <a class="card" href="{{ url_for('risk_universe') }}"><div class="label">High / Critical</div><div class="kpi">{{ counts.high }}</div><div class="muted">Open Risk Universe</div></a>
+  <a class="card" href="{{ url_for('risk_universe') }}"><div class="label">Open Cases</div><div class="kpi">{{ counts.cases }}</div><div class="muted">View Virtual Audits</div></a>
+  <a class="card" href="{{ url_for('findings_queue') }}"><div class="label">AI Findings</div><div class="kpi">{{ counts.findings }}</div><div class="muted">Open Findings Queue</div></a>
 </div>
 
 <h3 class="section-title">Phase 3 closed-loop workflow</h3>
 
-<!-- STEP 1 -->
-<a class="task" href="{{ url_for('risk_assessment') }}">
-  <div>
-    <b>1. Risk Assessment</b>
-    <div class="muted">
-      Apply approved rules to the synthetic taxpayer.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-
-<!-- STEP 2 -->
-<a class="task" href="{{ url_for('risk_universe') }}">
-  <div>
-    <b>2. Risk Universe</b>
-    <div class="muted">
-      Search, review and select a taxpayer for Virtual Audit.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-
-<!-- STEP 3 -->
+<a class="task" href="{{ url_for('risk_assessment') }}"><div><b>1. Risk Assessment</b><div class="muted">Apply approved rules to the synthetic taxpayer.</div></div><div class="arrow">→</div></a>
+<a class="task" href="{{ url_for('risk_universe') }}"><div><b>2. Risk Universe</b><div class="muted">Search, review and select a taxpayer for Virtual Audit.</div></div><div class="arrow">→</div></a>
 {% if workflow.case_id %}
-<a class="task" href="{{ url_for('case_detail', cid=workflow.case_id) }}">
-  <div>
-    <b>3. AI Audit Analysis</b>
-    <div class="muted">
-      Open the selected Virtual Audit case and run the controlled AI analysis.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>3. AI Audit Analysis</b>
-    <div class="muted">
-      Available after a taxpayer is selected for Virtual Audit.
-    </div>
-  </div>
-  <div class="arrow">3</div>
-</div>
-{% endif %}
-
-<!-- STEP 4 -->
+<a class="task" href="{{ url_for('case_detail',cid=workflow.case_id) }}"><div><b>3. AI Audit Analysis</b><div class="muted">Open the active case and run the controlled analysis.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>3. AI Audit Analysis</b><div class="muted">Select a High/Critical taxpayer first.</div></div><div class="arrow">3</div></div>{% endif %}
 {% if workflow.case_id and workflow.analyzed %}
-<a class="task" href="{{ url_for('findings_queue') }}">
-  <div>
-    <b>4. Human Finding Validation</b>
-    <div class="muted">
-      Review AI-generated findings and approve, reject or request review.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>4. Human Finding Validation</b>
-    <div class="muted">
-      Available after AI Audit Analysis is completed.
-    </div>
-  </div>
-  <div class="arrow">4</div>
-</div>
-{% endif %}
-
-<!-- STEP 5 -->
+<a class="task" href="{{ url_for('case_detail',cid=workflow.case_id) }}"><div><b>4. Human Finding Validation</b><div class="muted">Review and validate AI-generated findings.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>4. Human Finding Validation</b><div class="muted">Available after AI Audit Analysis.</div></div><div class="arrow">4</div></div>{% endif %}
 {% if workflow.case_id and workflow.validated %}
-<a class="task" href="{{ url_for('case_communication', cid=workflow.case_id) }}">
-  <div>
-    <b>5. Human Communication / Email</b>
-    <div class="muted">
-      Review the AI draft, edit it if necessary, approve it and send through Gmail.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>5. Human Communication / Email</b>
-    <div class="muted">
-      Becomes available after at least one finding is human-validated.
-    </div>
-  </div>
-  <div class="arrow">5</div>
-</div>
-{% endif %}
-
-<!-- STEP 6 -->
+<a class="task" href="{{ url_for('case_communication',cid=workflow.case_id) }}"><div><b>5. Human Communication / Email</b><div class="muted">Review, edit, approve and send the taxpayer communication through Gmail.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>5. Human Communication / Email</b><div class="muted">Becomes available after at least one finding is human-validated.</div></div><div class="arrow">5</div></div>{% endif %}
 {% if workflow.case_id and workflow.sent %}
-<a class="task" href="{{ url_for('response', cid=workflow.case_id) }}">
-  <div>
-    <b>6. Taxpayer Response & Evidence</b>
-    <div class="muted">
-      Record the taxpayer explanation and upload supporting evidence.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>6. Taxpayer Response & Evidence</b>
-    <div class="muted">
-      Available after the approved communication has been sent.
-    </div>
-  </div>
-  <div class="arrow">6</div>
-</div>
-{% endif %}
-
-<!-- STEP 7 -->
+<a class="task" href="{{ url_for('response',cid=workflow.case_id) }}"><div><b>6. Taxpayer Response & Evidence</b><div class="muted">Record the taxpayer explanation and upload supporting evidence.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>6. Taxpayer Response & Evidence</b><div class="muted">Available after the approved communication has been sent.</div></div><div class="arrow">6</div></div>{% endif %}
 {% if workflow.case_id and workflow.response %}
-<a class="task" href="{{ url_for('response_analysis', cid=workflow.case_id) }}">
-  <div>
-    <b>7. AI Response Analysis</b>
-    <div class="muted">
-      Compare the taxpayer response and evidence against the original validated finding.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>7. AI Response Analysis</b>
-    <div class="muted">
-      Available after a taxpayer response is recorded.
-    </div>
-  </div>
-  <div class="arrow">7</div>
-</div>
-{% endif %}
-
-<!-- STEP 8 -->
+<a class="task" href="{{ url_for('response_analysis',cid=workflow.case_id) }}"><div><b>7. AI Response Analysis</b><div class="muted">Compare the taxpayer response and evidence against the original validated finding.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>7. AI Response Analysis</b><div class="muted">Available after a taxpayer response is recorded.</div></div><div class="arrow">7</div></div>{% endif %}
 {% if workflow.case_id and workflow.response_analysis %}
-<a class="task" href="{{ url_for('case_detail', cid=workflow.case_id) }}#second-validation">
-  <div>
-    <b>8. Second Human Validation</b>
-    <div class="muted">
-      Resolve, request more evidence, modify the finding or initiate further action.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>8. Second Human Validation</b>
-    <div class="muted">
-      Available after AI Response Analysis is completed.
-    </div>
-  </div>
-  <div class="arrow">8</div>
-</div>
-{% endif %}
-
-<!-- STEP 9 -->
+<a class="task" href="{{ url_for('case_detail',cid=workflow.case_id) }}#second-validation"><div><b>8. Second Human Validation</b><div class="muted">Review the AI response analysis and decide whether the finding is resolved, needs more evidence, or requires further action.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>8. Second Human Validation</b><div class="muted">Available after AI Response Analysis is completed.</div></div><div class="arrow">8</div></div>{% endif %}
 {% if workflow.case_id and workflow.second_validation %}
-<a class="task" href="{{ url_for('case_detail', cid=workflow.case_id) }}#further-action">
-  <div>
-    <b>9. Further Action / Outcome / Closure</b>
-    <div class="muted">
-      Record controlled next actions and close only after required human validation.
-    </div>
-  </div>
-  <div class="arrow">→</div>
-</a>
-{% else %}
-<div class="task" style="opacity:.65">
-  <div>
-    <b>9. Further Action / Outcome / Closure</b>
-    <div class="muted">
-      Available after Second Human Validation.
-    </div>
-  </div>
-  <div class="arrow">9</div>
-</div>
-{% endif %}
+<a class="task" href="{{ url_for('case_detail',cid=workflow.case_id) }}#further-action"><div><b>9. Further Action / Outcome / Closure</b><div class="muted">Continue the controlled loop for unresolved findings or record the authorised audit outcome.</div></div><div class="arrow">→</div></a>
+{% else %}<div class="task" style="opacity:.65"><div><b>9. Further Action / Outcome / Closure</b><div class="muted">Available after Second Human Validation.</div></div><div class="arrow">9</div></div>{% endif %}
 
-{% if workflow.case_id %}
-<div class="notice">
-  <b>Current case:</b> {{ workflow.case_ref }}.
-  The workflow activates each stage only when its required predecessor has been completed.
-</div>
-{% else %}
-<div class="notice">
-  <b>Control principle:</b>
-  AI-generated analysis remains preliminary.
-  Human auditors validate findings, approve taxpayer communications,
-  validate responses and make consequential decisions.
-</div>
-{% endif %}
-
+{% if workflow.case_id %}<div class="notice"><b>Current case:</b> {{ workflow.case_ref }}. Open the active case above to continue from the first incomplete stage.</div>{% else %}<div class="notice"><b>Control principle:</b> AI-generated analysis remains preliminary. Human auditors validate findings, approve taxpayer communications, validate responses and make consequential decisions.</div>{% endif %}
 {% endblock %}

@@ -1,1 +1,212 @@
-{% extends 'base.html' %}{% block content %}<div class="two"><div class="card"><div class="label">Virtual Audit Case</div><h2>{{ case.case_ref }}</h2><p><b>{{ case.taxpayer_name }}</b> · {{ case.tin }}</p><span class="pill pending">{{ case.status }}</span></div><div class="card"><h3>Next action</h3>{% if not analysis %}<form method="post" action="{{ url_for('analyze',cid=case.id) }}"><button class="btn">Run AI Audit Analysis</button></form>{% elif findings|selectattr('status','equalto','AI Generated')|list %}<p>Open the AI findings and complete Human Finding Validation.</p>{% elif findings|selectattr('status','equalto','Human Validated')|list and not communications|selectattr('status','equalto','Sent')|list %}<a class="btn green" href="{{ url_for('case_communication',cid=case.id) }}">AI Communication → Human Approval</a>{% elif communications|selectattr('status','equalto','Sent')|list and not responses %}<a class="btn" href="{{ url_for('response',cid=case.id) }}">Taxpayer Response & Evidence</a>{% elif responses and not response_analyses %}<form method="post" action="{{ url_for('response_analysis',cid=case.id) }}"><button class="btn amber">Run AI Response Analysis</button></form>{% endif %}</div></div>{% if analysis %}<div class="card" style="margin-top:15px"><h3>AI Audit Analysis</h3><p>{{ analysis.summary }}</p><div class="notice">{{ analysis.limitations }}</div></div>{% endif %}<div class="card" style="margin-top:15px"><h3>Findings</h3><table class="table"><tr><th>Finding</th><th>Description</th><th>Variance</th><th>Status</th><th></th></tr>{% for f in findings %}<tr><td>{{ f.finding_ref }}</td><td>{{ f.description }}</td><td>UGX {{ '{:,.0f}'.format(f.variance) }} ({{ '{:.2f}'.format(f.variance_pct) }}%)</td><td><span class="pill {{ 'ai' if f.status=='AI Generated' else 'human' if f.status=='Human Validated' else 'pending' }}">{{ f.status }}</span></td><td><a class="btn secondary" href="{{ url_for('finding',fid=f.id) }}">Review</a></td></tr>{% endfor %}</table></div>{% if responses %}<div class="card" style="margin-top:15px"><h3>Taxpayer Response & Evidence</h3>{% for r in responses %}<div class="pre">{{ r.response_text }}</div>{% endfor %}{% for e in evidence %}<p><a href="{{ url_for('evidence',name=e.stored_filename) }}">{{ e.original_filename }}</a></p>{% endfor %}</div>{% endif %}{% if response_analyses %}{% set ra=response_analyses[0] %}<div class="card" style="margin-top:15px"><h3>AI Response Analysis</h3><p><b>{{ ra.overall_assessment }}</b></p><div class="two"><div><div class="label">Support</div><div class="pre">{{ ra.findings_supported }}</div></div><div><div class="label">Missing evidence</div><div class="pre">{{ ra.missing_evidence }}</div></div></div><p><b>Recommended action:</b> {{ ra.recommended_action }}</p><div class="notice">{{ ra.limitations }}</div></div><div class="card" style="margin-top:15px"><h3>Second Human Validation</h3><form method="post" action="{{ url_for('second_validation',cid=case.id) }}"><div class="field"><label>Finding</label><select name="finding_id">{% for f in findings if f.status=='Human Validated' %}<option value="{{ f.id }}">{{ f.finding_ref }}</option>{% endfor %}</select></div><div class="field"><label>Decision</label><select name="decision"><option>RESOLVED</option><option>PARTIAL</option><option>NOT RESOLVED</option><option>MORE EVIDENCE</option><option>FURTHER ACTION</option></select></div><div class="field"><label>Reason</label><textarea name="reason" required></textarea></div><button class="btn green">Record Second Validation</button></form></div>{% endif %}{% if validations %}<div class="card" style="margin-top:15px"><h3>Further Action</h3><form method="post" action="{{ url_for('further_action',cid=case.id) }}"><div class="field"><label>Action</label><select name="action_type"><option>Further taxpayer query</option><option>Request additional evidence</option><option>Additional AI analysis</option><option>Third-party comparison</option><option>Recalculation</option><option>Authorized assessment</option><option>Field audit referral</option><option>Investigation / specialist referral</option></select></div><div class="field"><textarea name="instruction" required></textarea></div><button class="btn amber">Create Further Action</button></form>{% for a in actions %}<p>{{ a.action_type }} — {{ a.instruction }} — <b>{{ a.status }}</b></p>{% endfor %}</div><div class="card" style="margin-top:15px"><h3>Final Outcome & Closure</h3><form method="post" action="{{ url_for('outcome',cid=case.id) }}"><div class="field"><label>Outcome</label><select name="outcome_type"><option>Cleared</option><option>Compliance action</option><option>Adjusted tax position</option><option>Authorized assessment</option><option>Further virtual audit</option><option>Field audit</option><option>Investigation / specialist</option><option>Other</option></select></div><div class="field"><label>Rationale</label><textarea name="rationale" required></textarea></div><button class="btn green">Record Outcome & Close Case</button></form></div>{% endif %}{% if outcome %}<div class="card" style="margin-top:15px"><h3>Case Closed</h3><p><b>{{ outcome.outcome_type }}</b></p><p>{{ outcome.rationale }}</p><p class="muted">{{ outcome.decided_by }} · {{ outcome.closed_at }}</p></div>{% endif %}{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <div class="label">VIRTUAL TAX AUDIT · CLOSED-LOOP CASE</div>
+  <div class="two" style="margin-top:8px">
+    <div>
+      <h2 style="margin:0">{{ case.case_ref }}</h2>
+      <p><b>{{ case.taxpayer_name }}</b> · {{ case.tin }}</p>
+    </div>
+    <div style="text-align:right">
+      <span class="pill pending">{{ case.status }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:15px">
+  <h3 style="margin-top:0">Controlled workflow</h3>
+  <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="notice" style="margin:0"><b>1–4</b><br>Risk → AI Audit → Human Finding Validation</div>
+    <div class="notice" style="margin:0"><b>5–6</b><br>Human Communication → Taxpayer Response</div>
+    <div class="notice" style="margin:0"><b>7</b><br>AI Response Analysis</div>
+    <div class="notice" style="margin:0"><b>8–9</b><br>Second Validation → Further Action / Outcome</div>
+  </div>
+</div>
+
+{% if not analysis %}
+<div class="card" style="margin-top:15px">
+  <h3>Next required action: AI Audit Analysis</h3>
+  <p class="muted">The selected taxpayer is ready for the controlled AI audit analysis.</p>
+  <form method="post" action="{{ url_for('analyze',cid=case.id) }}"><button class="btn">Run AI Audit Analysis</button></form>
+</div>
+{% endif %}
+
+{% if analysis %}
+<div class="card" style="margin-top:15px">
+  <h3>AI Audit Analysis</h3>
+  <p>{{ analysis.summary }}</p>
+  <div class="notice">{{ analysis.limitations }}</div>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:15px">
+  <h3>Findings</h3>
+  <table class="table">
+    <tr><th>Finding</th><th>Description</th><th>Variance</th><th>Status</th><th></th></tr>
+    {% for f in findings %}
+    <tr>
+      <td>{{ f.finding_ref }}</td>
+      <td>{{ f.description }}</td>
+      <td>UGX {{ '{:,.0f}'.format(f.variance) }} ({{ '{:.2f}'.format(f.variance_pct) }}%)</td>
+      <td><span class="pill {{ 'ai' if f.status=='AI Generated' else 'human' if f.status=='Human Validated' else 'pending' }}">{{ f.status }}</span></td>
+      <td><a class="btn secondary" href="{{ url_for('finding',fid=f.id) }}">Review</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if findings|selectattr('status','equalto','Human Validated')|list and not communications|selectattr('status','equalto','Sent')|list %}
+<div class="card" style="margin-top:15px">
+  <h3>Step 5 · Human Communication / Email</h3>
+  <p class="muted">At least one finding has been human validated. Review the AI communication draft, edit it if required, approve it and transmit through Gmail.</p>
+  <a class="btn green" href="{{ url_for('case_communication',cid=case.id) }}">Open Communication & Human Approval →</a>
+</div>
+{% endif %}
+
+{% if communications|selectattr('status','equalto','Sent')|list and not responses %}
+<div class="card" style="margin-top:15px">
+  <h3>Step 6 · Taxpayer Response & Evidence</h3>
+  <p class="muted">The approved communication has been sent. Record the taxpayer explanation and upload supporting evidence.</p>
+  <a class="btn" href="{{ url_for('response',cid=case.id) }}">Open Taxpayer Response →</a>
+</div>
+{% endif %}
+
+{% if responses %}
+<div class="card" style="margin-top:15px">
+  <h3>Step 6 · Taxpayer Response & Evidence <span class="pill human">Received</span></h3>
+  {% for r in responses %}
+    <div class="pre">{{ r.response_text }}</div>
+    <p class="muted">Submitted {{ r.submitted_at }} · {{ r.submitted_by }}</p>
+  {% endfor %}
+  <h4>Evidence register</h4>
+  {% for e in evidence %}
+    <p><a href="{{ url_for('evidence',name=e.stored_filename) }}">{{ e.original_filename }}</a> · {{ e.mime_type }} · {{ e.uploaded_at }}</p>
+  {% else %}
+    <p class="muted">No evidence files attached.</p>
+  {% endfor %}
+
+  {% if not response_analyses %}
+  <div class="success" style="margin-top:15px">
+    <b>Next required action: AI Response Analysis</b><br>
+    The taxpayer response has been recorded. The auditor must now run the controlled response-analysis engine before Second Human Validation.
+  </div>
+  <form method="post" action="{{ url_for('response_analysis',cid=case.id) }}">
+    <button class="btn amber">Run AI Response Analysis →</button>
+  </form>
+  {% else %}
+    <a class="btn secondary" href="{{ url_for('response_analysis',cid=case.id) }}">Open AI Response Analysis</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if response_analyses %}
+{% set ra=response_analyses[0] %}
+<div class="card" style="margin-top:15px">
+  <h3>Step 7 · AI Response Analysis <span class="pill ai">Completed</span></h3>
+  <p><b>{{ ra.overall_assessment }}</b></p>
+  <div class="two">
+    <div><div class="label">Potential support</div><div class="pre">{{ ra.findings_supported }}</div></div>
+    <div><div class="label">Missing evidence</div><div class="pre">{{ ra.missing_evidence }}</div></div>
+  </div>
+  <p><b>Recommended action:</b> {{ ra.recommended_action }}</p>
+  <div class="notice">{{ ra.limitations }}</div>
+</div>
+
+{% if not validations %}
+<div class="card" id="second-validation" style="margin-top:15px">
+  <h3>Step 8 · Second Human Validation</h3>
+  <p class="muted">The human auditor must review the taxpayer explanation, evidence and AI response analysis and make the authorised decision.</p>
+  <form method="post" action="{{ url_for('second_validation',cid=case.id) }}">
+    <div class="field"><label>Finding</label><select name="finding_id" required>{% for f in findings if f.status=='Human Validated' %}<option value="{{ f.id }}">{{ f.finding_ref }} — {{ f.description }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Decision</label><select name="decision" required>
+      <option value="RESOLVED">Resolved</option>
+      <option value="PARTIAL">Partially resolved</option>
+      <option value="NOT RESOLVED">Not resolved</option>
+      <option value="MORE EVIDENCE">More evidence required</option>
+      <option value="FURTHER ACTION">Further action required</option>
+    </select></div>
+    <div class="field"><label>Human reason / decision rationale</label><textarea name="reason" required></textarea></div>
+    <button class="btn green">Record Second Human Validation</button>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+{% if validations %}
+<div class="card" style="margin-top:15px">
+  <h3>Step 8 · Second Human Validation <span class="pill human">Recorded</span></h3>
+  {% for v in validations %}
+    <div class="pre"><b>{{ v.decision }}</b>
+{{ v.reason }}</div>
+    <p class="muted">Decided by {{ v.decided_by }} · {{ v.decided_at }}</p>
+  {% endfor %}
+</div>
+
+<div class="card" id="further-action" style="margin-top:15px">
+  <h3>Step 9A · Further Action / Iterative Audit Loop</h3>
+  <p class="muted">Use this where the finding remains unresolved. The controlled process can request more evidence, ask a further taxpayer question, run additional analysis, recalculate, or escalate.</p>
+  <form method="post" action="{{ url_for('further_action',cid=case.id) }}">
+    <div class="field"><label>Action type</label><select name="action_type" required>
+      <option>Further taxpayer query</option>
+      <option>Request additional evidence</option>
+      <option>Clarification of submitted information</option>
+      <option>Additional AI analysis</option>
+      <option>Third-party comparison</option>
+      <option>Recalculation</option>
+      <option>Authorized assessment</option>
+      <option>Field audit referral</option>
+      <option>Investigation / specialist referral</option>
+    </select></div>
+    <div class="field"><label>Instruction</label><textarea name="instruction" required placeholder="Specify exactly what must be done or obtained."></textarea></div>
+    <button class="btn amber">Create Further Action</button>
+  </form>
+
+  {% if actions %}
+  <h4>Further-action register</h4>
+  <table class="table">
+    <tr><th>Action</th><th>Instruction</th><th>Status</th><th></th></tr>
+    {% for a in actions %}
+    <tr>
+      <td>{{ a.action_type }}</td><td>{{ a.instruction }}</td><td>{{ a.status }}</td>
+      <td>{% if a.status=='Open' %}<form method="post" action="{{ url_for('complete_further_action',cid=case.id,aid=a.id) }}"><button class="btn secondary">Mark Completed</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+{% if not open_actions and not outcome %}
+<div class="card" style="margin-top:15px">
+  <h3>Step 9B · Audit Outcome & Closure</h3>
+  {% if unresolved_findings %}
+    <div class="notice"><b>Closure is not yet available.</b> Every finding must have a final human status before the case can close. The following finding(s) still require human action: {% for f in unresolved_findings %}{{ f.finding_ref }}{% if not loop.last %}, {% endif %}{% endfor %}.</div>
+  {% else %}
+    <p class="muted">The authorised human decision determines the audit outcome. The system prepares and records the decision; it does not independently impose a consequential tax decision.</p>
+    <form method="post" action="{{ url_for('outcome',cid=case.id) }}">
+      <div class="field"><label>Outcome</label><select name="outcome_type" required>
+        <option>Cleared / No further action</option>
+        <option>Compliance action</option>
+        <option>Adjusted tax position</option>
+        <option>Authorized assessment</option>
+        <option>Further virtual audit</option>
+        <option>Field audit</option>
+        <option>Investigation / specialist review</option>
+        <option>Other</option>
+      </select></div>
+      <div class="field"><label>Final rationale</label><textarea name="rationale" required></textarea></div>
+      <button class="btn green">Record Outcome & Close Case</button>
+    </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if outcome %}
+<div class="card" style="margin-top:15px">
+  <h3>Case Closed <span class="pill human">Closed</span></h3>
+  <p><b>{{ outcome.outcome_type }}</b></p>
+  <div class="pre">{{ outcome.rationale }}</div>
+  <p class="muted">{{ outcome.decided_by }} · {{ outcome.closed_at }}</p>
+</div>
+{% endif %}
+{% endblock %}
