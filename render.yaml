@@ -1,15 +1,15 @@
 services:
   - type: web
-    name: vta-8qs7
+    name: virtual-tax-auditor-phase3
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 app:app
+    startCommand: gunicorn app:app
     envVars:
       - key: GOOGLE_CLIENT_SECRETS
         value: /etc/secrets/client_secret.json
       - key: BASE_URL
-        value: https://vta-8qs7.onrender.com
+        value: https://virtual-tax-auditor-phase3.onrender.com
       - key: COOKIE_SECURE
         value: "1"
       - key: FLASK_SECRET_KEY
-        sync: false
+        generateValue: true
