@@ -1,115 +1,1206 @@
-{% extends 'base.html' %}
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<div class="notice">
-  <b>Knowledge Base — Step 1B</b><br>
-  Controlled document registration and versioned storage. Documents are registered as <b>Draft</b> until the approval workflow is added in Step 1C.
-</div>
+    <title>Knowledge Base — Virtual Tax Auditor</title>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, message in messages %}
-      <div class="notice" style="margin-top:12px"><b>{{ message }}</b></div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-<h3 class="section-title">Register Knowledge Document</h3>
-<form method="post" action="{{ url_for('knowledge_base_register') }}" enctype="multipart/form-data" class="card">
-  <div class="grid">
-    <div>
-      <label>Document Title *</label>
-      <input name="title" required placeholder="e.g. Value Added Tax Act">
-    </div>
-    <div>
-      <label>Knowledge Category *</label>
-      <select name="category" required>
-        <option value="">Select category</option>
-        {% for x in categories %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label>Document Type *</label>
-      <select name="document_type" required>
-        <option value="">Select type</option>
-        {% for x in document_types %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label>Tax Type</label>
-      <select name="tax_type">
-        {% for x in tax_types %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label>Issuing Authority / Source</label>
-      <input name="issuing_authority" placeholder="e.g. Uganda Revenue Authority / Ministry of Finance">
-    </div>
-    <div>
-      <label>Effective Date</label>
-      <input type="date" name="effective_date">
-    </div>
-    <div>
-      <label>Expiry / End Date</label>
-      <input type="date" name="expiry_date">
-    </div>
-    <div>
-      <label>Document File *</label>
-      <input type="file" name="document_file" required accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx">
-      <div class="muted">Allowed: PDF, DOC, DOCX, TXT, CSV, XLS, XLSX. Maximum upload size follows the VTA application limit.</div>
-    </div>
-  </div>
-  <div style="margin-top:14px">
-    <label>Description</label>
-    <textarea name="description" rows="3" placeholder="What does this document cover and why is it relevant to the VTA Knowledge Base?"></textarea>
-  </div>
-  <div style="margin-top:14px">
-    <label>Version / Change Summary</label>
-    <textarea name="change_summary" rows="2" placeholder="For a first registration, describe the document or source version being loaded."></textarea>
-  </div>
-  <button type="submit" class="button" style="margin-top:14px">Register &amp; Upload Document</button>
-</form>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f4f6f8;
+            color: #172033;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 14px;
+        }
 
-<h3 class="section-title">Registered Knowledge Documents</h3>
-{% if documents %}
-<table>
-  <thead>
-    <tr>
-      <th>Reference</th><th>Document</th><th>Category</th><th>Tax Type</th><th>Version</th><th>Status</th><th>Uploaded</th><th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for d in documents %}
-    <tr>
-      <td><b>{{ d.document_ref }}</b></td>
-      <td>
-        <b>{{ d.title }}</b><br>
-        <span class="muted">{{ d.document_type }}{% if d.issuing_authority %} · {{ d.issuing_authority }}{% endif %}</span>
-      </td>
-      <td>{{ d.category }}</td>
-      <td>{{ d.tax_type or '—' }}</td>
-      <td>v{{ d.version_number }}</td>
-      <td><b>{{ d.status }}</b></td>
-      <td>{{ d.uploaded_at }}</td>
-      <td>
-        <a href="{{ url_for('knowledge_base_download', document_id=d.id) }}">Download</a><br>
-        <a href="{{ url_for('knowledge_base_versions', document_id=d.id) }}">Version history</a>
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<div class="task">
-  <b>No knowledge documents have been registered yet.</b>
-  <div class="muted">Use the form above to create the first controlled Knowledge Base document record.</div>
-</div>
-{% endif %}
+        .topbar {
+            background: #ffffff;
+            border-bottom: 1px solid #d8dde5;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
 
-<div style="margin-top:20px">
-  <a class="task" href="{{ url_for('tasks') }}">
-    <div><b>← Back to VTA Dashboard</b><div class="muted">Return to the main Virtual Tax Auditor workflow.</div></div>
-    <div class="arrow">→</div>
-  </a>
-</div>
-{% endblock %}
+        .topbar a {
+            text-decoration: none;
+            color: #174a8b;
+            border: 1px solid #b9c8dc;
+            background: #ffffff;
+            padding: 7px 11px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .topbar a:hover {
+            background: #eef5ff;
+        }
+
+        .page {
+            max-width: 1280px;
+            margin: 20px auto 50px auto;
+            padding: 0 18px;
+        }
+
+        .panel {
+            background: #ffffff;
+            border: 1px solid #d4dbe5;
+            border-radius: 6px;
+            margin-bottom: 18px;
+            padding: 18px;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+            color: #12243a;
+        }
+
+        h2 {
+            margin: 0 0 6px 0;
+            font-size: 18px;
+            color: #12243a;
+        }
+
+        h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            color: #12243a;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: #5c6878;
+            line-height: 1.5;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-block;
+            border: 1px solid #b7c4d6;
+            background: #ffffff;
+            color: #173f72;
+            text-decoration: none;
+            padding: 9px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            background: #f0f5fb;
+        }
+
+        .btn-primary {
+            background: #0b5ed7;
+            border-color: #0b5ed7;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: #084db2;
+            color: #ffffff;
+        }
+
+        .btn-success {
+            background: #198754;
+            border-color: #198754;
+            color: #ffffff;
+        }
+
+        .btn-warning {
+            background: #f0ad4e;
+            border-color: #e09a32;
+            color: #1d1d1d;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            border-color: #dc3545;
+            color: #ffffff;
+        }
+
+        .btn-small {
+            padding: 6px 9px;
+            font-size: 12px;
+        }
+
+        .info-box {
+            background: #f5f9ff;
+            border: 1px solid #c8d9ef;
+            border-radius: 6px;
+            padding: 14px;
+            margin-top: 15px;
+            line-height: 1.55;
+        }
+
+        .info-box strong {
+            color: #173f72;
+        }
+
+        .governance-box {
+            background: #fafbfd;
+            border-left: 4px solid #174a8b;
+            padding: 12px 14px;
+            margin-top: 15px;
+            color: #4c5868;
+            line-height: 1.55;
+        }
+
+        .section-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #526274;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 10px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full {
+            grid-column: 1 / -1;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #26384d;
+            margin-bottom: 5px;
+        }
+
+        .required {
+            color: #c62828;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="file"],
+        select,
+        textarea {
+            width: 100%;
+            border: 1px solid #c8d1dc;
+            border-radius: 4px;
+            padding: 9px 10px;
+            font-family: inherit;
+            font-size: 13px;
+            background: #ffffff;
+            color: #1e2b3a;
+        }
+
+        textarea {
+            min-height: 95px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #4688d7;
+            box-shadow: 0 0 0 2px rgba(70, 136, 215, 0.12);
+        }
+
+        .help-text {
+            color: #687585;
+            font-size: 11px;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .form-actions {
+            margin-top: 15px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .flash-container {
+            margin-bottom: 15px;
+        }
+
+        .flash {
+            padding: 11px 14px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            border: 1px solid;
+        }
+
+        .flash-success {
+            background: #eef9f1;
+            border-color: #b9dfc2;
+            color: #17652a;
+        }
+
+        .flash-error {
+            background: #fff1f2;
+            border-color: #efb8bd;
+            color: #9d1c26;
+        }
+
+        .flash-warning {
+            background: #fff8e7;
+            border-color: #ecd69a;
+            color: #765b08;
+        }
+
+        .documents-table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1000px;
+        }
+
+        th {
+            background: #f3f6fa;
+            color: #33465c;
+            font-size: 12px;
+            text-align: left;
+            padding: 10px 9px;
+            border-bottom: 1px solid #cfd7e2;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 10px 9px;
+            border-bottom: 1px solid #e2e6eb;
+            vertical-align: top;
+            color: #2c3948;
+        }
+
+        tr:hover td {
+            background: #fafcff;
+        }
+
+        .ref {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 12px;
+            color: #174a8b;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .badge-approved {
+            background: #e7f6ec;
+            color: #17652a;
+        }
+
+        .badge-draft {
+            background: #fff5d9;
+            color: #785b00;
+        }
+
+        .badge-rejected {
+            background: #fdebed;
+            color: #a51f2a;
+        }
+
+        .badge-retired {
+            background: #eceff3;
+            color: #596575;
+        }
+
+        .badge-superseded {
+            background: #edf1f5;
+            color: #5e6978;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 35px 20px;
+            color: #687585;
+        }
+
+        .version-form {
+            margin-top: 10px;
+            padding: 12px;
+            background: #f8fafc;
+            border: 1px solid #e0e5eb;
+            border-radius: 5px;
+        }
+
+        .version-form summary {
+            cursor: pointer;
+            color: #174a8b;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .version-form-inner {
+            margin-top: 12px;
+        }
+
+        .footer {
+            color: #7a8491;
+            font-size: 11px;
+            text-align: center;
+            padding-top: 10px;
+        }
+
+        @media (max-width: 1000px) {
+            .form-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 650px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .page {
+                padding: 0 10px;
+            }
+
+            .panel {
+                padding: 13px;
+            }
+
+            .page-header {
+                flex-direction: column;
+            }
+
+            .header-actions {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ============================================================
+         MAIN NAVIGATION
+         ============================================================ -->
+    <div class="topbar">
+
+        <a href="{{ url_for('tasks') }}">Tasks</a>
+
+        <a href="{{ url_for('data_sources') }}">Data Sources</a>
+
+        <a href="{{ url_for('risk_assessment') }}">Risk Assessment</a>
+
+        <a href="{{ url_for('risk_universe') }}">Risk Universe</a>
+
+        <a href="{{ url_for('cases') }}">Cases</a>
+
+        <a href="{{ url_for('findings') }}">Findings</a>
+
+        <a href="{{ url_for('audit_log') }}">Audit Trail</a>
+
+        <a href="{{ url_for('logout') }}">Log out</a>
+
+    </div>
+
+
+    <main class="page">
+
+        <!-- ========================================================
+             FLASH MESSAGES
+             ======================================================== -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+
+                    {% for category, message in messages %}
+
+                        <div class="flash
+                            {% if category == 'success' %}
+                                flash-success
+                            {% elif category == 'error' %}
+                                flash-error
+                            {% else %}
+                                flash-warning
+                            {% endif %}
+                        ">
+                            {{ message }}
+                        </div>
+
+                    {% endfor %}
+
+                </div>
+            {% endif %}
+        {% endwith %}
+
+
+        <!-- ========================================================
+             PAGE HEADER
+             ======================================================== -->
+        <section class="panel">
+
+            <div class="page-header">
+
+                <div>
+
+                    <h1>Knowledge Base</h1>
+
+                    <p class="subtitle">
+                        Controlled tax knowledge management for the
+                        Virtual Tax Auditor.
+                    </p>
+
+                </div>
+
+
+                <div class="header-actions">
+
+                    <!-- IMPORTANT:
+                         This is the missing link requested by the user.
+                    -->
+
+                    <a
+                        href="{{ url_for('knowledge_base_search') }}"
+                        class="btn btn-primary"
+                    >
+                        🔎 Search Approved Knowledge
+                    </a>
+
+
+                    <a
+                        href="{{ url_for('knowledge_approval_queue') }}"
+                        class="btn"
+                    >
+                        Approval Queue
+                    </a>
+
+                </div>
+
+            </div>
+
+
+            <div class="info-box">
+
+                <strong>Knowledge governance</strong>
+
+                <div style="margin-top:5px;">
+
+                    Documents are registered and version-controlled
+                    before becoming authoritative knowledge for the
+                    Virtual Tax Auditor.
+
+                    A document remains <strong>Draft</strong> until it
+                    receives human approval.
+
+                    Only approved knowledge is intended to be available
+                    to the VTA retrieval process.
+
+                </div>
+
+            </div>
+
+
+            <div class="governance-box">
+
+                <strong>Controlled lifecycle:</strong>
+
+                Register →
+                Draft →
+                Human Review →
+                Approve / Reject →
+                Approved Knowledge →
+                VTA Retrieval
+
+                <br><br>
+
+                Editing a document creates a new version. Previous
+                versions are retained for auditability and are not
+                silently overwritten.
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================================================
+             REGISTER KNOWLEDGE DOCUMENT
+             ======================================================== -->
+        <section class="panel">
+
+            <div class="section-label">
+                Register Knowledge Document
+            </div>
+
+            <form
+                method="POST"
+                action="{{ url_for('knowledge_base_register') }}"
+                enctype="multipart/form-data"
+            >
+
+                <div class="form-grid">
+
+                    <!-- DOCUMENT TITLE -->
+                    <div class="form-group">
+
+                        <label for="title">
+                            Document Title
+                            <span class="required">*</span>
+                        </label>
+
+                        <input
+                            type="text"
+                            id="title"
+                            name="title"
+                            placeholder="e.g. Value Added Tax Act"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- KNOWLEDGE CATEGORY -->
+                    <div class="form-group">
+
+                        <label for="category">
+                            Knowledge Category
+                            <span class="required">*</span>
+                        </label>
+
+                        <select
+                            id="category"
+                            name="category"
+                            required
+                        >
+
+                            <option value="">
+                                Select category
+                            </option>
+
+                            {% for category in categories %}
+
+                                <option value="{{ category }}">
+                                    {{ category }}
+                                </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- DOCUMENT TYPE -->
+                    <div class="form-group">
+
+                        <label for="document_type">
+                            Document Type
+                            <span class="required">*</span>
+                        </label>
+
+                        <select
+                            id="document_type"
+                            name="document_type"
+                            required
+                        >
+
+                            <option value="">
+                                Select type
+                            </option>
+
+                            {% for document_type in document_types %}
+
+                                <option value="{{ document_type }}">
+                                    {{ document_type }}
+                                </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- TAX TYPE -->
+                    <div class="form-group">
+
+                        <label for="tax_type">
+                            Tax Type
+                        </label>
+
+                        <select
+                            id="tax_type"
+                            name="tax_type"
+                        >
+
+                            {% for tax_type in tax_types %}
+
+                                <option
+                                    value="{{ tax_type }}"
+                                    {% if tax_type == 'General' %}
+                                        selected
+                                    {% endif %}
+                                >
+                                    {{ tax_type }}
+                                </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- ISSUING AUTHORITY -->
+                    <div class="form-group">
+
+                        <label for="issuing_authority">
+                            Issuing Authority / Source
+                        </label>
+
+                        <input
+                            type="text"
+                            id="issuing_authority"
+                            name="issuing_authority"
+                            placeholder="e.g. Uganda Revenue Authority / Ministry of Finance"
+                        >
+
+                    </div>
+
+
+                    <!-- EFFECTIVE DATE -->
+                    <div class="form-group">
+
+                        <label for="effective_date">
+                            Effective Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="effective_date"
+                            name="effective_date"
+                        >
+
+                    </div>
+
+
+                    <!-- EXPIRY DATE -->
+                    <div class="form-group">
+
+                        <label for="expiry_date">
+                            Expiry / End Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="expiry_date"
+                            name="expiry_date"
+                        >
+
+                    </div>
+
+
+                    <!-- DOCUMENT FILE -->
+                    <div class="form-group">
+
+                        <label for="document_file">
+                            Document File
+                            <span class="required">*</span>
+                        </label>
+
+                        <input
+                            type="file"
+                            id="document_file"
+                            name="document_file"
+                            accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+                            required
+                        >
+
+                        <div class="help-text">
+
+                            Allowed:
+                            PDF, DOC, DOCX, TXT, CSV, XLS and XLSX.
+
+                            The uploaded document will initially be
+                            registered as Draft.
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- DESCRIPTION -->
+                    <div class="form-group full">
+
+                        <label for="description">
+                            Description
+                        </label>
+
+                        <textarea
+                            id="description"
+                            name="description"
+                            placeholder="What does this document cover and why is it relevant to the VTA Knowledge Base?"
+                        ></textarea>
+
+                    </div>
+
+
+                    <!-- CHANGE SUMMARY -->
+                    <div class="form-group full">
+
+                        <label for="change_summary">
+                            Version / Change Summary
+                        </label>
+
+                        <textarea
+                            id="change_summary"
+                            name="change_summary"
+                            placeholder="For a first registration, describe the document or source version being loaded."
+                        ></textarea>
+
+                    </div>
+
+                </div>
+
+
+                <div class="form-actions">
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+                        Register &amp; Upload Document
+                    </button>
+
+                </div>
+
+            </form>
+
+        </section>
+
+
+        <!-- ========================================================
+             REGISTERED DOCUMENTS
+             ======================================================== -->
+        <section class="panel">
+
+            <div class="section-label">
+                Registered Knowledge Documents
+            </div>
+
+
+            {% if documents %}
+
+                <div class="documents-table-wrapper">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Reference</th>
+
+                                <th>Document</th>
+
+                                <th>Category</th>
+
+                                <th>Document Type</th>
+
+                                <th>Tax Type</th>
+
+                                <th>Version</th>
+
+                                <th>Status</th>
+
+                                <th>Uploaded</th>
+
+                                <th>Actions</th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            {% for document in documents %}
+
+                                <tr>
+
+                                    <!-- REFERENCE -->
+                                    <td>
+
+                                        <div class="ref">
+                                            {{ document['document_ref'] }}
+                                        </div>
+
+                                    </td>
+
+
+                                    <!-- DOCUMENT -->
+                                    <td>
+
+                                        <strong>
+                                            {{ document['title'] }}
+                                        </strong>
+
+                                        {% if document['original_filename'] %}
+
+                                            <div class="help-text">
+                                                {{ document['original_filename'] }}
+                                            </div>
+
+                                        {% endif %}
+
+                                    </td>
+
+
+                                    <!-- CATEGORY -->
+                                    <td>
+                                        {{ document['category'] }}
+                                    </td>
+
+
+                                    <!-- DOCUMENT TYPE -->
+                                    <td>
+                                        {{ document['document_type'] }}
+                                    </td>
+
+
+                                    <!-- TAX TYPE -->
+                                    <td>
+                                        {{ document['tax_type'] or 'General' }}
+                                    </td>
+
+
+                                    <!-- VERSION -->
+                                    <td>
+
+                                        v{{ document['version_number'] }}
+
+                                    </td>
+
+
+                                    <!-- STATUS -->
+                                    <td>
+
+                                        {% set status = document['version_status'] or document['status'] or 'Draft' %}
+
+                                        {% if status == 'Approved' %}
+
+                                            <span class="badge badge-approved">
+                                                Approved
+                                            </span>
+
+                                        {% elif status == 'Draft' %}
+
+                                            <span class="badge badge-draft">
+                                                Draft
+                                            </span>
+
+                                        {% elif status == 'Rejected' %}
+
+                                            <span class="badge badge-rejected">
+                                                Rejected
+                                            </span>
+
+                                        {% elif status == 'Retired' %}
+
+                                            <span class="badge badge-retired">
+                                                Retired
+                                            </span>
+
+                                        {% elif status == 'Superseded' %}
+
+                                            <span class="badge badge-superseded">
+                                                Superseded
+                                            </span>
+
+                                        {% else %}
+
+                                            <span class="badge">
+                                                {{ status }}
+                                            </span>
+
+                                        {% endif %}
+
+                                    </td>
+
+
+                                    <!-- UPLOADED -->
+                                    <td>
+
+                                        {% if document['uploaded_at'] %}
+
+                                            {{ document['uploaded_at'] }}
+
+                                        {% else %}
+
+                                            —
+
+                                        {% endif %}
+
+                                    </td>
+
+
+                                    <!-- ACTIONS -->
+                                    <td>
+
+                                        <div class="actions">
+
+                                            <!-- VERSION HISTORY -->
+                                            <a
+                                                href="{{ url_for(
+                                                    'knowledge_base_versions',
+                                                    document_id=document['id']
+                                                ) }}"
+                                                class="btn btn-small"
+                                            >
+                                                Version history
+                                            </a>
+
+
+                                            <!-- DOWNLOAD CURRENT VERSION -->
+                                            <a
+                                                href="{{ url_for(
+                                                    'knowledge_base_download',
+                                                    document_id=document['id']
+                                                ) }}"
+                                                class="btn btn-small"
+                                            >
+                                                Download
+                                            </a>
+
+
+                                            <!-- REVIEW CURRENT DRAFT -->
+                                            {% if status == 'Draft' %}
+
+                                                <a
+                                                    href="{{ url_for(
+                                                        'knowledge_base_versions',
+                                                        document_id=document['id']
+                                                    ) }}"
+                                                    class="btn btn-small btn-warning"
+                                                >
+                                                    Review
+                                                </a>
+
+                                            {% endif %}
+
+
+                                            <!-- SEARCH THIS DOCUMENT
+                                                 ONLY DISPLAYED FOR APPROVED
+                                                 KNOWLEDGE.
+                                            -->
+                                            {% if status == 'Approved' %}
+
+                                                <a
+                                                    href="{{ url_for(
+                                                        'knowledge_base_search',
+                                                        document=document['document_ref']
+                                                    ) }}"
+                                                    class="btn btn-small btn-success"
+                                                >
+                                                    Search
+                                                </a>
+
+                                            {% endif %}
+
+                                        </div>
+
+
+                                        <!-- NEW VERSION -->
+                                        <details class="version-form">
+
+                                            <summary>
+                                                Upload new version
+                                            </summary>
+
+                                            <div class="version-form-inner">
+
+                                                <form
+                                                    method="POST"
+                                                    action="{{ url_for(
+                                                        'knowledge_base_new_version',
+                                                        document_id=document['id']
+                                                    ) }}"
+                                                    enctype="multipart/form-data"
+                                                >
+
+                                                    <div class="form-group">
+
+                                                        <label>
+                                                            New version file
+                                                        </label>
+
+                                                        <input
+                                                            type="file"
+                                                            name="document_file"
+                                                            accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+                                                            required
+                                                        >
+
+                                                    </div>
+
+
+                                                    <div
+                                                        class="form-group"
+                                                        style="margin-top:10px;"
+                                                    >
+
+                                                        <label>
+                                                            Change summary
+                                                        </label>
+
+                                                        <textarea
+                                                            name="change_summary"
+                                                            placeholder="Describe what changed in this version."
+                                                            style="min-height:70px;"
+                                                        ></textarea>
+
+                                                    </div>
+
+
+                                                    <div class="form-actions">
+
+                                                        <button
+                                                            type="submit"
+                                                            class="btn btn-small btn-primary"
+                                                        >
+                                                            Upload New Version
+                                                        </button>
+
+                                                    </div>
+
+                                                </form>
+
+                                            </div>
+
+                                        </details>
+
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            {% else %}
+
+                <div class="empty-state">
+
+                    <strong>No Knowledge Base documents registered yet.</strong>
+
+                    <div style="margin-top:7px;">
+                        Register the first approved tax law, regulation,
+                        procedure, audit guidance or other authoritative
+                        knowledge source above.
+                    </div>
+
+                </div>
+
+            {% endif %}
+
+        </section>
+
+
+        <!-- ========================================================
+             KNOWLEDGE GOVERNANCE NOTE
+             ======================================================== -->
+        <section class="panel">
+
+            <h3>
+                Knowledge Governance
+            </h3>
+
+            <div class="governance-box">
+
+                Each Knowledge Base version is retained for auditability.
+
+                Editing or replacing a document creates a new version
+                rather than silently overwriting the previous version.
+
+                The current version must be reviewed by an authorised
+                human before it becomes Approved.
+
+                <br><br>
+
+                <strong>
+                    Only Approved knowledge should be used as authoritative
+                    knowledge by the Virtual Tax Auditor.
+                </strong>
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================================================
+             BACK TO DASHBOARD
+             ======================================================== -->
+        <section class="panel">
+
+            <a
+                href="{{ url_for('tasks') }}"
+                class="btn"
+            >
+                ← Back to VTA Dashboard
+            </a>
+
+            <div class="help-text" style="margin-top:7px;">
+                Return to the main Virtual Tax Auditor workflow.
+            </div>
+
+        </section>
+
+
+        <div class="footer">
+            Virtual Tax Auditor · Phase 3 controlled test environment
+        </div>
+
+    </main>
+
+</body>
+</html>
