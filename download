@@ -1,0 +1,7 @@
+.env
+client_secret.json
+*.sqlite3
+__pycache__/
+*.pyc
+uploads/*
+!uploads/.gitkeep
