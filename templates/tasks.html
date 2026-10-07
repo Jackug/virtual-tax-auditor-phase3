@@ -1,18 +1,1 @@
-{% extends 'base.html' %}{% block content %}
-<div class="page-head"><div><h1>My Tasks</h1><p class="muted">Signed in as {{ email }}</p></div></div>
-<div class="grid four">
-<div class="kpi"><span>Taxpayers</span><strong>{{ counts.taxpayers }}</strong><a href="{{ url_for('data_sources') }}">View data</a></div>
-<div class="kpi"><span>Risk assessed</span><strong>{{ counts.assessed }}</strong><a href="{{ url_for('risk_assessment') }}">Run / view</a></div>
-<div class="kpi high"><span>High risk</span><strong>{{ counts.high }}</strong><a href="{{ url_for('risk_universe', band='High') }}">Open Risk Universe</a></div>
-<div class="kpi"><span>Open audit cases</span><strong>{{ counts.cases }}</strong><a href="{{ url_for('risk_universe') }}">View cases</a></div>
-</div>
-<h2>Phase 2 workflow tasks</h2>
-<div class="task-list">
-<a class="task" href="{{ url_for('communication') }}"><div><b>Phase 1. Communication / Email Test</b><small>Review and send a real Gmail test message.</small></div><span>→</span></a>
-<a class="task" href="{{ url_for('risk_assessment') }}"><div><b>1. Risk Assessment</b><small>Apply approved test rules to the synthetic taxpayer.</small></div><span>→</span></a>
-<a class="task" href="{{ url_for('risk_universe') }}"><div><b>2. Risk Universe</b><small>Search, filter and select a high-risk taxpayer for Virtual Audit.</small></div><span>→</span></a>
-<a class="task" href="{{ url_for('risk_universe') }}"><div><b>3. AI Audit Analysis</b><small>Run the controlled Phase 2 analysis engine on a selected case.</small></div><span>→</span></a>
-<a class="task" href="{{ url_for('risk_universe') }}"><div><b>4. Human Finding Validation</b><small>Approve, reject or return AI-generated findings for further review.</small></div><span>→</span></a>
-</div>
-<div class="notice"><strong>Control principle:</strong> AI-generated findings remain preliminary until a human auditor validates them.</div>
-{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="grid"><div class="card"><div class="label">Taxpayers</div><div class="kpi">{{ counts.taxpayers }}</div></div><div class="card"><div class="label">High / Critical</div><div class="kpi">{{ counts.high }}</div></div><div class="card"><div class="label">Open Cases</div><div class="kpi">{{ counts.cases }}</div></div><div class="card"><div class="label">AI Findings</div><div class="kpi">{{ counts.findings }}</div></div></div><h3 class="section-title">Phase 3 workflow tasks</h3>{% for n,t,d,u in [(1,'Risk Assessment','Apply approved rules to the synthetic taxpayer.','risk_assessment'),(2,'Risk Universe','Search, review and select a taxpayer for Virtual Audit.','risk_universe'),(3,'AI Audit Analysis','Run controlled analysis on a selected case.','risk_universe'),(4,'Human Finding Validation','Approve, reject or return AI findings.','risk_universe')] %}<a class="task" href="{{ url_for(u) }}"><div><b>{{ n }}. {{ t }}</b><div class="muted">{{ d }}</div></div><div class="arrow">→</div></a>{% endfor %}{% for t,d in [('5. Taxpayer Response & Evidence','Record taxpayer explanation and supporting evidence.'),('6. AI Response Analysis','Compare the response with the original validated finding.'),('7. Second Human Validation','Resolve, request evidence or initiate further action.'),('8. Further Action / Outcome / Closure','Record controlled next actions and close only after required validation.') ] %}<div class="task"><div><b>{{ t }}</b><div class="muted">{{ d }}</div></div><div class="arrow">↻</div></div>{% endfor %}<div class="notice"><b>Control principle:</b> AI-generated analysis remains preliminary. Human auditors validate findings and make consequential decisions.</div>{% endblock %}

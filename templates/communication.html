@@ -1,10 +1,1 @@
-{% extends 'base.html' %}{% block content %}
-<div class="page-head"><div><h1>Taxpayer Communication</h1><p class="muted">Human-reviewed email test. The signed-in Google account is the sender.</p></div></div>
-<div class="card"><form method="post">
-<label>Recipient<input name="recipient" value="{{ recipient }}" required></label>
-<label>Subject<input name="subject" value="{{ subject }}" required></label>
-<label>Message<textarea name="body" required>{{ body }}</textarea></label>
-<div class="notice"><b>Human approval required:</b> Review and edit the message before clicking Send.</div>
-<button class="button primary">Approve & Send Email</button>
-</form></div>
-{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="notice"><b>Human approval control:</b> the AI draft is retained separately; real Gmail transmission occurs only after explicit human approval.</div><div class="two"><div class="card"><h3>AI communication draft</h3><div class="pre">{{ ai_draft or 'No validated finding selected.' }}</div></div><div class="card"><h3>Human-edited communication</h3><form method="post"><div class="field"><label>Finding</label><select name="finding_id">{% for f in findings %}<option value="{{ f.id }}" {% if selected and f.id==selected.id %}selected{% endif %}>{{ f.finding_ref }} — {{ f.description }}</option>{% endfor %}</select></div><div class="field"><label>Recipient</label><input name="recipient" value="{{ recipient }}"></div><div class="field"><label>Subject</label><input name="subject" value="{{ subject }}"></div><div class="field"><label>Message</label><textarea name="body">{{ body }}</textarea></div><label><input type="checkbox" name="approve_send" value="1"> I approve this message for real Gmail transmission.</label><br><br><button class="btn green">Save & Send Approved Communication</button></form></div></div>{% endblock %}

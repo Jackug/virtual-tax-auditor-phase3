@@ -1,3 +1,1 @@
-{% extends 'base.html' %}{% block content %}
-<div class="card"><h1>Email sent</h1><p>The Gmail API accepted the message.</p><table><tr><th>Sender</th><td>{{ sender }}</td></tr><tr><th>Recipient</th><td>{{ recipient }}</td></tr><tr><th>Subject</th><td>{{ subject }}</td></tr><tr><th>Gmail message ID</th><td><code>{{ message_id }}</code></td></tr></table><a class="button primary" href="{{ url_for('audit_log') }}">View Audit Trail</a></div>
-{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="card"><h2>Communication sent</h2><p>Human-approved message transmitted through Gmail.</p><table class="table"><tr><th>Sender</th><td>{{ sender }}</td></tr><tr><th>Recipient</th><td>{{ recipient }}</td></tr><tr><th>Subject</th><td>{{ subject }}</td></tr><tr><th>Gmail message ID</th><td>{{ message_id }}</td></tr></table>{% if case_id %}<a class="btn" href="{{ url_for('case_detail',cid=case_id) }}">Return to Case</a>{% endif %}</div>{% endblock %}
