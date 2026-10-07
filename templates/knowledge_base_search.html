@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="notice">
+
+  <b>Approved Knowledge Search</b>
+
+  <div class="muted">
+    This search retrieves knowledge from
+    <b>Approved Knowledge Base versions only</b>.
+    Draft, Rejected, Superseded and Retired versions are excluded.
+  </div>
+
+</div>
+
+
+<div class="card">
+
+  <h3 style="margin-top:0;">
+    Search Approved Knowledge
+  </h3>
+
+  <form
+    method="get"
+    action="{{ url_for('knowledge_base_search') }}"
+  >
+
+    <input
+      type="text"
+      name="q"
+      value="{{ query }}"
+      placeholder="Example: input VAT requirements"
+      style="
+        width:75%;
+        box-sizing:border-box;
+        padding:10px;
+      "
+      required
+    >
+
+    <button type="submit">
+      Search
+    </button>
+
+  </form>
+
+</div>
+
+
+{% if query %}
+
+<div style="margin-top:20px;">
+
+  <h3 class="section-title">
+    Search Results
+  </h3>
+
+
+  {% if results %}
+
+    <div class="muted" style="margin-bottom:15px;">
+      Found {{ results|length }} relevant knowledge section(s)
+      for:
+      <b>{{ query }}</b>
+    </div>
+
+
+    {% for result in results %}
+
+    <div class="task" style="margin-bottom:15px;">
+
+      <div style="width:100%;">
+
+        <div>
+
+          <b>
+            {{ result['title'] }}
+          </b>
+
+          <span class="muted">
+            —
+            Version {{ result['version_number'] }}
+          </span>
+
+        </div>
+
+
+        <div class="muted" style="margin-top:6px;">
+
+          <b>Reference:</b>
+          {{ result['document_ref'] }}
+
+          |
+
+          <b>Status:</b>
+          {{ result['version_status'] }}
+
+        </div>
+
+
+        <div class="muted">
+
+          <b>Category:</b>
+          {{ result['category'] }}
+
+          |
+
+          <b>Document Type:</b>
+          {{ result['document_type'] }}
+
+          |
+
+          <b>Tax Type:</b>
+          {{ result['tax_type'] or 'General' }}
+
+        </div>
+
+
+        {% if result['page_number'] %}
+
+        <div class="muted">
+
+          <b>Page:</b>
+          {{ result['page_number'] }}
+
+        </div>
+
+        {% endif %}
+
+
+        <div
+          style="
+            margin-top:12px;
+            padding:14px;
+            border:1px solid #d9dee5;
+            border-radius:6px;
+            background:#fafafa;
+            white-space:pre-wrap;
+            line-height:1.5;
+          "
+        >
+          {{ result['text_content'] }}
+        </div>
+
+
+        <div class="muted" style="margin-top:8px;">
+
+          <b>Source file:</b>
+          {{ result['source_filename'] }}
+
+          |
+
+          <b>Knowledge chunk:</b>
+          {{ result['chunk_number'] }}
+
+        </div>
+
+
+        <div style="margin-top:12px;">
+
+          <a
+            class="button"
+            href="{{ url_for(
+                'knowledge_base_versions',
+                document_id=result['document_id']
+            ) }}"
+          >
+            View Document Versions
+          </a>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    {% endfor %}
+
+
+  {% else %}
+
+    <div class="task" style="opacity:.7;">
+
+      <div>
+
+        <b>No approved knowledge matched your search.</b>
+
+        <div class="muted">
+          The search only uses approved Knowledge Base versions.
+          Check whether the relevant document has been approved
+          and successfully indexed.
+        </div>
+
+      </div>
+
+    </div>
+
+  {% endif %}
+
+</div>
+
+{% endif %}
+
+
+<div
+  class="notice"
+  style="margin-top:20px;"
+>
+
+  <b>Governance control</b>
+
+  <div class="muted" style="margin-top:6px;">
+
+    Search results are restricted to Knowledge Base versions whose
+    status is <b>Approved</b>.
+
+    The VTA must not treat Draft, Rejected, Superseded or Retired
+    documents as authoritative tax knowledge.
+
+  </div>
+
+</div>
+
+
+<div style="margin-top:20px;">
+
+  <a
+    class="button"
+    href="{{ url_for('knowledge_base') }}"
+  >
+    ← Back to Knowledge Base
+  </a>
+
+</div>
+
+{% endblock %}
