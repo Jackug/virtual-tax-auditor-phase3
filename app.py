@@ -57,6 +57,39 @@ CREATE TABLE IF NOT EXISTS second_validations(id INTEGER PRIMARY KEY AUTOINCREME
 CREATE TABLE IF NOT EXISTS further_actions(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER,action_type TEXT,instruction TEXT,status TEXT DEFAULT 'Open',created_by TEXT,created_at TEXT,completed_at TEXT);
 CREATE TABLE IF NOT EXISTS outcomes(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER UNIQUE,outcome_type TEXT,rationale TEXT,decided_by TEXT,decided_at TEXT,closed_at TEXT);
 CREATE TABLE IF NOT EXISTS audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,actor_email TEXT,case_ref TEXT,event_type TEXT,detail TEXT,created_at TEXT);
+CREATE TABLE IF NOT EXISTS knowledge_documents(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_ref TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    document_type TEXT NOT NULL,
+    tax_type TEXT,
+    issuing_authority TEXT,
+    description TEXT,
+    effective_date TEXT,
+    expiry_date TEXT,
+    current_version INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'Draft',
+    created_by TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS knowledge_document_versions(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL,
+    version_number INTEGER NOT NULL,
+    original_filename TEXT NOT NULL,
+    stored_filename TEXT UNIQUE NOT NULL,
+    mime_type TEXT,
+    size_bytes INTEGER,
+    file_path TEXT NOT NULL,
+    uploaded_by TEXT,
+    uploaded_at TEXT,
+    version_status TEXT DEFAULT 'Draft',
+    change_summary TEXT,
+    FOREIGN KEY(document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    UNIQUE(document_id, version_number)
+);
 '''); seed(c); c.commit(); c.close()
 
 def seed(c):
@@ -203,21 +236,180 @@ def tasks():
         'latest_finding_id': latest_finding_id,
     }
     return render_template('tasks.html',counts=counts,workflow=workflow)
+ALLOWED_KB_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'}
+KB_CATEGORIES = ['Tax Laws', 'Regulations', 'Procedures', 'Audit Guidance', 'Sector Knowledge', 'Risk Knowledge']
+KB_DOCUMENT_TYPES = ['Act', 'Regulation', 'Statutory Instrument', 'Procedure', 'Manual', 'Guideline', 'Circular', 'Directive', 'Sector Guide', 'Risk Note', 'Other']
+KB_TAX_TYPES = ['General', 'VAT', 'CIT', 'PAYE', 'WHT', 'Excise Duty', 'Local Excise', 'Customs', 'Other']
+
+def kb_allowed_file(filename):
+    return bool(filename and '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_KB_EXTENSIONS)
+
+def kb_ext(filename):
+    return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+
 @app.route('/knowledge-base')
 @login_required
 def knowledge_base():
     c = db()
-    documents = []
-
-    # Step 1A foundation.
-    # Document storage, metadata, search and retrieval will be added
-    # in the next Knowledge Base build step.
+    documents = c.execute('''
+        SELECT d.*, v.version_number, v.original_filename, v.size_bytes,
+               v.uploaded_by, v.uploaded_at, v.version_status
+        FROM knowledge_documents d
+        LEFT JOIN knowledge_document_versions v
+          ON v.document_id=d.id AND v.version_number=d.current_version
+        ORDER BY d.id DESC
+    ''').fetchall()
     c.close()
-
     return render_template(
         'knowledge_base.html',
-        documents=documents
+        documents=documents,
+        categories=KB_CATEGORIES,
+        document_types=KB_DOCUMENT_TYPES,
+        tax_types=KB_TAX_TYPES
     )
+
+@app.route('/knowledge-base/register', methods=['POST'])
+@login_required
+def knowledge_base_register():
+    title = request.form.get('title','').strip()
+    category = request.form.get('category','').strip()
+    document_type = request.form.get('document_type','').strip()
+    tax_type = request.form.get('tax_type','').strip()
+    authority = request.form.get('issuing_authority','').strip()
+    description = request.form.get('description','').strip()
+    effective_date = request.form.get('effective_date','').strip() or None
+    expiry_date = request.form.get('expiry_date','').strip() or None
+    change_summary = request.form.get('change_summary','').strip()
+    file = request.files.get('document_file')
+
+    if not title or category not in KB_CATEGORIES or document_type not in KB_DOCUMENT_TYPES:
+        flash('Title, knowledge category and document type are required.', 'error')
+        return redirect(url_for('knowledge_base'))
+    if not file or not file.filename:
+        flash('Please select a knowledge document to upload.', 'error')
+        return redirect(url_for('knowledge_base'))
+    if not kb_allowed_file(file.filename):
+        flash('Unsupported file type. Allowed: PDF, DOC, DOCX, TXT, CSV, XLS and XLSX.', 'error')
+        return redirect(url_for('knowledge_base'))
+
+    safe_original = secure_filename(file.filename)
+    if not safe_original:
+        flash('The selected filename is not valid.', 'error')
+        return redirect(url_for('knowledge_base'))
+
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
+    document_ref = 'KB-' + stamp
+    stored_filename = document_ref + '_' + safe_original
+    target = UPLOAD / 'knowledge_base'
+    target.mkdir(parents=True, exist_ok=True)
+    file_path = target / stored_filename
+    file.save(file_path)
+
+    c = db()
+    try:
+        c.execute('''
+            INSERT INTO knowledge_documents
+            (document_ref,title,category,document_type,tax_type,issuing_authority,description,
+             effective_date,expiry_date,current_version,status,created_by,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,1,'Draft',?,?,?)
+        ''', (document_ref,title,category,document_type,tax_type,authority,description,
+              effective_date,expiry_date,email(),now(),now()))
+        document_id = c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        c.execute('''
+            INSERT INTO knowledge_document_versions
+            (document_id,version_number,original_filename,stored_filename,mime_type,size_bytes,
+             file_path,uploaded_by,uploaded_at,version_status,change_summary)
+            VALUES(?,?,?,?,?,?,?,?,?,'Draft',?)
+        ''', (document_id,1,safe_original,stored_filename,file.mimetype,file_path.stat().st_size,
+              str(file_path),email(),now(),change_summary or 'Initial document registration.'))
+        c.commit()
+    except Exception:
+        c.rollback()
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        c.close()
+        raise
+    c.close()
+    log('KNOWLEDGE_DOCUMENT_REGISTERED', f'{document_ref}: {title}; version 1; status Draft')
+    flash(f'Knowledge document {document_ref} registered successfully as version 1 (Draft).', 'success')
+    return redirect(url_for('knowledge_base'))
+
+@app.route('/knowledge-base/<int:document_id>/version', methods=['POST'])
+@login_required
+def knowledge_base_new_version(document_id):
+    file = request.files.get('document_file')
+    change_summary = request.form.get('change_summary','').strip()
+    if not file or not file.filename:
+        flash('Please select the replacement/version file.', 'error')
+        return redirect(url_for('knowledge_base'))
+    if not kb_allowed_file(file.filename):
+        flash('Unsupported file type. Allowed: PDF, DOC, DOCX, TXT, CSV, XLS and XLSX.', 'error')
+        return redirect(url_for('knowledge_base'))
+
+    safe_original = secure_filename(file.filename)
+    c = db()
+    doc = c.execute('SELECT * FROM knowledge_documents WHERE id=?',(document_id,)).fetchone()
+    if not doc:
+        c.close()
+        abort(404)
+    next_version = int(doc['current_version']) + 1
+    document_ref = doc['document_ref']
+    stored_filename = f'{document_ref}_v{next_version}_{safe_original}'
+    target = UPLOAD / 'knowledge_base'
+    target.mkdir(parents=True, exist_ok=True)
+    file_path = target / stored_filename
+    file.save(file_path)
+    try:
+        c.execute('''
+            INSERT INTO knowledge_document_versions
+            (document_id,version_number,original_filename,stored_filename,mime_type,size_bytes,
+             file_path,uploaded_by,uploaded_at,version_status,change_summary)
+            VALUES(?,?,?,?,?,?,?,?,?,'Draft',?)
+        ''', (document_id,next_version,safe_original,stored_filename,file.mimetype,file_path.stat().st_size,
+              str(file_path),email(),now(),change_summary or f'New version {next_version}.'))
+        c.execute("UPDATE knowledge_documents SET current_version=?, status='Draft', updated_at=? WHERE id=?", (next_version, now(), document_id))
+        c.commit()
+    except Exception:
+        c.rollback()
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        c.close()
+        raise
+    c.close()
+    log('KNOWLEDGE_DOCUMENT_VERSION_REGISTERED', f'{document_ref}: version {next_version}; status Draft')
+    flash(f'{document_ref} version {next_version} uploaded successfully. The previous version remains retained.', 'success')
+    return redirect(url_for('knowledge_base'))
+
+@app.route('/knowledge-base/<int:document_id>/download')
+@login_required
+def knowledge_base_download(document_id):
+    c = db()
+    doc = c.execute('''
+        SELECT d.document_ref, v.original_filename, v.stored_filename
+        FROM knowledge_documents d
+        JOIN knowledge_document_versions v
+          ON v.document_id=d.id AND v.version_number=d.current_version
+        WHERE d.id=?
+    ''',(document_id,)).fetchone()
+    c.close()
+    if not doc:
+        abort(404)
+    return send_from_directory(str(UPLOAD / 'knowledge_base'), doc['stored_filename'], as_attachment=True, download_name=doc['original_filename'])
+
+@app.route('/knowledge-base/<int:document_id>/versions')
+@login_required
+def knowledge_base_versions(document_id):
+    c=db()
+    doc=c.execute('SELECT * FROM knowledge_documents WHERE id=?',(document_id,)).fetchone()
+    versions=c.execute('SELECT * FROM knowledge_document_versions WHERE document_id=? ORDER BY version_number DESC',(document_id,)).fetchall()
+    c.close()
+    if not doc:
+        abort(404)
+    return render_template('knowledge_base_versions.html', document=doc, versions=versions)
 
 @app.route('/data-sources')
 @login_required

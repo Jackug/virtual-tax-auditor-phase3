@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="notice">
+  <b>Knowledge Base — Version History</b><br>
+  <b>{{ document.document_ref }}</b> · {{ document.title }} · Current version: <b>v{{ document.current_version }}</b> · Status: <b>{{ document.status }}</b>
+</div>
+
+<h3 class="section-title">Document Metadata</h3>
+<div class="card">
+  <div><b>Category:</b> {{ document.category }}</div>
+  <div><b>Document Type:</b> {{ document.document_type }}</div>
+  <div><b>Tax Type:</b> {{ document.tax_type or '—' }}</div>
+  <div><b>Issuing Authority:</b> {{ document.issuing_authority or '—' }}</div>
+  <div><b>Effective Date:</b> {{ document.effective_date or '—' }}</div>
+  <div><b>Expiry / End Date:</b> {{ document.expiry_date or '—' }}</div>
+  <div style="margin-top:8px"><b>Description:</b> {{ document.description or '—' }}</div>
+</div>
+
+<h3 class="section-title">Version History</h3>
+<table>
+<thead><tr><th>Version</th><th>Original File</th><th>Status</th><th>Uploaded By</th><th>Uploaded At</th><th>Change Summary</th><th>Action</th></tr></thead>
+<tbody>
+{% for v in versions %}
+<tr>
+  <td><b>v{{ v.version_number }}</b>{% if v.version_number == document.current_version %}<br><span class="muted">Current</span>{% endif %}</td>
+  <td>{{ v.original_filename }}</td>
+  <td>{{ v.version_status }}</td>
+  <td>{{ v.uploaded_by }}</td>
+  <td>{{ v.uploaded_at }}</td>
+  <td>{{ v.change_summary or '—' }}</td>
+  <td><a href="{{ url_for('knowledge_base_download', document_id=document.id) }}">Download current</a></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+<h3 class="section-title">Upload New Version</h3>
+<form method="post" action="{{ url_for('knowledge_base_new_version', document_id=document.id) }}" enctype="multipart/form-data" class="card">
+  <label>New Document File</label>
+  <input type="file" name="document_file" required accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx">
+  <div style="margin-top:12px"><label>Change Summary</label><textarea name="change_summary" rows="3" placeholder="Describe what changed in this version."></textarea></div>
+  <button type="submit" class="button" style="margin-top:14px">Upload New Version</button>
+</form>
+
+<div style="margin-top:20px"><a class="task" href="{{ url_for('knowledge_base') }}"><b>← Back to Knowledge Base</b><span class="arrow">→</span></a></div>
+{% endblock %}

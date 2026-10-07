@@ -2,78 +2,114 @@
 {% block content %}
 
 <div class="notice">
-  <b>Knowledge Base — Step 1A</b><br>
-  This is the foundation of the Virtual Tax Auditor Knowledge Base.
-  At this stage the page and navigation are being established only.
-  Document upload, metadata management, search, retrieval and AI/RAG integration
-  will be added in the next build steps.
+  <b>Knowledge Base — Step 1B</b><br>
+  Controlled document registration and versioned storage. Documents are registered as <b>Draft</b> until the approval workflow is added in Step 1C.
 </div>
 
-<h3 class="section-title">Knowledge categories</h3>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="notice" style="margin-top:12px"><b>{{ message }}</b></div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
 
-<div class="grid">
-  <div class="card">
-    <div class="label">Tax Laws</div>
-    <div class="muted">Acts and primary tax legislation.</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Regulations</div>
-    <div class="muted">Regulations and statutory instruments.</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Procedures</div>
-    <div class="muted">Approved tax administration procedures.</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Audit Guidance</div>
-    <div class="muted">Audit manuals, guidance and approved audit approaches.</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Sector Knowledge</div>
-    <div class="muted">Controlled sector and industry knowledge.</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Risk Knowledge</div>
-    <div class="muted">Known compliance risks and supporting knowledge.</div>
-  </div>
-</div>
-
-<h3 class="section-title">Documents</h3>
-
-{% if documents %}
-  {% for document in documents %}
-  <div class="task">
+<h3 class="section-title">Register Knowledge Document</h3>
+<form method="post" action="{{ url_for('knowledge_base_register') }}" enctype="multipart/form-data" class="card">
+  <div class="grid">
     <div>
-      <b>{{ document.name }}</b>
-      <div class="muted">{{ document.description }}</div>
+      <label>Document Title *</label>
+      <input name="title" required placeholder="e.g. Value Added Tax Act">
+    </div>
+    <div>
+      <label>Knowledge Category *</label>
+      <select name="category" required>
+        <option value="">Select category</option>
+        {% for x in categories %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Document Type *</label>
+      <select name="document_type" required>
+        <option value="">Select type</option>
+        {% for x in document_types %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Tax Type</label>
+      <select name="tax_type">
+        {% for x in tax_types %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Issuing Authority / Source</label>
+      <input name="issuing_authority" placeholder="e.g. Uganda Revenue Authority / Ministry of Finance">
+    </div>
+    <div>
+      <label>Effective Date</label>
+      <input type="date" name="effective_date">
+    </div>
+    <div>
+      <label>Expiry / End Date</label>
+      <input type="date" name="expiry_date">
+    </div>
+    <div>
+      <label>Document File *</label>
+      <input type="file" name="document_file" required accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx">
+      <div class="muted">Allowed: PDF, DOC, DOCX, TXT, CSV, XLS, XLSX. Maximum upload size follows the VTA application limit.</div>
     </div>
   </div>
+  <div style="margin-top:14px">
+    <label>Description</label>
+    <textarea name="description" rows="3" placeholder="What does this document cover and why is it relevant to the VTA Knowledge Base?"></textarea>
+  </div>
+  <div style="margin-top:14px">
+    <label>Version / Change Summary</label>
+    <textarea name="change_summary" rows="2" placeholder="For a first registration, describe the document or source version being loaded."></textarea>
+  </div>
+  <button type="submit" class="button" style="margin-top:14px">Register &amp; Upload Document</button>
+</form>
+
+<h3 class="section-title">Registered Knowledge Documents</h3>
+{% if documents %}
+<table>
+  <thead>
+    <tr>
+      <th>Reference</th><th>Document</th><th>Category</th><th>Tax Type</th><th>Version</th><th>Status</th><th>Uploaded</th><th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in documents %}
+    <tr>
+      <td><b>{{ d.document_ref }}</b></td>
+      <td>
+        <b>{{ d.title }}</b><br>
+        <span class="muted">{{ d.document_type }}{% if d.issuing_authority %} · {{ d.issuing_authority }}{% endif %}</span>
+      </td>
+      <td>{{ d.category }}</td>
+      <td>{{ d.tax_type or '—' }}</td>
+      <td>v{{ d.version_number }}</td>
+      <td><b>{{ d.status }}</b></td>
+      <td>{{ d.uploaded_at }}</td>
+      <td>
+        <a href="{{ url_for('knowledge_base_download', document_id=d.id) }}">Download</a><br>
+        <a href="{{ url_for('knowledge_base_versions', document_id=d.id) }}">Version history</a>
+      </td>
+    </tr>
   {% endfor %}
+  </tbody>
+</table>
 {% else %}
 <div class="task">
-  <div>
-    <b>No knowledge documents have been loaded yet.</b>
-    <div class="muted">
-      Step 1A deliberately does not add document storage or AI retrieval yet.
-      The next step will add controlled document registration and upload.
-    </div>
-  </div>
+  <b>No knowledge documents have been registered yet.</b>
+  <div class="muted">Use the form above to create the first controlled Knowledge Base document record.</div>
 </div>
 {% endif %}
 
 <div style="margin-top:20px">
   <a class="task" href="{{ url_for('tasks') }}">
-    <div>
-      <b>← Back to VTA Dashboard</b>
-      <div class="muted">Return to the main Virtual Tax Auditor workflow.</div>
-    </div>
+    <div><b>← Back to VTA Dashboard</b><div class="muted">Return to the main Virtual Tax Auditor workflow.</div></div>
     <div class="arrow">→</div>
   </a>
 </div>
-
 {% endblock %}
