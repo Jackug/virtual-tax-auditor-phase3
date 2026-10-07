@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="two">
+<div class="card">
+  <div class="label">Phase 3 · Step 7</div>
+  <h2>AI Response Analysis</h2>
+  <p class="muted">Case {{ case.case_ref }} · {{ case.taxpayer_name }}</p>
+  <h3>Taxpayer response</h3>
+  <div class="pre">{{ response.response_text }}</div>
+  <h3 style="margin-top:18px">Evidence</h3>
+  {% for e in evidence %}<p class="small"><a href="{{ url_for('evidence',name=e.stored_filename) }}">{{ e.original_filename }}</a> · {{ e.mime_type }}</p>{% else %}<p class="muted">No evidence files attached.</p>{% endfor %}
+</div>
+<div class="card">
+  <h3>Controlled analysis engine</h3>
+  <p class="muted">The engine compares the taxpayer explanation with the original human-validated finding and evidence metadata. It does not make the final compliance decision.</p>
+  <form method="post" action="{{ url_for('response_analysis',cid=case.id) }}">
+    <button class="btn amber">Run AI Response Analysis</button>
+  </form>
+  {% if analysis %}<div class="success" style="margin-top:16px"><b>Analysis completed.</b><br>{{ analysis.overall_assessment }}</div>{% endif %}
+</div>
+</div>
+{% if analysis %}
+<div class="card" style="margin-top:16px"><h3>Analysis Result</h3><div class="three">
+<div><div class="label">Potential support</div><div class="pre">{{ analysis.findings_supported }}</div></div>
+<div><div class="label">Missing evidence</div><div class="pre">{{ analysis.missing_evidence }}</div></div>
+<div><div class="label">Recommended action</div><div class="pre">{{ analysis.recommended_action }}</div></div>
+</div><div class="notice">{{ analysis.limitations }}</div>
+<a class="btn green" href="{{ url_for('case_detail',cid=case.id) }}#second-validation">Proceed to Second Human Validation</a>
+</div>
+{% endif %}
+{% endblock %}
