@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="notice">
+  <b>Knowledge Base — Edit Before Approval</b>
+
+  <div class="muted">
+    You are reviewing <b>{{ document.document_ref }}</b>,
+    currently version <b>v{{ version.version_number }}</b>.
+    Make the required amendments below before approval.
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+
+  <h3 style="margin-top:0;">Current Version</h3>
+
+  <p>
+    <b>Version:</b> v{{ version.version_number }}
+    &nbsp; | &nbsp;
+    <b>Status:</b> {{ version.version_status }}
+  </p>
+
+  <p>
+    <b>Current File:</b> {{ version.original_filename }}
+  </p>
+
+  <p>
+    <a href="{{ url_for(
+        'knowledge_base_version_download',
+        document_id=document.id,
+        version_number=version.version_number
+    ) }}">
+      Download current document
+    </a>
+  </p>
+
+</div>
+
+<form method="post"
+      enctype="multipart/form-data"
+      action="{{ url_for(
+          'knowledge_base_edit',
+          document_id=document.id
+      ) }}">
+
+  <div class="card">
+
+    <h3 style="margin-top:0;">Amend Knowledge Base Document</h3>
+
+    <p class="muted">
+      You may amend the metadata and, where necessary, upload an amended
+      document. Saving creates a new Draft version. The previous version
+      remains permanently available in the version history.
+    </p>
+
+    <label for="title"><b>Document Title *</b></label>
+
+    <input
+      id="title"
+      name="title"
+      type="text"
+      required
+      value="{{ document.title }}"
+      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
+    >
+
+    <label for="category"><b>Knowledge Category *</b></label>
+
+    <select
+      id="category"
+      name="category"
+      required
+      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
+    >
+
+      {% for x in categories %}
+
+      <option
+        value="{{ x }}"
+        {% if document.category == x %}selected{% endif %}
+      >
+        {{ x }}
+      </option>
+
+      {% endfor %}
+
+    </select>
+
+    <label for="document_type"><b>Document Type *</b></label>
+
+    <select
+      id="document_type"
+      name="document_type"
+      required
+      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
+    >
+
+      {% for x in document_types %}
+
+      <option
+        value="{{ x }}"
+        {% if document.document_type == x %}selected{% endif %}
+      >
+        {{ x }}
+      </option>
+
+      {% endfor %}
+
+    </select>
+
+    <label for="tax_type"><b>Tax Type</b></label>
+
+    <select
+      id="tax_type"
+      name="tax_type"
+      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
+    >
+
+      {% for x in tax_types %}
+
+      <option
+        value="{{ x }}"
+        {% if document.tax_type == x %}selected{% endif %}
+      >
+        {{ x }}
+      </option>
+
+      {% endfor %}
+
+    </select>
+
+    <label for="issuing_authority">
+      <b>Issuing Authority / Source</b>
+    </label>
+
+    <input
+      id="issuing_authority"
+      name="issuing_authority"
+      type="text"
+      value="{{ document.issuing_authority or '' }}"
+      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
+    >
+
+    <label for="effective_date">
+      <b>Effective Date</b>
+    </label>
+
+    <input
+      id="effective_date"
+      name="effective_date"
+      type="date"
+      value="{{ document.effective_date or '' }}"
+      style="margin:8px 0 16px;"
+    >
+
+    <label for="expiry_date">
+      <b>Expiry / End Date</b>
+    </label>
+
+    <input
+      id="expiry_date"
+      name="expiry_date"
+      type="date"
+      value="{{ document.expiry_date or '' }}"
+      style="margin:8px 0 16px;"
+    >
+
+    <label for="description">
+      <b>Description</b>
+    </label>
+
+    <textarea
+      id="description"
+      name="description"
+      rows="6"
+      style="width:100%; box-sizing:border-box; margin:8px 0 16px;"
+    >{{ document.description or '' }}</textarea>
+
+    <label for="document_file">
+      <b>Upload Amended Document</b>
+    </label>
+
+    <div class="muted" style="margin:6px 0 8px;">
+      Optional. If you upload a file, it becomes the document for the new
+      Draft version. If you do not upload one, the current file is carried
+      forward unchanged into the new version.
+    </div>
+
+    <input
+      id="document_file"
+      name="document_file"
+      type="file"
+      accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+      style="margin:8px 0 20px;"
+    >
+
+    <label for="change_summary">
+      <b>Amendment / Change Summary *</b>
+    </label>
+
+    <textarea
+      id="change_summary"
+      name="change_summary"
+      rows="6"
+      required
+      placeholder="Describe exactly what you changed, added, removed or corrected before approval."
+      style="width:100%; box-sizing:border-box; margin:8px 0 20px;"
+    ></textarea>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+
+      <button
+        type="submit"
+        onclick="return confirm('Save these amendments as a new Draft version?');"
+      >
+        ✓ Save Amendments as New Draft Version
+      </button>
+
+      <a
+        class="button"
+        href="{{ url_for(
+            'knowledge_base_versions',
+            document_id=document.id
+        ) }}"
+      >
+        Cancel
+      </a>
+
+    </div>
+
+  </div>
+
+</form>
+
+<div class="notice" style="margin-top:20px;">
+
+  <b>Governance control:</b>
+
+  This action does not approve the document. It creates a new Draft version
+  that must return to the Knowledge Approval Queue for human approval.
+
+</div>
+
+{% endblock %}
