@@ -1,0 +1,1547 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+
+.transform-header {
+    margin-bottom: 15px;
+}
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid #d9e0e7;
+    background: #f7f9fb;
+    border-radius: 7px;
+}
+
+.toolbar button {
+    border: 1px solid #cbd5df;
+    background: white;
+    padding: 7px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.toolbar button:hover {
+    background: #eef4f9;
+}
+
+.workspace {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.sidebar {
+    border: 1px solid #d9e0e7;
+    border-radius: 7px;
+    background: white;
+    padding: 12px;
+}
+
+.sidebar h4 {
+    margin-top: 0;
+}
+
+.step {
+    padding: 8px;
+    border-bottom: 1px solid #edf0f2;
+    font-size: 11px;
+}
+
+.step-number {
+    font-weight: 700;
+    color: #17365d;
+}
+
+.preview {
+    border: 1px solid #d9e0e7;
+    border-radius: 7px;
+    background: white;
+    overflow: hidden;
+}
+
+.preview-header {
+    padding: 10px 12px;
+    background: #f7f9fb;
+    border-bottom: 1px solid #d9e0e7;
+}
+
+.table-wrap {
+    overflow: auto;
+    max-height: 560px;
+}
+
+.data-table {
+    border-collapse: collapse;
+    min-width: 100%;
+    font-size: 11px;
+}
+
+.data-table th {
+    position: sticky;
+    top: 0;
+    background: #e9eef3;
+    padding: 7px;
+    border: 1px solid #d4dbe1;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.data-table td {
+    padding: 6px 7px;
+    border: 1px solid #e1e5e8;
+    white-space: nowrap;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.operation-panel {
+    margin-top: 12px;
+    border: 1px solid #d9e0e7;
+    border-radius: 7px;
+    background: white;
+    padding: 14px;
+}
+
+.operation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.operation-grid .full {
+    grid-column: 1 / -1;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.btn {
+    border: 0;
+    border-radius: 5px;
+    padding: 8px 13px;
+    cursor: pointer;
+    font-size: 11px;
+    background: #17365d;
+    color: white;
+}
+
+.btn-success {
+    background: #287a46;
+}
+
+.btn-warning {
+    background: #9a6a00;
+}
+
+.btn-secondary {
+    background: #66727d;
+}
+
+.btn-danger {
+    background: #a52a2a;
+}
+
+.info {
+    padding: 10px;
+    background: #f3f7fb;
+    border: 1px solid #d9e3ec;
+    border-radius: 6px;
+    font-size: 11px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 10px;
+    background: #e9eef3;
+    font-size: 10px;
+}
+
+@media(max-width: 900px) {
+
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .operation-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .operation-grid .full {
+        grid-column: auto;
+    }
+
+}
+
+</style>
+
+
+<div class="card transform-header">
+
+    <div class="label">
+        DATA & EVIDENCE · STEP 2C-3
+    </div>
+
+    <h2>
+        Transform Data
+    </h2>
+
+    <p class="muted">
+
+        Power Query-style data preparation workspace.
+
+        Transformations are applied to a preview first.
+
+        The original uploaded source is never changed.
+
+    </p>
+
+
+    <div class="info">
+
+        <b>
+            {{ source.source_name }}
+        </b>
+
+        ·
+
+        {{ source.source_ref }}
+
+        ·
+
+        Version {{ version.version_number }}
+
+        ·
+
+        {{ version.original_filename }}
+
+        ·
+
+        {{ original_rows }}
+        rows
+
+        ·
+
+        {{ original_columns|length }}
+        columns
+
+    </div>
+
+</div>
+
+
+<!-- ============================================================
+     TOOLBAR
+============================================================ -->
+
+<div class="card">
+
+    <h3>
+        Transformations
+    </h3>
+
+
+    <div class="toolbar">
+
+        <button
+            type="button"
+            onclick="showPanel('columns')"
+        >
+            Select Columns
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('remove-columns')"
+        >
+            Remove Columns
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('rename')"
+        >
+            Rename
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('filter')"
+        >
+            Filter
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('sort')"
+        >
+            Sort
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('rows')"
+        >
+            Remove / Keep Rows
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('replace')"
+        >
+            Replace
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('type')"
+        >
+            Change Type
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('fill')"
+        >
+            Fill
+        </button>
+
+        <button
+            type="button"
+            onclick="showPanel('text')"
+        >
+            Trim / Clean
+        </button>
+
+    </div>
+
+</div>
+
+
+<div class="workspace">
+
+
+<!-- ============================================================
+     APPLIED STEPS
+============================================================ -->
+
+<div class="sidebar">
+
+    <h4>
+        Applied Steps
+    </h4>
+
+    <div class="step">
+
+        <span class="step-number">
+            1.
+        </span>
+
+        Source
+
+    </div>
+
+
+    {% for step in steps %}
+
+    <div class="step">
+
+        <span class="step-number">
+            {{ loop.index + 1 }}.
+        </span>
+
+        {{ step.operation|replace('_',' ')|title }}
+
+        {% if step.column %}
+
+            <div class="muted">
+                {{ step.column }}
+            </div>
+
+        {% endif %}
+
+    </div>
+
+    {% endfor %}
+
+
+    <div class="actions">
+
+        <form method="POST">
+
+            <input
+                type="hidden"
+                name="action"
+                value="undo"
+            >
+
+            <button
+                class="btn btn-secondary"
+                type="submit"
+            >
+                Undo
+            </button>
+
+        </form>
+
+
+        <form method="POST">
+
+            <input
+                type="hidden"
+                name="action"
+                value="clear"
+            >
+
+            <button
+                class="btn btn-danger"
+                type="submit"
+            >
+                Clear
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<!-- ============================================================
+     DATA PREVIEW
+============================================================ -->
+
+<div class="preview">
+
+    <div class="preview-header">
+
+        <b>
+            Data Preview
+        </b>
+
+        <span class="badge">
+
+            Showing up to 100 rows
+
+        </span>
+
+
+        <div
+            class="muted"
+            style="margin-top:5px"
+        >
+
+            {{ preview_records|length }}
+            preview rows
+
+            ·
+
+            {{ preview_columns|length }}
+            columns
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrap">
+
+        <table class="data-table">
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        #
+                    </th>
+
+                    {% for column in preview_columns %}
+
+                    <th>
+                        {{ column }}
+                    </th>
+
+                    {% endfor %}
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+            {% for row in preview_records %}
+
+                <tr>
+
+                    <td>
+                        {{ loop.index }}
+                    </td>
+
+                    {% for column in preview_columns %}
+
+                    <td
+                        title="{{ row[column] }}"
+                    >
+                        {{ row[column] }}
+                    </td>
+
+                    {% endfor %}
+
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+</div>
+
+
+<!-- ============================================================
+     OPERATION PANELS
+============================================================ -->
+
+
+<!-- SELECT COLUMNS -->
+
+<div
+    id="panel-columns"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Select Columns
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="select_columns"
+        >
+
+        <div class="operation-grid">
+
+            {% for column in original_columns %}
+
+            <label>
+
+                <input
+                    type="checkbox"
+                    name="columns"
+                    value="{{ column }}"
+                    checked
+                >
+
+                {{ column }}
+
+            </label>
+
+            {% endfor %}
+
+        </div>
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Apply Selection
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- REMOVE COLUMNS -->
+
+<div
+    id="panel-remove-columns"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Remove Columns
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="remove_columns"
+        >
+
+        <div class="operation-grid">
+
+            {% for column in preview_columns %}
+
+            <label>
+
+                <input
+                    type="checkbox"
+                    name="columns"
+                    value="{{ column }}"
+                >
+
+                {{ column }}
+
+            </label>
+
+            {% endfor %}
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-danger"
+                type="submit"
+            >
+                Remove Selected Columns
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- RENAME -->
+
+<div
+    id="panel-rename"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Rename Column
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="rename_column"
+        >
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Existing Column
+                </label>
+
+                <select name="old_name">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    New Column Name
+                </label>
+
+                <input
+                    name="new_name"
+                    required
+                    placeholder="New name"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Rename Column
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- FILTER -->
+
+<div
+    id="panel-filter"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Filter Rows
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="filter"
+        >
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Condition
+                </label>
+
+                <select name="operator">
+
+                    <option value="contains">
+                        Contains
+                    </option>
+
+                    <option value="equals">
+                        Equals
+                    </option>
+
+                    <option value="not_equals">
+                        Does not equal
+                    </option>
+
+                    <option value="starts_with">
+                        Starts with
+                    </option>
+
+                    <option value="ends_with">
+                        Ends with
+                    </option>
+
+                    <option value="blank">
+                        Is blank
+                    </option>
+
+                    <option value="not_blank">
+                        Is not blank
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="full">
+
+                <label>
+                    Value
+                </label>
+
+                <input
+                    name="value"
+                    placeholder="Enter filter value"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Apply Filter
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- SORT -->
+
+<div
+    id="panel-sort"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Sort
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="sort"
+        >
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Direction
+                </label>
+
+                <select name="direction">
+
+                    <option value="ascending">
+                        Ascending
+                    </option>
+
+                    <option value="descending">
+                        Descending
+                    </option>
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Sort
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ROWS -->
+
+<div
+    id="panel-rows"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Remove / Keep Rows
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+
+        <div class="operation-grid">
+
+
+            <div>
+
+                <label>
+                    Operation
+                </label>
+
+                <select
+                    name="operation"
+                >
+
+                    <option value="remove_blank_rows">
+                        Remove Blank Rows
+                    </option>
+
+                    <option value="remove_duplicates">
+                        Remove Duplicates
+                    </option>
+
+                    <option value="remove_top_rows">
+                        Remove Top Rows
+                    </option>
+
+                    <option value="remove_bottom_rows">
+                        Remove Bottom Rows
+                    </option>
+
+                    <option value="keep_top_rows">
+                        Keep Top Rows
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Number of Rows
+                </label>
+
+                <input
+                    type="number"
+                    name="count"
+                    value="1"
+                    min="0"
+                >
+
+            </div>
+
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Apply
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- REPLACE -->
+
+<div
+    id="panel-replace"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Replace Values
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="replace_value"
+        >
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Existing Value
+                </label>
+
+                <input
+                    name="old_value"
+                    placeholder="e.g. -"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Replace With
+                </label>
+
+                <input
+                    name="new_value"
+                    placeholder="e.g. blank"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Replace
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- CHANGE TYPE -->
+
+<div
+    id="panel-type"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Change Data Type
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+        <input
+            type="hidden"
+            name="operation"
+            value="change_type"
+        >
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Data Type
+                </label>
+
+                <select name="target_type">
+
+                    <option value="text">
+                        Text
+                    </option>
+
+                    <option value="whole">
+                        Whole Number
+                    </option>
+
+                    <option value="decimal">
+                        Decimal Number
+                    </option>
+
+                    <option value="date">
+                        Date
+                    </option>
+
+                    <option value="datetime">
+                        Date / Time
+                    </option>
+
+                    <option value="boolean">
+                        True / False
+                    </option>
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Change Type
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- FILL -->
+
+<div
+    id="panel-fill"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Fill Values
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Operation
+                </label>
+
+                <select name="operation">
+
+                    <option value="fill_down">
+                        Fill Down
+                    </option>
+
+                    <option value="fill_up">
+                        Fill Up
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Fill
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- TRIM / CLEAN -->
+
+<div
+    id="panel-text"
+    class="operation-panel"
+    style="display:none"
+>
+
+    <h3>
+        Trim / Clean Text
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+        >
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Operation
+                </label>
+
+                <select name="operation">
+
+                    <option value="trim">
+                        Trim whitespace
+                    </option>
+
+                    <option value="clean_text">
+                        Clean text
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+            >
+                Apply
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ============================================================
+     SAVE / CREATE CLEAN VERSION
+============================================================ -->
+
+<div class="card" style="margin-top:15px">
+
+    <h3>
+        Save Transformation
+    </h3>
+
+    <p class="muted">
+
+        The transformation steps above are stored as a recipe.
+
+        Applying the recipe creates a separate controlled clean file.
+
+        The original uploaded file remains unchanged.
+
+    </p>
+
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="save_recipe"
+        >
+
+
+        <label>
+            Recipe Name
+        </label>
+
+        <input
+            name="recipe_name"
+            value="{{ recipe.recipe_name }}"
+        >
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-secondary"
+                type="submit"
+            >
+                Save Recipe
+            </button>
+
+        </div>
+
+    </form>
+
+
+    <form
+        method="POST"
+        action="{{ url_for(
+            'data_source_transform_apply',
+            source_id=source.id
+        ) }}"
+        style="margin-top:10px"
+    >
+
+        <button
+            class="btn btn-success"
+            type="submit"
+        >
+            Apply & Create Clean Version
+        </button>
+
+    </form>
+
+</div>
+
+
+<div
+    class="actions"
+    style="margin-top:15px"
+>
+
+    <a
+        href="{{ url_for('data_sources') }}"
+        class="btn btn-secondary"
+    >
+        ← Back to Data Sources
+    </a>
+
+</div>
+
+
+<script>
+
+function showPanel(name) {
+
+    const panels = [
+        'columns',
+        'remove-columns',
+        'rename',
+        'filter',
+        'sort',
+        'rows',
+        'replace',
+        'type',
+        'fill',
+        'text'
+    ];
+
+    panels.forEach(function(panel) {
+
+        const element = document.getElementById(
+            'panel-' + panel
+        );
+
+        if (element) {
+
+            element.style.display =
+                panel === name
+                ? 'block'
+                : 'none';
+
+        }
+
+    });
+
+    const selected = document.getElementById(
+        'panel-' + name
+    );
+
+    if (selected) {
+
+        selected.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+
+    }
+
+}
+
+</script>
+
+{% endblock %}
