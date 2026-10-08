@@ -359,7 +359,7 @@ def _rule_exposure_from_row(row, plan):
     return minimum or 0.0
 
 def _execute_approved_rule_for_engine(c, rule, version, plan):
-    summary=_execute_rule_plan(c,plan,sample_only=5,return_records=True)
+    summary=_execute_rule_plan(c,plan,sample_only=None,return_records=True)
     run_stamp=now()
     c.execute('INSERT INTO risk_rule_runs(rule_id,version_number,run_status,records_evaluated,records_triggered,total_exposure,executed_at,executed_by) VALUES(?,?,?,?,?,?,?,?)',
               (rule['id'],version['version_number'],'Completed',summary['records_evaluated'],summary['records_triggered'],summary['total_exposure'],run_stamp,email()))
@@ -2065,7 +2065,8 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
             cols.append((col,result[col]))
 
     preview=[]
-    for _,row in result.head(sample_only).iterrows():
+    preview_limit = len(result) if sample_only is None else max(int(sample_only), 0)
+    for _,row in result.head(preview_limit).iterrows():
         obj={name:_clean_value(series.loc[row.name]) for name,series in cols}
         obj['Risk Result']=plan.get('result',{}).get('risk_description','Potential Risk')
         obj['Estimated Exposure']=_clean_value(row.get('__exposure__',0))
