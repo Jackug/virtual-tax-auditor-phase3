@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block content %}
+<div class="card"><h2>{{ rule.rule_ref }} · Versions</h2><table class="table"><thead><tr><th>Version</th><th>Status</th><th>Created By</th><th>Created</th><th>Approved By</th><th>Approved</th><th>Preview</th></tr></thead><tbody>
+{% for v in versions %}<tr><td>v{{ v.version_number }}</td><td>{{ v.status }}</td><td>{{ v.created_by }}</td><td>{{ v.created_at }}</td><td>{{ v.approved_by or '—' }}</td><td>{{ v.approved_at or '—' }}</td><td>{{ v.preview_status }}</td></tr>{% endfor %}
+</tbody></table></div><a class="btn btn-secondary" href="{{ url_for('business_rules') }}">Back</a>
+{% endblock %}

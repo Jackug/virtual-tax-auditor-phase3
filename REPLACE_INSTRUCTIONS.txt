@@ -1,0 +1,39 @@
+VTA PHASE 3 — BUSINESS + DATA SOURCE REVISED FILES
+
+Replace these files in the EXISTING Phase 3 repository:
+
+app.py
+templates/base.html
+templates/business_rules.html
+templates/risk_rules.html
+templates/risk_rule_form.html
+templates/risk_rule_review.html
+templates/risk_rule_detail.html
+templates/risk_rule_versions.html
+templates/data_sources.html
+templates/data_transform.html
+
+IMPORTANT:
+- Do NOT create a new repository/service.
+- Do NOT delete or reset vta_phase3.sqlite3.
+- Keep all other existing templates/files.
+- The app.py contains SQLite CREATE TABLE IF NOT EXISTS / ALTER TABLE migrations, so the existing database is retained and extended.
+- Commit these files to the existing main branch and allow Render to deploy.
+
+MAIN FIXES:
+1. Adds the missing data_source_transform endpoint that caused the Render BuildError.
+2. Adds controlled Step 2C-3 transformation recipes/runs and applied-step processing.
+3. Adds data-quality profiling, exceptions, controlled clean versions and approval lineage.
+4. Keeps previous approved source versions available when a new draft version is uploaded.
+5. Risk Engine reads only approved source versions with an approved controlled-clean derivative.
+6. Risk rules are analyst-defined and versioned; hard-coded taxpayer risk logic is removed from assess().
+7. Risk rules require approved Knowledge Base legal backing, information requests, executable detection logic, revenue exposure configuration and analyst-configured ranking bands before activation.
+8. Successful rule approval automatically refreshes the Risk Universe.
+9. Risk Engine replacement is atomic: an unsuccessful run does not wipe the previous Risk Universe.
+10. Business navigation is added to base.html.
+11. Original analyst rule wording is retained separately from the generated system interpretation.
+12. Rule execution is bound to the approved data-source version captured in the rule, preserving reproducibility.
+
+Validation performed on the generated files:
+- app.py Python compilation: passed.
+- All supplied revised Jinja templates: parsed successfully.
