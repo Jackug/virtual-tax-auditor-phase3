@@ -1,0 +1,925 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 18px;
+  }
+
+  .page-header h2 {
+    margin: 0 0 6px 0;
+  }
+
+  .page-header p {
+    margin: 0;
+  }
+
+  .section {
+    margin-top: 18px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .table th,
+  .table td {
+    border-bottom: 1px solid #d9e0e6;
+    padding: 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .table th {
+    background: #eef2f5;
+    font-size: 12px;
+  }
+
+  .table td {
+    font-size: 12px;
+  }
+
+  .status {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .approved {
+    background: #dff1e4;
+    color: #216438;
+  }
+
+  .draft {
+    background: #fff0d2;
+    color: #765300;
+  }
+
+  .rejected {
+    background: #f8dada;
+    color: #8b2222;
+  }
+
+  .revision {
+    background: #e8e8f8;
+    color: #4d4d88;
+  }
+
+  .superseded {
+    background: #e5e8eb;
+    color: #59636c;
+  }
+
+  .validation-pass {
+    color: #216438;
+    font-weight: 700;
+  }
+
+  .validation-warning {
+    color: #765300;
+    font-weight: 700;
+  }
+
+  .validation-failed {
+    color: #8b2222;
+    font-weight: 700;
+  }
+
+  .small {
+    font-size: 11px;
+  }
+
+  .muted {
+    color: #687682;
+    line-height: 1.5;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 9px 14px;
+    border-radius: 5px;
+    background: #17365d;
+    color: white;
+    text-decoration: none;
+    font-size: 12px;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .btn-secondary {
+    background: #66727d;
+  }
+
+  .btn-success {
+    background: #287a46;
+  }
+
+  .btn-danger {
+    background: #a52a2a;
+  }
+
+  .btn-warning {
+    background: #9a6a00;
+  }
+
+  .notice {
+    margin-top: 15px;
+  }
+
+  .empty {
+    padding: 20px;
+    text-align: center;
+    color: #687682;
+    border: 1px dashed #cbd5df;
+    background: #fafbfc;
+    border-radius: 6px;
+  }
+
+  .decision-box {
+    border: 1px solid #d9e0e6;
+    border-radius: 7px;
+    padding: 18px;
+    margin-top: 15px;
+    background: #fafbfc;
+  }
+
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 120px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  @media(max-width: 700px) {
+    .page-header {
+      flex-direction: column;
+    }
+  }
+</style>
+
+
+<!-- ============================================================
+     HEADER
+============================================================ -->
+
+<div class="card page-header">
+
+  <div>
+
+    <div class="label">
+      DATA SOURCE GOVERNANCE
+    </div>
+
+    <h2>
+      {{ source.source_name }}
+    </h2>
+
+    <p class="muted">
+      {{ source.source_ref }}
+      · Version history and approval record
+    </p>
+
+  </div>
+
+
+  <div>
+
+    <a
+      class="btn btn-secondary"
+      href="{{ url_for('data_sources') }}"
+    >
+      ← Back to Data Sources
+    </a>
+
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     SOURCE METADATA
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Data Source Information
+  </h3>
+
+  <div class="grid">
+
+    <div class="card">
+
+      <div class="label">
+        Source Reference
+      </div>
+
+      <div>
+        {{ source.source_ref }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Source Name
+      </div>
+
+      <div>
+        {{ source.source_name }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Source Type
+      </div>
+
+      <div>
+        {{ source.source_type or '—' }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Tax Type
+      </div>
+
+      <div>
+        {{ source.tax_type or 'General' }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Reporting Period
+      </div>
+
+      <div>
+        {{ source.reporting_period or '—' }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Owner Department
+      </div>
+
+      <div>
+        {{ source.owner_department or '—' }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Current Version
+      </div>
+
+      <div>
+        v{{ source.current_version }}
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        Source Status
+      </div>
+
+      <div>
+
+        {% if source.status == 'Approved' %}
+
+          <span class="status approved">
+            Approved
+          </span>
+
+        {% elif source.status == 'Rejected' %}
+
+          <span class="status rejected">
+            Rejected
+          </span>
+
+        {% else %}
+
+          <span class="status draft">
+            {{ source.status or 'Draft' }}
+          </span>
+
+        {% endif %}
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     VERSION HISTORY
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Version History
+  </h3>
+
+  <p class="muted">
+    Every uploaded version is retained. A new version does not overwrite
+    the historical record of an earlier version.
+  </p>
+
+
+  {% if versions %}
+
+  <div class="table-wrap">
+
+    <table class="table">
+
+      <thead>
+
+        <tr>
+          <th>Version</th>
+          <th>File</th>
+          <th>Records</th>
+          <th>Columns</th>
+          <th>Validation</th>
+          <th>Status</th>
+          <th>Uploaded</th>
+          <th>Approval</th>
+        </tr>
+
+      </thead>
+
+
+      <tbody>
+
+        {% for v in versions %}
+
+        <tr>
+
+          <td>
+            <b>v{{ v.version_number }}</b>
+          </td>
+
+
+          <td>
+
+            {{ v.original_filename }}
+
+            {% if v.change_summary %}
+
+            <div class="muted small" style="margin-top:5px;">
+              {{ v.change_summary }}
+            </div>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+            {{ "{:,}".format(v.record_count or 0) }}
+          </td>
+
+
+          <td>
+            {{ v.column_count or 0 }}
+          </td>
+
+
+          <td>
+
+            {% if v.validation_status == 'Passed' %}
+
+              <span class="validation-pass">
+                Passed
+              </span>
+
+            {% elif v.validation_status == 'Warning' %}
+
+              <span class="validation-warning">
+                Warnings
+              </span>
+
+            {% elif v.validation_status == 'Failed' %}
+
+              <span class="validation-failed">
+                Failed
+              </span>
+
+            {% else %}
+
+              {{ v.validation_status or 'Pending' }}
+
+            {% endif %}
+
+
+            <div class="muted small" style="margin-top:5px;">
+
+              {{ v.validation_errors or 0 }}
+              error(s)
+
+              ·
+
+              {{ v.validation_warnings or 0 }}
+              warning(s)
+
+            </div>
+
+          </td>
+
+
+          <td>
+
+            {% if v.version_status == 'Approved' %}
+
+              <span class="status approved">
+                Approved
+              </span>
+
+            {% elif v.version_status == 'Rejected' %}
+
+              <span class="status rejected">
+                Rejected
+              </span>
+
+            {% elif v.version_status == 'Needs Revision' %}
+
+              <span class="status revision">
+                Needs Revision
+              </span>
+
+            {% elif v.version_status == 'Superseded' %}
+
+              <span class="status superseded">
+                Superseded
+              </span>
+
+            {% else %}
+
+              <span class="status draft">
+                {{ v.version_status or 'Draft' }}
+              </span>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {{ v.uploaded_by or '—' }}
+
+            <div class="muted small">
+              {{ v.uploaded_at or '—' }}
+            </div>
+
+          </td>
+
+
+          <td>
+
+            {% if v.approved_by %}
+
+              <b>
+                {{ v.approved_by }}
+              </b>
+
+              <div class="muted small">
+                {{ v.approved_at or '—' }}
+              </div>
+
+            {% else %}
+
+              —
+
+            {% endif %}
+
+          </td>
+
+        </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+  {% else %}
+
+  <div class="empty">
+    No versions have been registered.
+  </div>
+
+  {% endif %}
+
+</div>
+
+
+<!-- ============================================================
+     CURRENT VERSION REVIEW
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Human Approval Decision
+  </h3>
+
+
+  {% set current_version = versions
+      | selectattr('version_number', 'equalto', source.current_version)
+      | list
+      | first
+  %}
+
+
+  {% if current_version and current_version.version_status == 'Draft' %}
+
+    <div class="notice">
+
+      <b>Approval Required</b>
+
+      <div class="muted" style="margin-top:6px;">
+
+        Version {{ current_version.version_number }}
+        is currently Draft.
+
+        It has been uploaded and validated, but it is
+        <b>NOT available to the Virtual Tax Auditor</b>
+        until a human reviewer approves it.
+
+      </div>
+
+    </div>
+
+
+    <div class="decision-box">
+
+      <h3>
+        Review Version {{ current_version.version_number }}
+      </h3>
+
+
+      <div class="muted">
+
+        <b>File:</b>
+        {{ current_version.original_filename }}
+
+        <br>
+
+        <b>Records:</b>
+        {{ "{:,}".format(current_version.record_count or 0) }}
+
+        <br>
+
+        <b>Validation:</b>
+        {{ current_version.validation_status }}
+
+      </div>
+
+
+      {% if current_version.validation_summary %}
+
+      <details style="margin-top:12px;">
+
+        <summary>
+          View validation summary
+        </summary>
+
+        <pre style="white-space:pre-wrap; margin-top:10px;">{{ current_version.validation_summary }}</pre>
+
+      </details>
+
+      {% endif %}
+
+
+      <form
+        method="POST"
+        action="{{ url_for('data_source_review', source_id=source.id) }}"
+        style="margin-top:18px;"
+      >
+
+        <label for="comments">
+          <b>
+            Reviewer Comments / Decision Rationale
+          </b>
+        </label>
+
+        <textarea
+          id="comments"
+          name="comments"
+          required
+          placeholder="Enter the reason for approving, rejecting or requesting revision of this data source."
+        ></textarea>
+
+
+        <div class="actions">
+
+          <button
+            type="submit"
+            name="decision"
+            value="Approved"
+            class="btn btn-success"
+            onclick="return confirm('Approve this data source version? It will become available to the VTA engine.');"
+          >
+            ✓ Approve
+          </button>
+
+
+          <button
+            type="submit"
+            name="decision"
+            value="Needs Revision"
+            class="btn btn-warning"
+            onclick="return confirm('Return this data source for revision?');"
+          >
+            ↻ Needs Revision
+          </button>
+
+
+          <button
+            type="submit"
+            name="decision"
+            value="Rejected"
+            class="btn btn-danger"
+            onclick="return confirm('Reject this data source version?');"
+          >
+            ✕ Reject
+          </button>
+
+        </div>
+
+      </form>
+
+    </div>
+
+
+  {% elif current_version and current_version.version_status == 'Approved' %}
+
+    <div class="notice">
+
+      <b>✓ APPROVED</b>
+
+      <div class="muted" style="margin-top:6px;">
+
+        Version {{ current_version.version_number }}
+        is the current approved data source version.
+
+        This version is eligible to be used by the VTA,
+        subject to downstream data mapping and processing controls.
+
+      </div>
+
+    </div>
+
+
+  {% elif current_version and current_version.version_status == 'Rejected' %}
+
+    <div class="notice">
+
+      <b>REJECTED</b>
+
+      <div class="muted" style="margin-top:6px;">
+
+        The current version has been rejected.
+        It cannot be used by the VTA.
+
+      </div>
+
+    </div>
+
+
+  {% elif current_version and current_version.version_status == 'Needs Revision' %}
+
+    <div class="notice">
+
+      <b>NEEDS REVISION</b>
+
+      <div class="muted" style="margin-top:6px;">
+
+        This version requires correction and a new version
+        should be uploaded before approval.
+
+      </div>
+
+    </div>
+
+  {% endif %}
+
+</div>
+
+
+<!-- ============================================================
+     REVIEW HISTORY
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Human Review History
+  </h3>
+
+
+  {% if reviews %}
+
+  <div class="table-wrap">
+
+    <table class="table">
+
+      <thead>
+
+        <tr>
+          <th>Version</th>
+          <th>Decision</th>
+          <th>Reviewer</th>
+          <th>Date</th>
+          <th>Comments / Rationale</th>
+        </tr>
+
+      </thead>
+
+
+      <tbody>
+
+        {% for r in reviews %}
+
+        <tr>
+
+          <td>
+            v{{ r.version_number }}
+          </td>
+
+          <td>
+
+            {% if r.decision == 'Approved' %}
+
+              <span class="status approved">
+                Approved
+              </span>
+
+            {% elif r.decision == 'Rejected' %}
+
+              <span class="status rejected">
+                Rejected
+              </span>
+
+            {% elif r.decision == 'Needs Revision' %}
+
+              <span class="status revision">
+                Needs Revision
+              </span>
+
+            {% else %}
+
+              {{ r.decision }}
+
+            {% endif %}
+
+          </td>
+
+          <td>
+            {{ r.reviewed_by }}
+          </td>
+
+          <td>
+            {{ r.reviewed_at }}
+          </td>
+
+          <td>
+            {{ r.comments or '—' }}
+          </td>
+
+        </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+  {% else %}
+
+  <div class="empty">
+
+    <b>No human review has been recorded yet.</b>
+
+    <div class="muted" style="margin-top:6px;">
+      The current version is awaiting its first governance decision.
+    </div>
+
+  </div>
+
+  {% endif %}
+
+</div>
+
+
+<!-- ============================================================
+     GOVERNANCE RULE
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Data Governance Rule
+  </h3>
+
+  <div class="notice">
+
+    <b>Approval is the control point.</b>
+
+    <p class="muted">
+      Uploading and validating a source does not make it authoritative.
+      Only a human-approved version may be used as an approved VTA data
+      source.
+    </p>
+
+    <p class="muted">
+      Rejected, Draft, Needs Revision and Superseded versions remain retained
+      for auditability but must not be treated as the current approved source.
+    </p>
+
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     BACK
+============================================================ -->
+
+<div style="margin-top:20px;">
+
+  <a
+    class="task"
+    href="{{ url_for('data_sources') }}"
+  >
+
+    <div>
+
+      <b>
+        ← Back to Data Sources
+      </b>
+
+      <div class="muted">
+        Return to the Data Source registration and approval queue.
+      </div>
+
+    </div>
+
+    <div class="arrow">
+      →
+    </div>
+
+  </a>
+
+</div>
+
+
+{% endblock %}
