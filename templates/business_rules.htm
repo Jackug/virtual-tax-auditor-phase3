@@ -1,0 +1,1076 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+    .rules-page {
+        padding: 24px;
+        max-width: 1500px;
+        margin: 0 auto;
+    }
+
+    .rules-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .rules-title h1 {
+        margin: 0;
+        font-size: 28px;
+        color: #172033;
+    }
+
+    .rules-title p {
+        margin: 7px 0 0;
+        color: #667085;
+        font-size: 14px;
+    }
+
+    .create-btn {
+        background: #1f4e78;
+        color: white;
+        padding: 11px 18px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 13px;
+    }
+
+    .create-btn:hover {
+        background: #173a5c;
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 22px;
+    }
+
+    .summary-card {
+        background: white;
+        border: 1px solid #e4e7ec;
+        border-radius: 8px;
+        padding: 18px;
+    }
+
+    .summary-label {
+        font-size: 12px;
+        color: #667085;
+        margin-bottom: 8px;
+    }
+
+    .summary-value {
+        font-size: 26px;
+        font-weight: 700;
+        color: #172033;
+    }
+
+    .filter-panel {
+        background: white;
+        border: 1px solid #e4e7ec;
+        border-radius: 8px;
+        padding: 18px;
+        margin-bottom: 20px;
+    }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 12px;
+    }
+
+    .filter-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475467;
+        margin-bottom: 6px;
+    }
+
+    .filter-group input,
+    .filter-group select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 9px 10px;
+        border: 1px solid #d0d5dd;
+        border-radius: 5px;
+        font-size: 13px;
+        background: white;
+    }
+
+    .rules-panel {
+        background: white;
+        border: 1px solid #e4e7ec;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .rules-panel-header {
+        padding: 17px 20px;
+        border-bottom: 1px solid #eaecf0;
+    }
+
+    .rules-panel-header h2 {
+        margin: 0;
+        font-size: 17px;
+        color: #172033;
+    }
+
+    .rules-panel-header p {
+        margin: 5px 0 0;
+        font-size: 12px;
+        color: #667085;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th {
+        padding: 12px 14px;
+        background: #f8f9fb;
+        border-bottom: 1px solid #eaecf0;
+        text-align: left;
+        font-size: 11px;
+        color: #475467;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    td {
+        padding: 13px 14px;
+        border-bottom: 1px solid #f0f2f5;
+        font-size: 13px;
+        color: #344054;
+        vertical-align: top;
+    }
+
+    tr:hover td {
+        background: #fafbfc;
+    }
+
+    .rule-ref {
+        font-weight: 700;
+        color: #1f4e78;
+    }
+
+    .rule-name {
+        font-weight: 600;
+        color: #172033;
+    }
+
+    .category-text {
+        font-size: 12px;
+    }
+
+    .logic {
+        max-width: 350px;
+        background: #f8f9fb;
+        border: 1px solid #eaecf0;
+        border-radius: 5px;
+        padding: 7px 9px;
+        font-family: Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        word-break: break-word;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 15px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .badge-active,
+    .badge-approved {
+        background: #ecfdf3;
+        color: #027a48;
+    }
+
+    .badge-draft {
+        background: #f2f4f7;
+        color: #475467;
+    }
+
+    .badge-review {
+        background: #fffaeb;
+        color: #b54708;
+    }
+
+    .badge-suspended {
+        background: #fff1f3;
+        color: #c01048;
+    }
+
+    .badge-retired {
+        background: #f2f4f7;
+        color: #667085;
+    }
+
+    .actions {
+        display: flex;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    .action-btn {
+        display: inline-block;
+        padding: 6px 9px;
+        border: 1px solid #d0d5dd;
+        border-radius: 5px;
+        text-decoration: none;
+        color: #344054;
+        background: white;
+        font-size: 11px;
+    }
+
+    .action-btn:hover {
+        background: #f9fafb;
+    }
+
+    .empty-state {
+        padding: 55px 20px;
+        text-align: center;
+        color: #667085;
+    }
+
+    .empty-state h3 {
+        margin: 0 0 7px;
+        color: #344054;
+    }
+
+    .empty-state p {
+        margin: 0 0 18px;
+        font-size: 13px;
+    }
+
+    .reset-btn {
+        margin-top: 12px;
+        padding: 8px 13px;
+        border: 1px solid #d0d5dd;
+        background: white;
+        border-radius: 5px;
+        cursor: pointer;
+        color: #344054;
+        font-size: 12px;
+    }
+
+    .engine-note {
+        margin-top: 20px;
+        padding: 14px 16px;
+        background: #f8f9fb;
+        border: 1px solid #e4e7ec;
+        border-radius: 7px;
+        font-size: 12px;
+        color: #475467;
+    }
+
+    .engine-note strong {
+        color: #172033;
+    }
+
+    @media (max-width: 1000px) {
+        .summary-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .filter-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .rules-panel {
+            overflow-x: auto;
+        }
+
+        table {
+            min-width: 1100px;
+        }
+    }
+
+    @media (max-width: 600px) {
+        .rules-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .summary-grid,
+        .filter-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+
+<div class="rules-page">
+
+    <!-- HEADER -->
+    <div class="rules-header">
+
+        <div class="rules-title">
+            <h1>Business Rules / Risk Rule Library</h1>
+
+            <p>
+                Analyst-defined rules used by the Virtual Tax Auditor Risk Engine
+                to identify and rank taxpayer risks.
+            </p>
+        </div>
+
+        <a href="{{ url_for('business_rule_create') }}" class="create-btn">
+            + Create Risk Rule
+        </a>
+
+    </div>
+
+
+    <!-- SUMMARY -->
+    {% set total_rules = rules|length %}
+
+    {% set active_count = namespace(value=0) %}
+    {% set draft_count = namespace(value=0) %}
+    {% set review_count = namespace(value=0) %}
+
+    {% for rule in rules %}
+
+        {% set status = (
+            rule.status
+            or rule.latest_status
+            or ('Active' if rule.approved else 'Draft')
+        )|lower %}
+
+        {% if status in ['active', 'approved'] %}
+            {% set active_count.value = active_count.value + 1 %}
+        {% elif status == 'draft' %}
+            {% set draft_count.value = draft_count.value + 1 %}
+        elif status in ['under review', 'review'] %}
+            {% set review_count.value = review_count.value + 1 %}
+        {% endif %}
+
+    {% endfor %}
+
+
+    <div class="summary-grid">
+
+        <div class="summary-card">
+            <div class="summary-label">
+                Total Risk Rules
+            </div>
+
+            <div class="summary-value">
+                {{ total_rules }}
+            </div>
+        </div>
+
+
+        <div class="summary-card">
+            <div class="summary-label">
+                Active / Approved
+            </div>
+
+            <div class="summary-value">
+                {{ active_count.value }}
+            </div>
+        </div>
+
+
+        <div class="summary-card">
+            <div class="summary-label">
+                Draft
+            </div>
+
+            <div class="summary-value">
+                {{ draft_count.value }}
+            </div>
+        </div>
+
+
+        <div class="summary-card">
+            <div class="summary-label">
+                Under Review
+            </div>
+
+            <div class="summary-value">
+                {{ review_count.value }}
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- FILTERS -->
+    <div class="filter-panel">
+
+        <div class="filter-grid">
+
+            <div class="filter-group">
+
+                <label for="ruleSearch">
+                    Search
+                </label>
+
+                <input
+                    type="text"
+                    id="ruleSearch"
+                    placeholder="Search rule name, category or detection logic..."
+                    onkeyup="filterRules()"
+                >
+
+            </div>
+
+
+            <div class="filter-group">
+
+                <label for="statusFilter">
+                    Status
+                </label>
+
+                <select
+                    id="statusFilter"
+                    onchange="filterRules()"
+                >
+
+                    <option value="">
+                        All Statuses
+                    </option>
+
+                    <option value="active">
+                        Active
+                    </option>
+
+                    <option value="approved">
+                        Approved
+                    </option>
+
+                    <option value="draft">
+                        Draft
+                    </option>
+
+                    <option value="under review">
+                        Under Review
+                    </option>
+
+                    <option value="suspended">
+                        Suspended
+                    </option>
+
+                    <option value="retired">
+                        Retired
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="filter-group">
+
+                <label for="categoryFilter">
+                    Risk Category
+                </label>
+
+                <select
+                    id="categoryFilter"
+                    onchange="filterRules()"
+                >
+
+                    <option value="">
+                        All Categories
+                    </option>
+
+                    {% set category_list = [] %}
+
+                    {% for rule in rules %}
+
+                        {% set category =
+                            rule.risk_category
+                            or rule.category
+                        %}
+
+                        {% if category and category not in category_list %}
+
+                            {% set _ =
+                                category_list.append(category)
+                            %}
+
+                        {% endif %}
+
+                    {% endfor %}
+
+
+                    {% for category in category_list|sort %}
+
+                        <option value="{{ category|lower }}">
+                            {{ category }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="filter-group">
+
+                <label for="taxTypeFilter">
+                    Tax Type
+                </label>
+
+                <select
+                    id="taxTypeFilter"
+                    onchange="filterRules()"
+                >
+
+                    <option value="">
+                        All Tax Types
+                    </option>
+
+                    {% set tax_type_list = [] %}
+
+                    {% for rule in rules %}
+
+                        {% if rule.tax_type and rule.tax_type not in tax_type_list %}
+
+                            {% set _ =
+                                tax_type_list.append(rule.tax_type)
+                            %}
+
+                        {% endif %}
+
+                    {% endfor %}
+
+
+                    {% for tax_type in tax_type_list|sort %}
+
+                        <option value="{{ tax_type|lower }}">
+                            {{ tax_type }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+        <button
+            type="button"
+            class="reset-btn"
+            onclick="clearFilters()"
+        >
+            Clear Filters
+        </button>
+
+    </div>
+
+
+    <!-- RULE LIBRARY -->
+    <div class="rules-panel">
+
+        <div class="rules-panel-header">
+
+            <h2>
+                Risk Rule Library
+            </h2>
+
+            <p>
+                Approved rules become available to the Risk Engine.
+                Draft and review rules are not executed.
+            </p>
+
+        </div>
+
+
+        {% if rules %}
+
+        <table id="rulesTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Rule ID
+                    </th>
+
+                    <th>
+                        Rule Name
+                    </th>
+
+                    <th>
+                        Risk Category
+                    </th>
+
+                    <th>
+                        Tax Type
+                    </th>
+
+                    <th>
+                        Detection Logic
+                    </th>
+
+                    <th>
+                        Version
+                    </th>
+
+                    <th>
+                        Status
+                    </th>
+
+                    <th>
+                        Engine
+                    </th>
+
+                    <th>
+                        Actions
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+            {% for rule in rules %}
+
+                {% set rule_status =
+                    rule.status
+                    or rule.latest_status
+                    or ('Active' if rule.approved else 'Draft')
+                %}
+
+                {% set rule_category =
+                    rule.risk_category
+                    or rule.category
+                    or ''
+                %}
+
+                {% set detection_logic =
+                    rule.detection_logic_json
+                    or rule.structured_logic
+                    or rule.natural_language
+                    or 'Not configured'
+                %}
+
+
+                <tr
+                    class="rule-row"
+
+                    data-search="
+                        {{
+                            (
+                                (rule.name or '')
+                                ~ ' '
+                                ~ (rule_category or '')
+                                ~ ' '
+                                ~ (rule.tax_type or '')
+                                ~ ' '
+                                ~ (rule.structured_logic or '')
+                                ~ ' '
+                                ~ (rule.natural_language or '')
+                            )|lower
+                        }}
+                    "
+
+                    data-status="{{ rule_status|lower }}"
+
+                    data-category="{{ rule_category|lower }}"
+
+                    data-tax-type="{{ (rule.tax_type or '')|lower }}"
+                >
+
+
+                    <!-- RULE ID -->
+                    <td>
+
+                        <span class="rule-ref">
+
+                            {{
+                                rule.rule_ref
+                                or 'R-%04d'|format(rule.id)
+                            }}
+
+                        </span>
+
+                    </td>
+
+
+                    <!-- RULE NAME -->
+                    <td>
+
+                        <div class="rule-name">
+                            {{ rule.name or 'Unnamed Rule' }}
+                        </div>
+
+                        {% if rule.natural_language %}
+
+                        <div style="
+                            margin-top:5px;
+                            font-size:11px;
+                            color:#667085;
+                            max-width:260px;
+                        ">
+
+                            {{ rule.natural_language }}
+
+                        </div>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- CATEGORY -->
+                    <td>
+
+                        <span class="category-text">
+
+                            {{ rule_category or '—' }}
+
+                        </span>
+
+                    </td>
+
+
+                    <!-- TAX TYPE -->
+                    <td>
+
+                        {{ rule.tax_type or 'All Tax Types' }}
+
+                    </td>
+
+
+                    <!-- DETECTION LOGIC -->
+                    <td>
+
+                        <div class="logic">
+
+                            {{ detection_logic }}
+
+                        </div>
+
+                    </td>
+
+
+                    <!-- VERSION -->
+                    <td>
+
+                        v{{ rule.latest_version
+                            or rule.version_number
+                            or 1 }}
+
+                    </td>
+
+
+                    <!-- STATUS -->
+                    <td>
+
+                        {% set status_class = rule_status|lower %}
+
+                        <span class="badge
+
+                            {% if status_class == 'active' %}
+                                badge-active
+
+                            {% elif status_class == 'approved' %}
+                                badge-approved
+
+                            {% elif status_class == 'draft' %}
+                                badge-draft
+
+                            {% elif status_class in ['review', 'under review'] %}
+                                badge-review
+
+                            {% elif status_class == 'suspended' %}
+                                badge-suspended
+
+                            {% elif status_class == 'retired' %}
+                                badge-retired
+
+                            {% else %}
+                                badge-draft
+                            {% endif %}
+                        ">
+
+                            {{ rule_status }}
+
+                        </span>
+
+                    </td>
+
+
+                    <!-- ENGINE -->
+                    <td>
+
+                        {% if status_class in ['active', 'approved'] %}
+
+                            <span style="
+                                color:#027a48;
+                                font-weight:600;
+                                font-size:11px;
+                            ">
+                                ✓ Executable
+                            </span>
+
+                        {% else %}
+
+                            <span style="
+                                color:#667085;
+                                font-size:11px;
+                            ">
+                                Not Executed
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <!-- ACTIONS -->
+                    <td>
+
+                        <div class="actions">
+
+                            <a
+                                href="{{ url_for(
+                                    'business_rule_view',
+                                    rule_id=rule.id
+                                ) }}"
+                                class="action-btn"
+                            >
+                                View
+                            </a>
+
+                            <a
+                                href="{{ url_for(
+                                    'business_rule_edit',
+                                    rule_id=rule.id
+                                ) }}"
+                                class="action-btn"
+                            >
+                                Edit
+                            </a>
+
+                            <a
+                                href="{{ url_for(
+                                    'business_rule_versions',
+                                    rule_id=rule.id
+                                ) }}"
+                                class="action-btn"
+                            >
+                                Versions
+                            </a>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+
+
+        <div
+            id="noResults"
+            class="empty-state"
+            style="display:none;"
+        >
+
+            <h3>
+                No matching rules
+            </h3>
+
+            <p>
+                No risk rules match the selected filters.
+            </p>
+
+            <button
+                type="button"
+                class="reset-btn"
+                onclick="clearFilters()"
+            >
+                Clear Filters
+            </button>
+
+        </div>
+
+
+        {% else %}
+
+        <div class="empty-state">
+
+            <h3>
+                No Risk Rules Defined
+            </h3>
+
+            <p>
+                The Risk Rule Library does not contain any rules yet.
+                Create a rule to make it available for governance and,
+                after approval, execution by the Risk Engine.
+            </p>
+
+            <a
+                href="{{ url_for('business_rule_create') }}"
+                class="create-btn"
+            >
+                + Create Risk Rule
+            </a>
+
+        </div>
+
+        {% endif %}
+
+    </div>
+
+
+    <!-- ENGINE INFORMATION -->
+    <div class="engine-note">
+
+        <strong>Risk Engine Control:</strong>
+
+        Analyst-defined rules are stored independently from individual
+        taxpayer risk results. Only rules that have completed the required
+        approval process should be executed against approved data sources
+        to generate Risk Drivers, Revenue Exposure, Risk Scores and Risk
+        Bands for the Risk Universe.
+
+    </div>
+
+</div>
+
+
+<script>
+
+function filterRules() {
+
+    const search =
+        document
+            .getElementById("ruleSearch")
+            .value
+            .toLowerCase()
+            .trim();
+
+    const status =
+        document
+            .getElementById("statusFilter")
+            .value
+            .toLowerCase();
+
+    const category =
+        document
+            .getElementById("categoryFilter")
+            .value
+            .toLowerCase();
+
+    const taxType =
+        document
+            .getElementById("taxTypeFilter")
+            .value
+            .toLowerCase();
+
+
+    const rows =
+        document.querySelectorAll(".rule-row");
+
+
+    let visibleRows = 0;
+
+
+    rows.forEach(function(row) {
+
+        const rowSearch =
+            row.getAttribute("data-search") || "";
+
+        const rowStatus =
+            row.getAttribute("data-status") || "";
+
+        const rowCategory =
+            row.getAttribute("data-category") || "";
+
+        const rowTaxType =
+            row.getAttribute("data-tax-type") || "";
+
+
+        const searchMatch =
+            !search ||
+            rowSearch.includes(search);
+
+
+        const statusMatch =
+            !status ||
+            rowStatus === status;
+
+
+        const categoryMatch =
+            !category ||
+            rowCategory === category;
+
+
+        const taxTypeMatch =
+            !taxType ||
+            rowTaxType === taxType;
+
+
+        const show =
+            searchMatch &&
+            statusMatch &&
+            categoryMatch &&
+            taxTypeMatch;
+
+
+        row.style.display =
+            show ? "" : "none";
+
+
+        if (show) {
+            visibleRows++;
+        }
+
+    });
+
+
+    const noResults =
+        document.getElementById("noResults");
+
+
+    if (noResults) {
+
+        noResults.style.display =
+            visibleRows === 0
+            ? "block"
+            : "none";
+
+    }
+
+}
+
+
+function clearFilters() {
+
+    document.getElementById("ruleSearch").value = "";
+
+    document.getElementById("statusFilter").value = "";
+
+    document.getElementById("categoryFilter").value = "";
+
+    document.getElementById("taxTypeFilter").value = "";
+
+    filterRules();
+
+}
+
+</script>
+
+{% endblock %}
