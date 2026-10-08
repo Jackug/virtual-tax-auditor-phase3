@@ -2402,7 +2402,9 @@ def _rule_form_context(c,rule=None):
 @app.route('/business')
 @login_required
 def business_rules():
-    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
+    # Legacy Business Rules / Risk Rule Library page retired.
+    # Business now opens the current Stage 1-6 risk-rule workflow directly.
+    return redirect(url_for('risk_rule_new'))
 
 @app.route('/business/rules/create')
 @login_required
@@ -2423,11 +2425,10 @@ def business_rule_versions(rule_id):return redirect(url_for('risk_rule_detail',r
 @app.route('/risk-rules')
 @login_required
 def risk_rules():
-    q=request.args.get('q','').strip();status=request.args.get('status','').strip();category=request.args.get('category','').strip();c=db();sql='SELECT * FROM risk_rules WHERE 1=1';params=[]
-    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)';like='%'+q+'%';params += [like,like,like]
-    if status:sql+=' AND status=?';params.append(status)
-    if category:sql+=' AND COALESCE(risk_category,category)=?';params.append(category)
-    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC";rows=c.execute(sql,params).fetchall();c.close();return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
+    # Legacy Risk Rule Library page retired.
+    # Keep the URL valid so old bookmarks/navigation links do not produce
+    # TemplateNotFound errors. Open the current Stage 1-6 rule workflow.
+    return redirect(url_for('risk_rule_new'))
 
 def _extract_common_rule_form(c):
     name=request.form.get('rule_name','').strip();category=request.form.get('risk_category','').strip();tax_type=request.form.get('tax_type','General').strip() or 'General';scope=request.form.get('taxpayer_scope','').strip();period=request.form.get('applicable_period','').strip()
