@@ -197,6 +197,31 @@ CREATE TABLE IF NOT EXISTS data_source_issues(
 );
 CREATE INDEX IF NOT EXISTS idx_data_source_versions_status ON data_source_versions(version_status);
 CREATE INDEX IF NOT EXISTS idx_data_source_issues_source_version ON data_source_issues(source_id, version_number);
+CREATE TABLE IF NOT EXISTS data_quality_profiles(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL, version_number INTEGER NOT NULL,
+    quality_score REAL DEFAULT 0, quality_band TEXT, profile_json TEXT NOT NULL,
+    created_by TEXT, created_at TEXT NOT NULL,
+    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE,
+    UNIQUE(source_id, version_number)
+);
+CREATE TABLE IF NOT EXISTS data_cleaning_exceptions(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL, version_number INTEGER NOT NULL,
+    issue_type TEXT NOT NULL, rule_code TEXT, severity TEXT NOT NULL, column_name TEXT,
+    row_reference TEXT, original_value TEXT, proposed_value TEXT, final_value TEXT,
+    status TEXT DEFAULT 'Open', resolution TEXT, resolved_by TEXT, resolved_at TEXT,
+    description TEXT NOT NULL, created_at TEXT NOT NULL,
+    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_dq_profiles_source_version ON data_quality_profiles(source_id, version_number);
+CREATE INDEX IF NOT EXISTS idx_cleaning_exceptions_source_version ON data_cleaning_exceptions(source_id, version_number);
+CREATE TABLE IF NOT EXISTS data_cleaned_versions(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL, source_version INTEGER NOT NULL,
+    cleaned_filename TEXT NOT NULL, cleaned_path TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+    status TEXT DEFAULT 'Draft', quality_score REAL, transformation_count INTEGER DEFAULT 0,
+    exception_count INTEGER DEFAULT 0, unresolved_count INTEGER DEFAULT 0, approved_by TEXT, approved_at TEXT,
+    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE,
+    UNIQUE(source_id, source_version)
+);
 '''); seed(c); c.commit(); c.close()
 
 def seed(c):
@@ -1368,46 +1393,176 @@ DATA_SOURCE_EXTENSIONS = {'csv','xlsx','xls'}
 DATA_SOURCE_TYPES = ['Taxpayer Master','Payments','Returns','Assessments','VAT','CIT','PAYE','WHT','Customs / Imports','Customs / Exports','EFRIS','Payment Integrator','Third-Party Data','Audit History','Other']
 DATA_SOURCE_TAX_TYPES = ['General','VAT','CIT','PAYE','WHT','Excise Duty','Customs','Other']
 
+DQ_SAMPLE_ROWS = 5000
+DQ_EMPTY_TOKENS = {'', 'na', 'n/a', 'n.a.', 'none', 'null', '-', '--'}
+DQ_DATE_HINTS = ('date','day','month','year','period')
+DQ_AMOUNT_HINTS = ('amount','value','sales','purchase','payment','tax','income','revenue','expense','asset','liability','turnover','profit','cost','deduction','assessment')
+DQ_TIN_HINTS = ('tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno')
+
 def data_source_allowed_file(filename):
     return bool(filename and '.' in filename and filename.rsplit('.',1)[1].lower() in DATA_SOURCE_EXTENSIONS)
 
 def data_source_ext(filename):
     return filename.rsplit('.',1)[1].lower() if '.' in filename else ''
 
+def _dq_normalize_name(value):
+    return re.sub(r'[^a-z0-9]', '', str(value or '').lower())
+
+def _dq_is_empty(value):
+    if pd is not None:
+        try:
+            if pd.isna(value): return True
+        except Exception:
+            pass
+    return str(value).strip().lower() in DQ_EMPTY_TOKENS
+
+def _dq_numeric_candidate(series):
+    if pd is None: return 0.0
+    if series.empty: return 1.0
+    raw=series.astype(str).str.strip()
+    cleaned=raw.str.replace(r'(?i)ugx|usd|eur|gbp', '', regex=True).str.replace(',', '', regex=False).str.replace(' ', '', regex=False)
+    numeric=pd.to_numeric(cleaned, errors='coerce')
+    nonempty=~series.map(_dq_is_empty)
+    denom=max(int(nonempty.sum()),1)
+    return float(numeric[nonempty].notna().sum()/denom)
+
+def _dq_date_candidate(series):
+    if pd is None: return 0.0
+    if series.empty: return 1.0
+    nonempty=~series.map(_dq_is_empty)
+    denom=max(int(nonempty.sum()),1)
+    parsed=pd.to_datetime(series[nonempty].astype(str).str.strip(), errors='coerce', dayfirst=False)
+    return float(parsed.notna().sum()/denom)
+
+def _dq_column_profile(df, col):
+    series=df[col]
+    nonempty=~series.map(_dq_is_empty)
+    missing=int((~nonempty).sum())
+    sample_count=int(len(series))
+    dtype=str(series.dtype)
+    name=_dq_normalize_name(col)
+    date_score=_dq_date_candidate(series)
+    numeric_score=_dq_numeric_candidate(series)
+    if any(h in name for h in DQ_DATE_HINTS):
+        detected='date' if date_score >= 0.70 else 'mixed/date-candidate'
+    elif any(h in name for h in DQ_AMOUNT_HINTS):
+        detected='numeric' if numeric_score >= 0.70 else 'mixed/numeric-candidate'
+    elif pd is not None and pd.api.types.is_numeric_dtype(series):
+        detected='numeric'
+    elif pd is not None and pd.api.types.is_datetime64_any_dtype(series):
+        detected='date'
+    else:
+        detected='text'
+    return {
+        'column':str(col),'dtype':dtype,'detected_type':detected,'sample_rows':sample_count,
+        'missing_count':missing,'missing_pct':round((missing/sample_count*100) if sample_count else 0,2),
+        'unique_count':int(series.nunique(dropna=True)),
+        'numeric_parse_rate':round(numeric_score*100,2),'date_parse_rate':round(date_score*100,2)
+    }
+
+def _dq_quality_score(profile):
+    score=100.0
+    score-=min(profile.get('critical_count',0)*15,45)
+    score-=min(profile.get('high_count',0)*2,25)
+    score-=min(profile.get('medium_count',0)*0.5,15)
+    score-=min(profile.get('warning_count',0)*0.1,10)
+    return round(max(0,min(100,score)),2)
+
+def _dq_quality_band(score):
+    if score>=90: return 'Excellent'
+    if score>=75: return 'Good'
+    if score>=50: return 'Needs Review'
+    return 'Poor'
+
 def inspect_data_source(path):
+    """Initial immutable profiling. It never changes the uploaded source file."""
     if pd is None: raise RuntimeError('pandas is required for data-source validation.')
     ext=data_source_ext(path.name)
     if ext=='csv':
-        df=pd.read_csv(path,nrows=5000,low_memory=False)
+        df=pd.read_csv(path,nrows=DQ_SAMPLE_ROWS,low_memory=False)
         with open(path,'rb') as fh: total_rows=max(sum(1 for _ in fh)-1,0)
     else:
-        df=pd.read_excel(path,nrows=5000)
+        df=pd.read_excel(path,nrows=DQ_SAMPLE_ROWS)
         try: total_rows=int(pd.read_excel(path,usecols=[0]).shape[0])
         except Exception: total_rows=len(df)
-    df.columns=[str(x).strip() for x in df.columns]; cols=list(df.columns); errors=[]; warnings=[]
+    df.columns=[str(x).strip() for x in df.columns]
+    cols=list(df.columns); errors=[]; warnings=[]; issues=[]; column_profiles=[]
     if not cols: errors.append('No columns were detected.')
-    if len(cols)!=len(set(cols)): errors.append('Duplicate column names were detected.')
+    if len(cols)!=len(set(cols)):
+        errors.append('Duplicate column names were detected.')
+        for col in cols:
+            if cols.count(col)>1: issues.append({'issue_type':'Structure','rule_code':'DQ-001','severity':'Critical','column_name':col,'row_reference':'','original_value':col,'proposed_value':None,'description':f'Duplicate column name detected: {col}.'})
     blank=[c for c in cols if not str(c).strip() or str(c).lower().startswith('unnamed')]
-    if blank: warnings.append('Blank/unnamed columns detected: '+', '.join(blank[:10]))
-    blank_rows=len(df)-len(df.dropna(how='all'))
-    if blank_rows: warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
-    normalized={c.lower().replace(' ','').replace('_','') for c in cols}
-    if not normalized.intersection({'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno'}):
+    if blank:
+        warnings.append('Blank/unnamed columns detected: '+', '.join(blank[:10]))
+        for col in blank: issues.append({'issue_type':'Structure','rule_code':'DQ-002','severity':'High','column_name':col,'row_reference':'','original_value':col,'proposed_value':None,'description':f'Blank or unnamed column detected: {col}.'})
+    blank_rows=int(len(df)-len(df.dropna(how='all')))
+    if blank_rows:
+        warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
+        issues.append({'issue_type':'Completeness','rule_code':'DQ-003','severity':'Low','column_name':'','row_reference':'sample','original_value':str(blank_rows),'proposed_value':'Remove truly blank rows','description':f'{blank_rows} completely blank rows found in the validation sample.'})
+    normalized={_dq_normalize_name(c) for c in cols}
+    if not normalized.intersection(DQ_TIN_HINTS):
         warnings.append('No obvious TIN column was detected. TIN mapping will be required before Taxpayer 360 ingestion.')
-    null_summary={c:int(df[c].isna().sum()) for c in cols if int(df[c].isna().sum())>0}
-    if null_summary:
-        top=sorted(null_summary.items(),key=lambda x:x[1],reverse=True)[:10]
-        warnings.append('Missing values detected in: '+', '.join(f'{k} ({v})' for k,v in top))
-    summary={'sample_rows':int(len(df)),'record_count':int(total_rows),'column_count':len(cols),'columns':cols,'nulls_sample':null_summary,'errors':errors,'warnings':warnings}
-    return summary, ('Failed' if errors else ('Warnings' if warnings else 'Passed'))
+        issues.append({'issue_type':'Identity','rule_code':'DQ-004','severity':'High','column_name':'','row_reference':'','original_value':'No TIN-like column','proposed_value':None,'description':'No obvious taxpayer identification column was detected.'})
+    null_summary={}
+    for col in cols:
+        cp=_dq_column_profile(df,col); column_profiles.append(cp)
+        if cp['missing_count']>0: null_summary[col]=cp['missing_count']
+        if cp['missing_pct']>=50:
+            sev='High' if any(h in _dq_normalize_name(col) for h in DQ_TIN_HINTS+DQ_AMOUNT_HINTS) else 'Medium'
+            issues.append({'issue_type':'Completeness','rule_code':'DQ-005','severity':sev,'column_name':col,'row_reference':'sample','original_value':f"{cp['missing_pct']}% missing",'proposed_value':None,'description':f"Column '{col}' has {cp['missing_pct']}% missing values in the validation sample."})
+        if cp['detected_type'].startswith('date') and 0 < cp['date_parse_rate'] < 100:
+            issues.append({'issue_type':'Date Quality','rule_code':'DQ-006','severity':'High','column_name':col,'row_reference':'sample','original_value':f"{cp['date_parse_rate']}% parseable",'proposed_value':None,'description':f"Column '{col}' contains values that cannot all be interpreted reliably as dates."})
+        if cp['detected_type'].startswith('numeric') and 0 < cp['numeric_parse_rate'] < 100:
+            issues.append({'issue_type':'Numeric Quality','rule_code':'DQ-007','severity':'High','column_name':col,'row_reference':'sample','original_value':f"{cp['numeric_parse_rate']}% parseable",'proposed_value':None,'description':f"Column '{col}' contains values that cannot all be interpreted reliably as numbers."})
+        if cp['missing_pct']>0 and cp['missing_pct']<50:
+            warnings.append(f"Missing values detected in {col}: {cp['missing_count']} ({cp['missing_pct']}% of sample).")
+    duplicate_count=int(df.duplicated().sum())
+    if duplicate_count:
+        warnings.append(f'{duplicate_count} exact duplicate rows were found in the validation sample.')
+        issues.append({'issue_type':'Duplicate','rule_code':'DQ-008','severity':'Medium','column_name':'','row_reference':'sample','original_value':str(duplicate_count),'proposed_value':None,'description':f'{duplicate_count} exact duplicate rows detected in the validation sample. They are flagged, not deleted automatically.'})
+    profile={'sample_rows':int(len(df)),'record_count':int(total_rows),'column_count':len(cols),'columns':cols,'column_profiles':column_profiles,'nulls_sample':null_summary,'errors':errors,'warnings':warnings,'issues':issues,'critical_count':sum(1 for x in issues if x['severity']=='Critical'),'high_count':sum(1 for x in issues if x['severity']=='High'),'medium_count':sum(1 for x in issues if x['severity']=='Medium'),'warning_count':len(warnings),'duplicate_sample_count':duplicate_count}
+    score=_dq_quality_score(profile); profile['quality_score']=score; profile['quality_band']=_dq_quality_band(score)
+    status='Failed' if errors else ('Warnings' if issues or warnings else 'Passed')
+    return profile,status
+
+def _store_quality_profile(c, source_id, version_number, profile, actor):
+    c.execute('DELETE FROM data_quality_profiles WHERE source_id=? AND version_number=?',(source_id,version_number))
+    c.execute('INSERT INTO data_quality_profiles(source_id,version_number,quality_score,quality_band,profile_json,created_by,created_at) VALUES(?,?,?,?,?,?,?)',(source_id,version_number,profile['quality_score'],profile['quality_band'],json.dumps(profile,default=str),actor,now()))
+
+def _create_cleaning_proposals(c, source_id, version_number, profile, actor):
+    existing=c.execute('SELECT COUNT(*) FROM data_cleaning_exceptions WHERE source_id=? AND version_number=?',(source_id,version_number)).fetchone()[0]
+    if existing: return int(existing)
+    for item in profile.get('issues',[]):
+        c.execute('INSERT INTO data_cleaning_exceptions(source_id,version_number,issue_type,rule_code,severity,column_name,row_reference,original_value,proposed_value,description,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(source_id,version_number,item.get('issue_type'),item.get('rule_code'),item.get('severity'),item.get('column_name'),item.get('row_reference'),item.get('original_value'),item.get('proposed_value'),item.get('description'),now()))
+    return len(profile.get('issues',[]))
+
+def _profile_and_store(path, source_id, version_number, actor):
+    profile,status=inspect_data_source(path); c=db(); _store_quality_profile(c,source_id,version_number,profile,actor); _create_cleaning_proposals(c,source_id,version_number,profile,actor); c.commit(); c.close(); return profile,status
+
+def _source_version(c, source_id, version_number=None):
+    src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
+    if not src: return None,None
+    vn=int(version_number or src['current_version']); v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,vn)).fetchone(); return src,v
 
 @app.route('/data-sources')
 @login_required
 def data_sources():
     c=db()
-    rows=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_errors,v.validation_warnings,v.version_status,v.uploaded_by,v.uploaded_at,v.approved_by,v.approved_at FROM data_sources d LEFT JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version ORDER BY d.id DESC").fetchall()
-    pending=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_summary,v.validation_errors,v.validation_warnings,v.uploaded_at,v.uploaded_by FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft' ORDER BY d.id DESC").fetchall()
-    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES)
+    rows=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_errors,v.validation_warnings,v.version_status,v.uploaded_by,v.uploaded_at,v.approved_by,v.approved_at,p.quality_score,p.quality_band,COALESCE((SELECT COUNT(*) FROM data_cleaning_exceptions e WHERE e.source_id=d.id AND e.version_number=v.version_number),0) exception_count,COALESCE((SELECT COUNT(*) FROM data_cleaning_exceptions e WHERE e.source_id=d.id AND e.version_number=v.version_number AND e.status='Open'),0) unresolved_count FROM data_sources d LEFT JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version LEFT JOIN data_quality_profiles p ON p.source_id=d.id AND p.version_number=v.version_number ORDER BY d.id DESC").fetchall()
+    pending=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_summary,v.validation_errors,v.validation_warnings,v.uploaded_at,v.uploaded_by,p.quality_score,p.quality_band,COALESCE((SELECT COUNT(*) FROM data_cleaning_exceptions e WHERE e.source_id=d.id AND e.version_number=v.version_number),0) exception_count,COALESCE((SELECT COUNT(*) FROM data_cleaning_exceptions e WHERE e.source_id=d.id AND e.version_number=v.version_number AND e.status='Open'),0) unresolved_count FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version LEFT JOIN data_quality_profiles p ON p.source_id=d.id AND p.version_number=v.version_number WHERE v.version_status='Draft' ORDER BY d.id DESC").fetchall()
+    details={}
+    for r in rows:
+        sid=r['id']; vn=r['version_number']
+        p=c.execute('SELECT * FROM data_quality_profiles WHERE source_id=? AND version_number=?',(sid,vn)).fetchone()
+        ex=c.execute("SELECT * FROM data_cleaning_exceptions WHERE source_id=? AND version_number=? ORDER BY CASE severity WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,id",(sid,vn)).fetchall()
+        cv=c.execute('SELECT * FROM data_cleaned_versions WHERE source_id=? AND source_version=?',(sid,vn)).fetchone()
+        profile_columns=[]
+        if p:
+            try: profile_columns=json.loads(p['profile_json']).get('column_profiles',[])
+            except Exception: profile_columns=[]
+        details[sid]={'profile':p,'profile_column_profiles':profile_columns,'exceptions':ex,'cleaned':cv}
+    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES,details=details)
 
 @app.route('/data-sources/register',methods=['POST'])
 @login_required
@@ -1420,29 +1575,29 @@ def data_source_register():
     if not safe: flash('The selected filename is not valid.','error'); return redirect(url_for('data_sources'))
     stamp=datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f'); source_ref='DS-'+stamp; target=UPLOAD/'data_sources'; target.mkdir(parents=True,exist_ok=True); stored=f'{source_ref}_v1_{safe}'; path=target/stored; file.save(path)
     try:
-        summary,validation=inspect_data_source(path); c=db()
-        c.execute("INSERT INTO data_sources(source_ref,source_name,source_type,description,owner_department,reporting_period,tax_type,current_version,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,1,'Draft',?,?,?)",(source_ref,name,source_type,description,owner,period,tax_type,email(),now(),now()))
-        sid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
-        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(sid,1,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),summary['record_count'],summary['column_count'],json.dumps(summary['columns']),validation,json.dumps(summary),len(summary['errors']),len(summary['warnings']),'Initial data-source registration.'))
-        for msg in summary['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,1,'Validation','Error',?,?)",(sid,msg,now()))
-        for msg in summary['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,1,'Validation','Warning',?,?)",(sid,msg,now()))
+        summary,validation=_profile_and_store(path,0,1,email()) if False else (None,None)
+        c=db(); c.execute("INSERT INTO data_sources(source_ref,source_name,source_type,description,owner_department,reporting_period,tax_type,current_version,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,1,'Draft',?,?,?)",(source_ref,name,source_type,description,owner,period,tax_type,email(),now(),now())); sid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        profile,validation=inspect_data_source(path); _store_quality_profile(c,sid,1,profile,email()); _create_cleaning_proposals(c,sid,1,profile,email())
+        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(sid,1,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),profile['record_count'],profile['column_count'],json.dumps(profile['columns']),validation,json.dumps(profile,default=str),len(profile['errors']),len(profile['warnings']),'Initial data-source registration; Step 2C profile generated.'))
+        for msg in profile['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,1,'Validation','Error',?,?)",(sid,msg,now()))
+        for msg in profile['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,1,'Validation','Warning',?,?)",(sid,msg,now()))
         c.commit(); c.close()
     except Exception as exc:
         try: path.unlink(missing_ok=True)
         except Exception: pass
         flash(f'Data source validation failed: {exc}','error'); return redirect(url_for('data_sources'))
-    log('DATA_SOURCE_REGISTERED',f'{source_ref}: {name}; v1; validation={validation}'); flash(f'{source_ref} registered as Version 1 ({validation}). It is NOT available to the VTA until approved.','success'); return redirect(url_for('data_sources'))
+    log('DATA_SOURCE_REGISTERED',f'{source_ref}: {name}; v1; validation={validation}; quality={profile["quality_score"]}'); flash(f'{source_ref} registered as Version 1 ({validation}). Data quality profile generated. It is NOT available to the VTA until approved.','success'); return redirect(url_for('data_sources'))
 
 @app.route('/data-sources/<int:source_id>/review',methods=['POST'])
 @login_required
 def data_source_review(source_id):
     decision=request.form.get('decision','').strip(); comments=request.form.get('comments','').strip()
     if decision not in ('Approved','Rejected','Needs Revision'): flash('Invalid review decision.','error'); return redirect(url_for('data_sources'))
-    c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
-    if not src: c.close(); abort(404)
-    v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone()
-    if not v: c.close(); abort(404)
+    c=db(); src,v=_source_version(c,source_id)
+    if not src or not v: c.close(); abort(404)
+    unresolved=c.execute("SELECT COUNT(*) FROM data_cleaning_exceptions WHERE source_id=? AND version_number=? AND status='Open'",(source_id,v['version_number'])).fetchone()[0]
     if decision=='Approved' and v['validation_status']=='Failed': c.close(); flash('This source cannot be approved because validation failed. Correct it and upload a new version.','error'); return redirect(url_for('data_sources'))
+    if decision=='Approved' and unresolved>0: c.close(); flash(f'This source has {unresolved} unresolved Step 2C data-quality exception(s). Resolve them before approval.','error'); return redirect(url_for('data_sources'))
     c.execute('INSERT INTO data_source_reviews(source_id,version_number,decision,comments,reviewed_by,reviewed_at) VALUES(?,?,?,?,?,?)',(source_id,v['version_number'],decision,comments,email(),now()))
     c.execute('UPDATE data_source_versions SET version_status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,v['id']))
     c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',('Approved' if decision=='Approved' else ('Rejected' if decision=='Rejected' else 'Draft'),now(),source_id)); c.commit(); c.close()
@@ -1457,17 +1612,83 @@ def data_source_new_version(source_id):
     if not src: c.close(); abort(404)
     next_v=int(src['current_version'])+1; ref=src['source_ref']; target=UPLOAD/'data_sources'; target.mkdir(parents=True,exist_ok=True); stored=f'{ref}_v{next_v}_{safe}'; path=target/stored; file.save(path)
     try:
-        summary,validation=inspect_data_source(path); c.execute("UPDATE data_source_versions SET version_status='Superseded' WHERE source_id=? AND version_status='Approved'",(source_id,))
-        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(source_id,next_v,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),summary['record_count'],summary['column_count'],json.dumps(summary['columns']),validation,json.dumps(summary),len(summary['errors']),len(summary['warnings']),change or f'New version {next_v}.'))
-        for msg in summary['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Error',?,?)",(source_id,next_v,msg,now()))
-        for msg in summary['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Warning',?,?)",(source_id,next_v,msg,now()))
+        profile,validation=inspect_data_source(path)
+        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(source_id,next_v,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),profile['record_count'],profile['column_count'],json.dumps(profile['columns']),validation,json.dumps(profile,default=str),len(profile['errors']),len(profile['warnings']),change or f'New version {next_v}.'))
+        _store_quality_profile(c,source_id,next_v,profile,email())
+        _create_cleaning_proposals(c,source_id,next_v,profile,email())
+        for msg in profile['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Error',?,?)",(source_id,next_v,msg,now()))
+        for msg in profile['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Warning',?,?)",(source_id,next_v,msg,now()))
         c.execute("UPDATE data_sources SET current_version=?,status='Draft',updated_at=? WHERE id=?",(next_v,now(),source_id)); c.commit()
     except Exception as exc:
         c.rollback()
         try: path.unlink(missing_ok=True)
         except Exception: pass
         c.close(); flash(f'New version validation failed: {exc}','error'); return redirect(url_for('data_sources'))
-    c.close(); log('DATA_SOURCE_VERSION_REGISTERED',f'{ref}: v{next_v}; validation={validation}'); flash(f'{ref} Version {next_v} uploaded as Draft ({validation}). The previous approved version remains retained.','success'); return redirect(url_for('data_sources'))
+    c.close(); log('DATA_SOURCE_VERSION_REGISTERED',f'{ref}: v{next_v}; validation={validation}; quality={profile["quality_score"]}'); flash(f'{ref} Version {next_v} uploaded as Draft ({validation}) with Step 2C profile. The previous approved version remains retained.','success'); return redirect(url_for('data_sources'))
+
+@app.route('/data-sources/<int:source_id>/exception/<int:exception_id>',methods=['POST'])
+@login_required
+def data_source_exception_resolve(source_id,exception_id):
+    action=request.form.get('action','').strip(); final_value=request.form.get('final_value','')
+    if action not in ('Accept Correction','Reject','Override','Mark as Valid'): flash('Invalid exception action.','error'); return redirect(url_for('data_sources'))
+    c=db(); ex=c.execute('SELECT * FROM data_cleaning_exceptions WHERE id=? AND source_id=?',(exception_id,source_id)).fetchone()
+    if not ex: c.close(); abort(404)
+    if action=='Accept Correction': resolution='Accepted proposed correction'; final=ex['proposed_value']
+    elif action=='Reject': resolution='Rejected proposed correction; original retained'; final=ex['original_value']
+    elif action=='Override': resolution='Human override'; final=final_value
+    else: resolution='Marked as valid; original retained'; final=ex['original_value']
+    c.execute('UPDATE data_cleaning_exceptions SET status="Resolved",resolution=?,final_value=?,resolved_by=?,resolved_at=? WHERE id=?',(resolution,final,email(),now(),exception_id)); c.commit(); c.close(); log('DATA_CLEANING_EXCEPTION_RESOLVED',f'Exception {exception_id}; {action}; source {source_id}'); flash(f'Exception {exception_id} resolved: {action}.','success'); return redirect(url_for('data_sources'))
+
+@app.route('/data-sources/<int:source_id>/clean',methods=['POST'])
+@login_required
+def data_source_generate_clean(source_id):
+    c=db(); src,v=_source_version(c,source_id)
+    if not src or not v: c.close(); abort(404)
+    if v['version_status'] not in ('Draft','Needs Revision'): c.close(); flash('Cleaning can only be generated for a non-approved source version.','error'); return redirect(url_for('data_sources'))
+    exceptions=c.execute('SELECT * FROM data_cleaning_exceptions WHERE source_id=? AND version_number=?',(source_id,v['version_number'])).fetchall()
+    unresolved=[x for x in exceptions if x['status']=='Open']
+    if unresolved: c.close(); flash(f'{len(unresolved)} exception(s) remain unresolved. Resolve them before generating the controlled cleaned version.','error'); return redirect(url_for('data_sources'))
+    if pd is None: c.close(); flash('pandas is required for cleaning.','error'); return redirect(url_for('data_sources'))
+    src_dir=Path(v['file_path']);
+    if not src_dir.exists(): c.close(); flash('Original source file could not be found.','error'); return redirect(url_for('data_sources'))
+    try:
+        ext=data_source_ext(src_dir.name)
+        if ext=='csv': df=pd.read_csv(src_dir,low_memory=False)
+        else: df=pd.read_excel(src_dir)
+        original_columns=list(df.columns); df.columns=[str(x).strip() for x in df.columns]
+        transformations=0
+        for col in df.columns:
+            if df[col].dtype=='object':
+                before=df[col].copy(); df[col]=df[col].map(lambda x: x.strip() if isinstance(x,str) else x); transformations+=int((before.astype(str)!=df[col].astype(str)).sum())
+        # Apply only explicitly resolved human decisions. Nothing unresolved is silently changed.
+        for ex in exceptions:
+            if ex['status']!='Resolved': continue
+            col=ex['column_name']
+            if not col or col not in df.columns: continue
+            rowref=ex['row_reference'] or ''
+            if rowref.startswith('row:'):
+                try: idx=int(rowref.split(':',1)[1]); df.loc[idx,col]=ex['final_value']; transformations+=1
+                except Exception: pass
+        outdir=UPLOAD/'data_sources'/'cleaned'; outdir.mkdir(parents=True,exist_ok=True); clean_name=f'{src["source_ref"]}_v{v["version_number"]}_cleaned.xlsx'; clean_path=outdir/clean_name; df.to_excel(clean_path,index=False)
+        c.execute('DELETE FROM data_cleaned_versions WHERE source_id=? AND source_version=?',(source_id,v['version_number']))
+        c.execute('INSERT INTO data_cleaned_versions(source_id,source_version,cleaned_filename,cleaned_path,created_by,created_at,status,quality_score,transformation_count,exception_count,unresolved_count) VALUES(?,?,?,?,?,?,?,?,?,?,0)',(source_id,v['version_number'],clean_name,str(clean_path),email(),now(),'Pending Approval',float((c.execute('SELECT quality_score FROM data_quality_profiles WHERE source_id=? AND version_number=?',(source_id,v['version_number'])).fetchone() or [0])[0]),transformations,len(exceptions)))
+        c.commit(); c.close(); log('DATA_CLEANED_VERSION_CREATED',f'{src["source_ref"]} v{v["version_number"]}; {transformations} transformations'); flash(f'Controlled cleaned version created: {clean_name}. It is pending approval and is not yet available to VTA.','success')
+    except Exception as exc:
+        c.rollback(); c.close(); flash(f'Cleaning failed: {exc}','error')
+    return redirect(url_for('data_sources'))
+
+@app.route('/data-sources/<int:source_id>/clean-approve',methods=['POST'])
+@login_required
+def data_source_clean_approve(source_id):
+    decision=request.form.get('decision','').strip(); comments=request.form.get('comments','').strip()
+    if decision not in ('Approved','Rejected'): flash('Invalid cleaned-version decision.','error'); return redirect(url_for('data_sources'))
+    c=db(); src,v=_source_version(c,source_id)
+    if not src or not v: c.close(); abort(404)
+    cv=c.execute('SELECT * FROM data_cleaned_versions WHERE source_id=? AND source_version=?',(source_id,v['version_number'])).fetchone()
+    if not cv: c.close(); flash('No cleaned version is awaiting approval.','error'); return redirect(url_for('data_sources'))
+    c.execute('UPDATE data_cleaned_versions SET status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,cv['id']))
+    if decision=='Approved': c.execute('UPDATE data_sources SET status="Cleaned Approved",updated_at=? WHERE id=?',(now(),source_id))
+    c.commit(); c.close(); log('DATA_CLEANED_VERSION_REVIEWED',f'{src["source_ref"]} v{v["version_number"]}: {decision}; {comments}'); flash(f'Cleaned version {decision.lower()}.','success'); return redirect(url_for('data_sources'))
 
 @app.route('/data-sources/<int:source_id>/versions')
 @login_required
