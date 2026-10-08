@@ -27,10 +27,8 @@ except Exception:
 
 try:
     from openpyxl import load_workbook
-    from openpyxl.styles import Alignment as OpenpyxlAlignment
 except Exception:
     load_workbook = None
-    OpenpyxlAlignment = None
 
 try:
     import xlrd
@@ -76,6 +74,14 @@ CREATE TABLE IF NOT EXISTS taxpayer_metrics(id INTEGER PRIMARY KEY AUTOINCREMENT
 CREATE TABLE IF NOT EXISTS risk_rules(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,natural_language TEXT,structured_logic TEXT,category TEXT,approved INTEGER DEFAULT 1,created_at TEXT);
 CREATE TABLE IF NOT EXISTS risk_assessments(id INTEGER PRIMARY KEY AUTOINCREMENT,taxpayer_id INTEGER,score REAL,band TEXT,exposure REAL,assessed_at TEXT,engine_version TEXT,FOREIGN KEY(taxpayer_id) REFERENCES taxpayers(id));
 CREATE TABLE IF NOT EXISTS risk_drivers(id INTEGER PRIMARY KEY AUTOINCREMENT,assessment_id INTEGER,rule_id INTEGER,description TEXT,variance REAL,variance_pct REAL);
+CREATE TABLE IF NOT EXISTS risk_rule_versions(id INTEGER PRIMARY KEY AUTOINCREMENT,rule_id INTEGER NOT NULL,version_number INTEGER NOT NULL,rule_name TEXT NOT NULL,risk_category TEXT NOT NULL,tax_type TEXT,taxpayer_scope TEXT,applicable_period TEXT,detection_logic_json TEXT NOT NULL DEFAULT '{}',legal_basis_json TEXT NOT NULL DEFAULT '[]',information_requests_json TEXT NOT NULL DEFAULT '[]',exposure_config_json TEXT NOT NULL DEFAULT '{}',ranking_config_json TEXT NOT NULL DEFAULT '{}',status TEXT NOT NULL DEFAULT 'Draft',created_by TEXT,created_at TEXT,approved_by TEXT,approved_at TEXT,FOREIGN KEY(rule_id) REFERENCES risk_rules(id) ON DELETE CASCADE,UNIQUE(rule_id,version_number));
+CREATE TABLE IF NOT EXISTS risk_rule_legal_basis(id INTEGER PRIMARY KEY AUTOINCREMENT,rule_id INTEGER NOT NULL,version_number INTEGER NOT NULL,document_id INTEGER NOT NULL,document_version INTEGER NOT NULL,chunk_id INTEGER,legal_passage TEXT,created_at TEXT NOT NULL,FOREIGN KEY(rule_id) REFERENCES risk_rules(id) ON DELETE CASCADE,FOREIGN KEY(document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS risk_rule_information_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,rule_id INTEGER NOT NULL,version_number INTEGER NOT NULL,request_title TEXT NOT NULL,purpose TEXT,period TEXT,mandatory INTEGER NOT NULL DEFAULT 1,evidence_type TEXT,sort_order INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,FOREIGN KEY(rule_id) REFERENCES risk_rules(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS risk_rule_runs(id INTEGER PRIMARY KEY AUTOINCREMENT,rule_id INTEGER NOT NULL,version_number INTEGER NOT NULL,run_status TEXT NOT NULL DEFAULT 'Pending',records_evaluated INTEGER DEFAULT 0,records_triggered INTEGER DEFAULT 0,total_exposure REAL DEFAULT 0,executed_at TEXT,executed_by TEXT);
+CREATE INDEX IF NOT EXISTS idx_rule_versions_rule ON risk_rule_versions(rule_id,version_number);
+CREATE INDEX IF NOT EXISTS idx_rule_legal_rule ON risk_rule_legal_basis(rule_id,version_number);
+CREATE INDEX IF NOT EXISTS idx_rule_requests_rule ON risk_rule_information_requests(rule_id,version_number);
+
 CREATE TABLE IF NOT EXISTS audit_cases(id INTEGER PRIMARY KEY AUTOINCREMENT,case_ref TEXT UNIQUE,taxpayer_id INTEGER,status TEXT,selected_by TEXT,selected_at TEXT,assigned_to TEXT,created_at TEXT,updated_at TEXT);
 CREATE TABLE IF NOT EXISTS audit_analyses(id INTEGER PRIMARY KEY AUTOINCREMENT,case_id INTEGER,analysis_status TEXT,summary TEXT,methodology TEXT,limitations TEXT,created_at TEXT);
 CREATE TABLE IF NOT EXISTS findings(id INTEGER PRIMARY KEY AUTOINCREMENT,finding_ref TEXT UNIQUE,case_id INTEGER,risk_category TEXT,description TEXT,financial_year TEXT,expected_value REAL,observed_value REAL,variance REAL,variance_pct REAL,potential_exposure REAL,source TEXT,audit_test TEXT,explanation TEXT,ai_confidence TEXT,limitations TEXT,status TEXT DEFAULT 'AI Generated',created_at TEXT);
@@ -199,37 +205,14 @@ CREATE TABLE IF NOT EXISTS data_source_issues(
 );
 CREATE INDEX IF NOT EXISTS idx_data_source_versions_status ON data_source_versions(version_status);
 CREATE INDEX IF NOT EXISTS idx_data_source_issues_source_version ON data_source_issues(source_id, version_number);
-CREATE TABLE IF NOT EXISTS data_transform_recipes(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id INTEGER NOT NULL,
-    version_number INTEGER NOT NULL,
-    recipe_name TEXT,
-    steps_json TEXT NOT NULL DEFAULT '[]',
-    status TEXT NOT NULL DEFAULT 'Draft',
-    created_by TEXT,
-    created_at TEXT,
-    updated_at TEXT,
-    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS data_transform_runs(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    recipe_id INTEGER NOT NULL,
-    source_id INTEGER NOT NULL,
-    version_number INTEGER NOT NULL,
-    output_filename TEXT,
-    output_path TEXT,
-    output_rows INTEGER,
-    output_columns INTEGER,
-    transformation_count INTEGER DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'Preview',
-    created_by TEXT,
-    created_at TEXT,
-    FOREIGN KEY(recipe_id) REFERENCES data_transform_recipes(id) ON DELETE CASCADE,
-    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_transform_recipe_source ON data_transform_recipes(source_id, version_number);
-CREATE INDEX IF NOT EXISTS idx_transform_run_source ON data_transform_runs(source_id, version_number);
-'''); seed(c); c.commit(); c.close()
+''')
+    # Step 3A migration: extend the existing risk_rules table without resetting data.
+    existing_cols={row['name'] for row in c.execute('PRAGMA table_info(risk_rules)').fetchall()}
+    additions={'rule_ref':'TEXT','version_number':'INTEGER DEFAULT 1','risk_category':'TEXT','tax_type':'TEXT','taxpayer_scope':'TEXT','applicable_period':'TEXT','detection_logic_json':"TEXT DEFAULT '{}'",'legal_basis_json':"TEXT DEFAULT '[]'",'information_requests_json':"TEXT DEFAULT '[]'",'exposure_config_json':"TEXT DEFAULT '{}'",'ranking_config_json':"TEXT DEFAULT '{}'",'status':"TEXT DEFAULT 'Draft'",'created_by':'TEXT','updated_at':'TEXT','approved_by':'TEXT','approved_at':'TEXT'}
+    for col,definition in additions.items():
+        if col not in existing_cols: c.execute(f'ALTER TABLE risk_rules ADD COLUMN {col} {definition}')
+    c.execute("UPDATE risk_rules SET risk_category=COALESCE(NULLIF(risk_category,''),category), status=CASE WHEN approved=1 THEN 'Active' ELSE COALESCE(status,'Draft') END, version_number=COALESCE(version_number,1), updated_at=COALESCE(updated_at,created_at)")
+    seed(c); c.commit(); c.close()
 
 def seed(c):
     if c.execute('SELECT COUNT(*) FROM taxpayers').fetchone()[0]: return
@@ -1433,24 +1416,115 @@ def inspect_data_source(path):
     summary={'sample_rows':int(len(df)),'record_count':int(total_rows),'column_count':len(cols),'columns':cols,'nulls_sample':null_summary,'errors':errors,'warnings':warnings}
     return summary, ('Failed' if errors else ('Warnings' if warnings else 'Passed'))
 
+# ========================= STEP 3A: ANALYST RISK RULE LIBRARY =========================
+RISK_RULE_STATUSES=['Draft','Under Review','Approved','Active','Suspended','Retired','Rejected']
+RISK_RULE_CATEGORIES=['Sales Reconciliation','Purchases / Imports Reconciliation','VAT Risk','CIT Risk','PAYE Risk','WHT Risk','Registration Risk','Payment Behaviour','Assessment Behaviour','Third-Party Mismatch','Sector / Peer Risk','Other']
+RISK_RULE_TAX_TYPES=['General','VAT','CIT','PAYE','WHT','Excise Duty','Customs','Other']
+RISK_OPERATORS=['Greater Than','Greater Than or Equal To','Less Than','Less Than or Equal To','Equal To','Not Equal To','Percentage Greater Than','Percentage Less Than','Exists','Does Not Exist']
+RISK_EXPOSURE_TYPES=['Estimated Revenue Exposure','Potential VAT Exposure','Potential Income Tax Exposure','Potential PAYE Exposure','Potential WHT Exposure','Potential Excise Exposure','No Exposure Calculation']
+
+def _json_or_default(value, default):
+    try:return json.loads(value) if value else default
+    except Exception:return default
+
+def _rule_ref(c):return 'RR-'+datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
+
+def _approved_legal_basis(c):
+    return c.execute("""SELECT d.id document_id,d.document_ref,d.title,d.category,d.document_type,d.tax_type,d.issuing_authority,v.version_number,v.version_status FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Approved' AND d.status IN ('Approved','Active') ORDER BY d.title""").fetchall()
+
+def _rule_form_payload(c):
+    f=request.form; name=f.get('rule_name','').strip(); category=f.get('risk_category','').strip(); tax_type=f.get('tax_type','').strip() or 'General'; scope=f.get('taxpayer_scope','').strip(); period=f.get('applicable_period','').strip(); field1=f.get('field_1','').strip(); operator=f.get('operator','').strip(); field2=f.get('field_2','').strip(); threshold=f.get('threshold','').strip(); minimum=f.get('minimum_exposure','').strip(); natural=f.get('natural_language','').strip()
+    detection={'field_1':field1,'operator':operator,'field_2':field2,'threshold':threshold,'minimum_exposure':minimum}
+    legal=[]
+    for raw in f.getlist('legal_basis'):
+        try:legal.append(int(raw))
+        except Exception:pass
+    requests=[]; titles=f.getlist('request_title'); purposes=f.getlist('request_purpose'); periods=f.getlist('request_period'); mandatory=f.getlist('request_mandatory'); evidence=f.getlist('request_evidence')
+    for idx,title in enumerate(titles):
+        title=title.strip()
+        if title: requests.append({'title':title,'purpose':purposes[idx].strip() if idx<len(purposes) else '','period':periods[idx].strip() if idx<len(periods) else '','mandatory':1 if idx<len(mandatory) and mandatory[idx] in ('1','on','true') else 0,'evidence_type':evidence[idx].strip() if idx<len(evidence) else '','sort_order':idx+1})
+    exposure={'type':f.get('exposure_type','Estimated Revenue Exposure').strip(),'formula':f.get('exposure_formula','').strip(),'minimum_exposure':minimum,'rate':f.get('exposure_rate','').strip()}
+    ranking={'base_score':f.get('base_score','').strip() or '0','exposure_weight':f.get('exposure_weight','').strip() or '0','frequency_weight':f.get('frequency_weight','').strip() or '0','low_max':f.get('low_max','').strip() or '39','medium_max':f.get('medium_max','').strip() or '69','high_max':f.get('high_max','').strip() or '89','critical_min':f.get('critical_min','').strip() or '90'}
+    return name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking
+
+@app.route('/risk-rules')
+@login_required
+def risk_rules():
+    q=request.args.get('q','').strip(); status=request.args.get('status','').strip(); category=request.args.get('category','').strip(); c=db(); sql='SELECT * FROM risk_rules WHERE 1=1'; params=[]
+    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)'; like='%'+q+'%'; params += [like,like,like]
+    if status:sql+=' AND status=?'; params.append(status)
+    if category:sql+=' AND COALESCE(risk_category,category)=?'; params.append(category)
+    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC"; rows=c.execute(sql,params).fetchall(); c.close(); return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
+
+@app.route('/risk-rules/new',methods=['GET','POST'])
+@login_required
+def risk_rule_new():
+    c=db()
+    if request.method=='POST':
+        try:
+            name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking=_rule_form_payload(c)
+            if not name or category not in RISK_RULE_CATEGORIES:raise ValueError('Rule name and Risk Category are required.')
+            if not detection['field_1'] or detection['operator'] not in RISK_OPERATORS:raise ValueError('Detection Logic requires Field 1 and a valid Operator.')
+            if detection['operator'] not in ('Exists','Does Not Exist') and not detection['field_2'] and not detection['threshold']:raise ValueError('Provide Field 2 or Threshold.')
+            if not legal:raise ValueError('Select at least one approved Knowledge Base legal basis.')
+            ref=_rule_ref(c); stamp=now();
+            c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural or name,json.dumps(detection),category,stamp,ref,1,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),'Draft',email(),stamp))
+            rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+            c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,1,name,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),'Draft',email(),stamp))
+            for docid in legal:
+                doc=c.execute("SELECT d.*,v.version_number FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE d.id=? AND v.version_status='Approved'",(docid,)).fetchone()
+                if doc:c.execute('INSERT INTO risk_rule_legal_basis(rule_id,version_number,document_id,document_version,legal_passage,created_at) VALUES(?,?,?,?,?,?)',(rid,1,docid,doc['version_number'],'',stamp))
+            for req in requests:c.execute('INSERT INTO risk_rule_information_requests(rule_id,version_number,request_title,purpose,period,mandatory,evidence_type,sort_order,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(rid,1,req['title'],req['purpose'],req['period'],req['mandatory'],req['evidence_type'],req['sort_order'],stamp))
+            c.commit(); log('RISK_RULE_CREATED',f'{ref}: {name}; Draft; version 1'); flash(f'{ref} created as Draft. It is not active until approved.','success'); return redirect(url_for('risk_rules'))
+        except Exception as exc:c.rollback(); flash(str(exc),'error')
+    legal=_approved_legal_basis(c); c.close(); return render_template('risk_rule_form.html',rule=None,legal_basis=legal,categories=RISK_RULE_CATEGORIES,tax_types=RISK_RULE_TAX_TYPES,operators=RISK_OPERATORS,exposure_types=RISK_EXPOSURE_TYPES)
+
+@app.route('/risk-rules/<int:rule_id>/edit',methods=['GET','POST'])
+@login_required
+def risk_rule_edit(rule_id):
+    c=db(); rule=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    if not rule:c.close();abort(404)
+    if request.method=='POST':
+        try:
+            name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking=_rule_form_payload(c)
+            if not name or category not in RISK_RULE_CATEGORIES:raise ValueError('Rule name and Risk Category are required.')
+            if not legal:raise ValueError('Select at least one approved Knowledge Base legal basis.')
+            newv=int(rule['version_number'] or 1)+1; stamp=now()
+            c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural or name,json.dumps(detection),category,newv,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),stamp,rule_id))
+            c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rule_id,newv,name,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),'Draft',email(),stamp))
+            c.execute('DELETE FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,newv)); c.execute('DELETE FROM risk_rule_information_requests WHERE rule_id=? AND version_number=?',(rule_id,newv))
+            for docid in legal:
+                doc=c.execute('SELECT * FROM knowledge_documents WHERE id=?',(docid,)).fetchone(); v=c.execute("SELECT version_number FROM knowledge_document_versions WHERE document_id=? AND version_status='Approved' ORDER BY version_number DESC LIMIT 1",(docid,)).fetchone()
+                if doc and v:c.execute('INSERT INTO risk_rule_legal_basis(rule_id,version_number,document_id,document_version,legal_passage,created_at) VALUES(?,?,?,?,?,?)',(rule_id,newv,docid,v['version_number'],'',stamp))
+            for req in requests:c.execute('INSERT INTO risk_rule_information_requests(rule_id,version_number,request_title,purpose,period,mandatory,evidence_type,sort_order,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(rule_id,newv,req['title'],req['purpose'],req['period'],req['mandatory'],req['evidence_type'],req['sort_order'],stamp))
+            c.commit(); log('RISK_RULE_VERSION_CREATED',f'{rule["rule_ref"]}: version {newv}; Draft'); flash(f'{rule["rule_ref"]} updated as Version {newv} Draft.','success'); return redirect(url_for('risk_rule_edit',rule_id=rule_id))
+        except Exception as exc:c.rollback(); flash(str(exc),'error')
+    legal=_approved_legal_basis(c); requests=c.execute('SELECT * FROM risk_rule_information_requests WHERE rule_id=? AND version_number=? ORDER BY sort_order',(rule_id,rule['version_number'])).fetchall(); basis=c.execute('SELECT * FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,rule['version_number'])).fetchall(); c.close(); return render_template('risk_rule_form.html',rule=rule,legal_basis=legal,selected_basis=[x['document_id'] for x in basis],requests=requests,categories=RISK_RULE_CATEGORIES,tax_types=RISK_RULE_TAX_TYPES,operators=RISK_OPERATORS,exposure_types=RISK_EXPOSURE_TYPES)
+
+@app.route('/risk-rules/<int:rule_id>/decision',methods=['POST'])
+@login_required
+def risk_rule_decision(rule_id):
+    decision=request.form.get('decision','').strip(); comments=request.form.get('comments','').strip()
+    if decision not in ('Under Review','Approved','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rules'))
+    c=db(); r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    if not r:c.close();abort(404)
+    if decision=='Approved' and not c.execute('SELECT COUNT(*) FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()[0]:c.close();flash('A rule cannot be approved without approved Knowledge Base legal backing.','error');return redirect(url_for('risk_rule_edit',rule_id=rule_id))
+    active='Active' if decision=='Approved' else decision; c.execute('UPDATE risk_rules SET status=?,approved=?,approved_by=?,approved_at=?,updated_at=? WHERE id=?',(active,1 if decision=='Approved' else 0,email(),now() if decision=='Approved' else None,now(),rule_id)); c.execute('UPDATE risk_rule_versions SET status=?,approved_by=?,approved_at=? WHERE rule_id=? AND version_number=?',(active,email(),now() if decision=='Approved' else None,rule_id,r['version_number'])); c.commit(); c.close(); log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}'); flash(f'{r["rule_ref"]} Version {r["version_number"]}: {active}.','success'); return redirect(url_for('risk_rules'))
+
+@app.route('/risk-rules/<int:rule_id>')
+@login_required
+def risk_rule_detail(rule_id):
+    c=db(); r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    if not r:c.close();abort(404)
+    basis=c.execute("SELECT b.*,d.document_ref,d.title,d.category,d.document_type,d.tax_type,d.issuing_authority,v.version_status FROM risk_rule_legal_basis b JOIN knowledge_documents d ON d.id=b.document_id JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=b.document_version WHERE b.rule_id=? AND b.version_number=?",(rule_id,r['version_number'])).fetchall(); req=c.execute('SELECT * FROM risk_rule_information_requests WHERE rule_id=? AND version_number=? ORDER BY sort_order',(rule_id,r['version_number'])).fetchall(); c.close(); return render_template('risk_rule_detail.html',rule=r,basis=basis,requests=req,detection=_json_or_default(r['detection_logic_json'],{}),exposure=_json_or_default(r['exposure_config_json'],{}),ranking=_json_or_default(r['ranking_config_json'],{}))
+
 @app.route('/data-sources')
 @login_required
 def data_sources():
     c=db()
     rows=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_errors,v.validation_warnings,v.version_status,v.uploaded_by,v.uploaded_at,v.approved_by,v.approved_at FROM data_sources d LEFT JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version ORDER BY d.id DESC").fetchall()
     pending=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_summary,v.validation_errors,v.validation_warnings,v.uploaded_at,v.uploaded_by FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft' ORDER BY d.id DESC").fetchall()
-    transform_rows=c.execute("""
-        SELECT r.*
-        FROM data_transform_runs r
-        JOIN (
-            SELECT source_id, MAX(id) AS max_id
-            FROM data_transform_runs
-            GROUP BY source_id
-        ) x ON x.max_id=r.id
-        ORDER BY r.id DESC
-    """).fetchall()
-    transform_status={row['source_id']: row for row in transform_rows}
-    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES,transform_status=transform_status)
+    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES)
 
 @app.route('/data-sources/register',methods=['POST'])
 @login_required
@@ -1527,445 +1601,6 @@ def data_source_download(source_id):
     v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone(); c.close()
     if not v: abort(404)
     return send_from_directory(str(UPLOAD/'data_sources'),v['stored_filename'],as_attachment=True,download_name=v['original_filename'])
-
-# ============================================================
-# STEP 2C-3 — POWER QUERY STYLE TRANSFORMATION ENGINE
-# ============================================================
-
-def transform_read_source(path):
-    if pd is None:
-        raise RuntimeError('pandas is required for data transformation.')
-    ext=data_source_ext(path.name)
-    if ext=='csv':
-        return pd.read_csv(path, low_memory=False)
-    if ext in ('xls','xlsx'):
-        return pd.read_excel(path)
-    raise RuntimeError('Unsupported data source format.')
-
-def transform_apply_step(df, step):
-    operation=step.get('operation')
-
-    # Replace the column headers with a user-selected row.
-    # row_number is 1-based so that it matches the visible spreadsheet row number.
-    # The selected row becomes the header and all rows above it are removed.
-    if operation=='replace_headers_with_row':
-        try:
-            row_number=max(int(step.get('row_number',1) or 1),1)
-        except (TypeError,ValueError):
-            row_number=1
-        position=row_number-1
-        if position >= len(df):
-            return df
-        header_values=df.iloc[position].tolist()
-        new_columns=[]
-        used={}
-        for index,value in enumerate(header_values):
-            if pd.isna(value) or str(value).strip()=='':
-                base=f'Column{index+1}'
-            else:
-                base=str(value).strip()
-            # Ensure headers are unique because pandas columns must be addressable.
-            count=used.get(base,0)+1
-            used[base]=count
-            new_columns.append(base if count==1 else f'{base}_{count}')
-        result=df.iloc[position+1:].copy()
-        result.columns=new_columns
-        return result.reset_index(drop=True)
-
-    if operation=='remove_columns':
-        columns=step.get('columns',[])
-        existing=[c for c in columns if c in df.columns]
-        if existing: df=df.drop(columns=existing)
-        return df
-
-    if operation=='select_columns':
-        columns=step.get('columns',[])
-        existing=[c for c in columns if c in df.columns]
-        if existing: df=df[existing]
-        return df
-
-    if operation=='rename_column':
-        old_name=step.get('old_name')
-        new_name=step.get('new_name')
-        if old_name in df.columns and new_name and new_name not in df.columns:
-            df=df.rename(columns={old_name:new_name.strip()})
-        return df
-
-    if operation=='remove_blank_rows':
-        return df.dropna(how='all').reset_index(drop=True)
-
-    if operation=='remove_duplicates':
-        columns=step.get('columns',[])
-        existing=[c for c in columns if c in df.columns]
-        df=df.drop_duplicates(subset=existing) if existing else df.drop_duplicates()
-        return df.reset_index(drop=True)
-
-    if operation=='remove_top_rows':
-        count=max(int(step.get('count',0) or 0),0)
-        return df.iloc[count:].reset_index(drop=True)
-
-    if operation=='remove_bottom_rows':
-        count=max(int(step.get('count',0) or 0),0)
-        if count==0: return df.reset_index(drop=True)
-        if count>=len(df): return df.iloc[0:0].reset_index(drop=True)
-        return df.iloc[:-count].reset_index(drop=True)
-
-    if operation=='keep_top_rows':
-        count=max(int(step.get('count',0) or 0),0)
-        return df.head(count).reset_index(drop=True)
-
-    if operation=='filter':
-        column=step.get('column')
-        operator=step.get('operator','contains')
-        value=str(step.get('value',''))
-        if column not in df.columns: return df
-        series=df[column].astype('string')
-        if operator=='contains': mask=series.str.contains(value,case=False,na=False,regex=False)
-        elif operator=='equals': mask=series.str.strip().str.lower()==value.strip().lower()
-        elif operator=='not_equals': mask=series.str.strip().str.lower()!=value.strip().lower()
-        elif operator=='starts_with': mask=series.str.startswith(value,na=False)
-        elif operator=='ends_with': mask=series.str.endswith(value,na=False)
-        elif operator=='blank': mask=df[column].isna() | (series.str.strip()=='')
-        elif operator=='not_blank': mask=~(df[column].isna() | (series.str.strip()==''))
-        else: mask=pd.Series(True,index=df.index)
-        return df.loc[mask].reset_index(drop=True)
-
-    if operation=='replace_value':
-        column=step.get('column'); old_value=step.get('old_value',''); new_value=step.get('new_value','')
-        if column in df.columns:
-            df[column]=df[column].replace(old_value,new_value)
-            df[column]=df[column].replace(str(old_value),new_value)
-        return df
-
-    if operation=='replace_text':
-        column=step.get('column'); old_value=str(step.get('old_value','')); new_value=str(step.get('new_value',''))
-        if column in df.columns:
-            df[column]=df[column].astype('string').str.replace(old_value,new_value,regex=False)
-        return df
-
-    if operation=='trim':
-        columns=step.get('columns',[]) or list(df.columns)
-        for column in columns:
-            if column in df.columns:
-                df[column]=df[column].apply(lambda x:x.strip() if isinstance(x,str) else x)
-        return df
-
-    if operation=='clean_text':
-        column=step.get('column')
-        if column in df.columns:
-            df[column]=df[column].astype('string').str.replace(r'[\\x00-\\x1F\\x7F]','',regex=True).str.strip()
-        return df
-
-    if operation=='change_type':
-        column=step.get('column'); target_type=step.get('target_type')
-        if column not in df.columns: return df
-        if target_type=='text': df[column]=df[column].astype('string')
-        elif target_type=='whole': df[column]=pd.to_numeric(df[column],errors='coerce').astype('Int64')
-        elif target_type=='decimal': df[column]=pd.to_numeric(df[column],errors='coerce')
-        elif target_type in ('date','datetime'): df[column]=pd.to_datetime(df[column],errors='coerce')
-        elif target_type=='boolean':
-            mapping={'true':True,'false':False,'yes':True,'no':False,'1':True,'0':False}
-            df[column]=df[column].astype('string').str.strip().str.lower().map(mapping)
-        return df
-
-    if operation=='fill_down':
-        column=step.get('column')
-        if column in df.columns: df[column]=df[column].ffill()
-        return df
-
-    if operation=='fill_up':
-        column=step.get('column')
-        if column in df.columns: df[column]=df[column].bfill()
-        return df
-
-    if operation=='sort':
-        column=step.get('column'); direction=step.get('direction','ascending')
-        if column in df.columns:
-            df=df.sort_values(by=column,ascending=(direction=='ascending'))
-        return df.reset_index(drop=True)
-
-    return df
-
-def transform_apply_recipe(df,steps):
-    for step in steps:
-        df=transform_apply_step(df,step)
-    return df
-
-def transform_get_recipe(c,source_id,version_number):
-    row=c.execute('SELECT * FROM data_transform_recipes WHERE source_id=? AND version_number=? ORDER BY id DESC LIMIT 1',(source_id,version_number)).fetchone()
-    if not row: return None
-    try: steps=json.loads(row['steps_json']) if row['steps_json'] else []
-    except Exception: steps=[]
-    return {'id':row['id'],'recipe_name':row['recipe_name'],'steps':steps,'status':row['status']}
-
-def transform_get_source(source_id):
-    c=db()
-    source=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
-    if not source:
-        c.close(); abort(404)
-    version=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,source['current_version'])).fetchone()
-    c.close()
-    if not version: abort(404)
-    return source,version
-
-@app.route('/data-sources/<int:source_id>/transform',methods=['GET','POST'])
-@login_required
-def data_source_transform(source_id):
-    source,version=transform_get_source(source_id)
-    source_path=Path(version['file_path'])
-    if not source_path.exists():
-        flash('The original source file could not be found.','error')
-        return redirect(url_for('data_sources'))
-
-    c=db()
-    recipe=transform_get_recipe(c,source_id,version['version_number'])
-    if recipe is None:
-        c.execute('INSERT INTO data_transform_recipes(source_id,version_number,recipe_name,steps_json,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',(source_id,version['version_number'],f"Transform {source['source_name']} v{version['version_number']}",'[]','Draft',email(),now(),now()))
-        c.commit()
-        recipe=transform_get_recipe(c,source_id,version['version_number'])
-    steps=recipe['steps']
-
-    if request.method=='POST':
-        action=request.form.get('action','')
-        if action in ('add_step','edit_step'):
-            operation=request.form.get('operation','').strip()
-            if not operation:
-                c.close(); flash('No transformation operation was selected.','error')
-                return redirect(url_for('data_source_transform',source_id=source_id))
-            step={'operation':operation}
-            if operation in ('remove_columns','select_columns','remove_duplicates','trim','alignment'):
-                step['columns']=request.form.getlist('columns')
-                if not step['columns'] and request.form.get('column',''):
-                    step['columns']=[request.form.get('column')]
-                if operation=='alignment':
-                    step['alignment']=request.form.get('alignment','left')
-            elif operation=='replace_headers_with_row':
-                try:
-                    step['row_number']=max(int(request.form.get('row_number','1') or 1),1)
-                except (TypeError,ValueError):
-                    step['row_number']=1
-            elif operation=='rename_column':
-                step['old_name']=request.form.get('old_name','').strip(); step['new_name']=request.form.get('new_name','').strip()
-            elif operation in ('remove_top_rows','remove_bottom_rows','keep_top_rows'):
-                try: step['count']=max(int(request.form.get('count',0) or 0),0)
-                except (TypeError,ValueError): step['count']=0
-            elif operation=='filter':
-                step['column']=request.form.get('column',''); step['operator']=request.form.get('operator','contains'); step['value']=request.form.get('value','')
-            elif operation in ('replace_value','replace_text'):
-                step['column']=request.form.get('column',''); step['old_value']=request.form.get('old_value',''); step['new_value']=request.form.get('new_value','')
-            elif operation=='change_type':
-                step['column']=request.form.get('column',''); step['target_type']=request.form.get('target_type','text')
-            elif operation in ('fill_down','fill_up','clean_text'):
-                step['column']=request.form.get('column','')
-            elif operation=='sort':
-                step['column']=request.form.get('column',''); step['direction']=request.form.get('direction','ascending')
-
-            if action=='edit_step':
-                try: idx=int(request.form.get('step_index','-1'))
-                except (TypeError,ValueError): idx=-1
-                if idx < 0 or idx >= len(steps):
-                    c.close(); flash('The selected transformation step could not be found.','error')
-                    return redirect(url_for('data_source_transform',source_id=source_id))
-                steps[idx]=step
-                event='DATA_TRANSFORM_STEP_EDITED'
-            else:
-                steps.append(step)
-                event='DATA_TRANSFORM_STEP_ADDED'
-            c.execute('UPDATE data_transform_recipes SET steps_json=?,updated_at=? WHERE id=?',(json.dumps(steps),now(),recipe['id']))
-            c.commit(); c.close()
-            log(event,f"{source['source_ref']} v{version['version_number']}: {operation}")
-            return redirect(url_for('data_source_transform',source_id=source_id))
-
-        if action=='delete_step':
-            try: idx=int(request.form.get('step_index','-1'))
-            except (TypeError,ValueError): idx=-1
-            if idx < 0 or idx >= len(steps):
-                c.close(); flash('The selected transformation step could not be found.','error')
-                return redirect(url_for('data_source_transform',source_id=source_id))
-            removed=steps.pop(idx)
-            c.execute('UPDATE data_transform_recipes SET steps_json=?,updated_at=? WHERE id=?',(json.dumps(steps),now(),recipe['id']))
-            c.commit(); c.close()
-            log('DATA_TRANSFORM_STEP_DELETED',f"{source['source_ref']} v{version['version_number']}: step={idx+1}; {removed.get('operation')}")
-            return redirect(url_for('data_source_transform',source_id=source_id))
-
-        if action=='undo':
-            if steps:
-                removed=steps.pop()
-                c.execute('UPDATE data_transform_recipes SET steps_json=?,updated_at=? WHERE id=?',(json.dumps(steps),now(),recipe['id']))
-                c.commit(); log('DATA_TRANSFORM_STEP_UNDONE',f"{source['source_ref']} v{version['version_number']}: {removed.get('operation')}")
-            c.close(); return redirect(url_for('data_source_transform',source_id=source_id))
-
-        if action=='clear':
-            c.execute("UPDATE data_transform_recipes SET steps_json='[]',updated_at=? WHERE id=?",(now(),recipe['id']))
-            c.commit(); c.close(); log('DATA_TRANSFORM_CLEARED',f"{source['source_ref']} v{version['version_number']}")
-            return redirect(url_for('data_source_transform',source_id=source_id))
-
-        if action=='save_recipe':
-            recipe_name=request.form.get('recipe_name','').strip() or f"Transform {source['source_name']} v{version['version_number']}"
-            c.execute("UPDATE data_transform_recipes SET recipe_name=?,status='Saved',updated_at=? WHERE id=?",(recipe_name,now(),recipe['id']))
-            c.commit(); c.close()
-
-            # Save means: save the recipe AND create the controlled clean version.
-            # The user is then returned to the main Data Sources page where the
-            # clean version can be Approved or Rejected. The original source is
-            # never overwritten.
-            try:
-                df=transform_read_source(source_path)
-                cleaned=transform_apply_recipe(df.copy(),steps)
-                target=UPLOAD/'data_sources'/'cleaned'; target.mkdir(parents=True,exist_ok=True)
-                stamp=datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
-                output_filename=f"{source['source_ref']}_v{version['version_number']}_CLEAN_{stamp}.xlsx"
-                output_path=target/output_filename
-                cleaned.to_excel(output_path,index=False)
-
-                alignment_steps=[step for step in steps if step.get('operation')=='alignment' and step.get('columns')]
-                if alignment_steps:
-                    if load_workbook is None or OpenpyxlAlignment is None:
-                        raise RuntimeError('Excel alignment requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
-                    wb=load_workbook(output_path)
-                    ws=wb.active
-                    header_map={str(cell.value):cell.column for cell in ws[1]}
-                    for step in alignment_steps:
-                        horizontal=step.get('alignment','left')
-                        for column_name in step.get('columns',[]):
-                            col_idx=header_map.get(str(column_name))
-                            if not col_idx: continue
-                            for row in ws.iter_rows(min_row=2,min_col=col_idx,max_col=col_idx):
-                                row[0].alignment=OpenpyxlAlignment(horizontal=horizontal,vertical='center')
-                    wb.save(output_path)
-
-                c=db()
-                c.execute('INSERT INTO data_transform_runs(recipe_id,source_id,version_number,output_filename,output_path,output_rows,output_columns,transformation_count,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(recipe['id'],source_id,version['version_number'],output_filename,str(output_path),len(cleaned),len(cleaned.columns),len(steps),'Pending Approval',email(),now()))
-                c.execute("UPDATE data_transform_recipes SET status='Applied',updated_at=? WHERE id=?",(now(),recipe['id']))
-                c.commit(); run_id=c.execute('SELECT last_insert_rowid()').fetchone()[0]; c.close()
-                log('DATA_TRANSFORM_RECIPE_SAVED',f"{source['source_ref']} v{version['version_number']}: {recipe_name}; clean_run={run_id}")
-                flash('Transformation saved and clean version created. It is now awaiting approval.','success')
-                return redirect(url_for('data_sources'))
-            except Exception as exc:
-                try: c.close()
-                except Exception: pass
-                flash(f'Transformation was saved, but the clean version could not be created: {exc}','error')
-                return redirect(url_for('data_source_transform',source_id=source_id))
-
-        c.close()
-
-    try:
-        original_df=transform_read_source(source_path)
-        original_rows=len(original_df); original_columns=[str(c) for c in original_df.columns]
-        preview_df=transform_apply_recipe(original_df.copy(),steps).head(100)
-        preview_columns=[str(c) for c in preview_df.columns]
-        preview_rows=len(preview_df)
-        preview_records=preview_df.fillna('').astype(str).to_dict(orient='records')
-    except Exception as exc:
-        flash(f'Transformation preview failed: {exc}','error')
-        return redirect(url_for('data_sources'))
-
-    return render_template('data_transform.html',source=source,version=version,recipe=recipe,steps=steps,original_rows=original_rows,original_columns=original_columns,preview_rows=preview_rows,preview_columns=preview_columns,preview_records=preview_records)
-
-@app.route('/data-sources/<int:source_id>/decision/<decision>',methods=['POST'])
-@login_required
-def data_source_decision(source_id,decision):
-    if decision not in ('Approved','Rejected'):
-        flash('Invalid data-source decision.','error')
-        return redirect(url_for('data_sources'))
-    c=db()
-    src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
-    if not src:
-        c.close(); abort(404)
-
-    # Prefer the latest clean transformation run when one exists.
-    run=c.execute('SELECT * FROM data_transform_runs WHERE source_id=? ORDER BY id DESC LIMIT 1',(source_id,)).fetchone()
-    if run and run['status'] in ('Pending Approval','Created - Pending Approval'):
-        c.execute('UPDATE data_transform_runs SET status=? WHERE id=?',(decision,run['id']))
-        # A clean version is the controlled version used downstream. Keep the
-        # original uploaded source intact and record its source status separately.
-        c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',(decision,now(),source_id))
-        c.commit(); c.close()
-        log('DATA_TRANSFORM_REVIEWED',f"{src['source_ref']} clean run {run['id']}: {decision}")
-        flash(f"{src['source_ref']} clean version: {decision}.",'success')
-        return redirect(url_for('data_sources'))
-
-    # If no clean version is pending, retain the original source approval flow.
-    v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone()
-    if not v:
-        c.close(); abort(404)
-    if decision=='Approved' and v['validation_status']=='Failed':
-        c.close(); flash('This source cannot be approved because validation failed.','error')
-        return redirect(url_for('data_sources'))
-    c.execute('INSERT INTO data_source_reviews(source_id,version_number,decision,comments,reviewed_by,reviewed_at) VALUES(?,?,?,?,?,?)',(source_id,v['version_number'],decision,'Decision made from Data Sources action bar.',email(),now()))
-    c.execute('UPDATE data_source_versions SET version_status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,v['id']))
-    c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',(decision,now(),source_id))
-    c.commit(); c.close()
-    log('DATA_SOURCE_REVIEWED',f"{src['source_ref']} v{v['version_number']}: {decision}")
-    flash(f"{src['source_ref']} Version {v['version_number']}: {decision}.",'success')
-    return redirect(url_for('data_sources'))
-
-@app.route('/data-sources/<int:source_id>/transform/apply',methods=['POST'])
-@login_required
-def data_source_transform_apply(source_id):
-    source,version=transform_get_source(source_id)
-    source_path=Path(version['file_path'])
-    if not source_path.exists():
-        flash('Original source file could not be found.','error')
-        return redirect(url_for('data_sources'))
-    c=db(); recipe=transform_get_recipe(c,source_id,version['version_number'])
-    if not recipe:
-        c.close(); flash('No transformation recipe exists.','error')
-        return redirect(url_for('data_source_transform',source_id=source_id))
-    steps=recipe['steps']
-    if not steps:
-        c.close(); flash('Add at least one transformation before creating a clean version.','error')
-        return redirect(url_for('data_source_transform',source_id=source_id))
-    try:
-        df=transform_read_source(source_path)
-        cleaned=transform_apply_recipe(df.copy(),steps)
-        target=UPLOAD/'data_sources'/'cleaned'; target.mkdir(parents=True,exist_ok=True)
-        stamp=datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
-        output_filename=f"{source['source_ref']}_v{version['version_number']}_CLEAN_{stamp}.xlsx"
-        output_path=target/output_filename
-        cleaned.to_excel(output_path,index=False)
-
-        # Apply presentation-only alignment steps to the generated Excel file.
-        # These steps do not alter the underlying data values.
-        alignment_steps=[step for step in steps if step.get('operation')=='alignment' and step.get('columns')]
-        if alignment_steps:
-            if load_workbook is None or OpenpyxlAlignment is None:
-                raise RuntimeError('Excel alignment requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
-            wb=load_workbook(output_path)
-            ws=wb.active
-            header_map={str(cell.value):cell.column for cell in ws[1]}
-            for step in alignment_steps:
-                horizontal=step.get('alignment','left')
-                for column_name in step.get('columns',[]):
-                    col_idx=header_map.get(str(column_name))
-                    if not col_idx:
-                        continue
-                    for row in ws.iter_rows(min_row=2,min_col=col_idx,max_col=col_idx):
-                        row[0].alignment=OpenpyxlAlignment(horizontal=horizontal,vertical='center')
-            wb.save(output_path)
-
-        c.execute('INSERT INTO data_transform_runs(recipe_id,source_id,version_number,output_filename,output_path,output_rows,output_columns,transformation_count,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(recipe['id'],source_id,version['version_number'],output_filename,str(output_path),len(cleaned),len(cleaned.columns),len(steps),'Created - Pending Approval',email(),now()))
-        c.execute("UPDATE data_transform_recipes SET status='Applied',updated_at=? WHERE id=?",(now(),recipe['id']))
-        c.commit(); run_id=c.execute('SELECT last_insert_rowid()').fetchone()[0]; c.close()
-        log('DATA_TRANSFORM_APPLIED',f"{source['source_ref']} v{version['version_number']}; run={run_id}; rows={len(cleaned)}; columns={len(cleaned.columns)}; steps={len(steps)}")
-        flash('Clean version created successfully. It remains pending human approval and does not replace the original source.','success')
-        return redirect(url_for('data_source_transform',source_id=source_id))
-    except Exception as exc:
-        c.rollback(); c.close(); flash(f'Could not create clean version: {exc}','error')
-        return redirect(url_for('data_source_transform',source_id=source_id))
-
-@app.route('/data-sources/<int:source_id>/transform/<int:run_id>/download')
-@login_required
-def data_source_transform_download(source_id,run_id):
-    c=db()
-    run=c.execute('SELECT * FROM data_transform_runs WHERE id=? AND source_id=?',(run_id,source_id)).fetchone()
-    c.close()
-    if not run: abort(404)
-    path=Path(run['output_path'])
-    if not path.exists():
-        flash('The transformed output file could not be found.','error')
-        return redirect(url_for('data_source_transform',source_id=source_id))
-    return send_from_directory(str(path.parent),path.name,as_attachment=True,download_name=path.name)
 
 @app.route('/risk-assessment',methods=['GET','POST'])
 @login_required
