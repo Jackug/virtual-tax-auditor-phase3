@@ -441,8 +441,19 @@ def _refresh_risk_universe_from_active_rules(c):
             pct=0.0
             desc=rule['name']
             exposures.append((rule,exp,pct,desc))
-        score=min(100.0,25.0*len(exposures)+sum(10.0 for x in exposures if x[1]>0))
-        score=min(100.0,score)
+        
+        # Execute the approved ranking configuration instead of using a fixed risk score.
+        # Exposure index is normalized against an optional exposure_reference; frequency index
+        # is the number of triggered approved rules for the taxpayer, capped at 100.
+        ranking_scores=[]
+        for rr,exp,_,_ in exposures:
+            cfg=_json_or_default(rr['ranking_config_json'],{}) if rr['ranking_config_json'] else {}
+            base=_parse_number(cfg.get('base_score')) or 0.0; ew=_parse_number(cfg.get('exposure_weight')) or 0.0; fw=_parse_number(cfg.get('frequency_weight')) or 0.0
+            ref=_parse_number(cfg.get('exposure_reference')) or 1.0
+            exposure_index=min(100.0,max(0.0,(exp/ref)*100.0)) if ref>0 else 0.0
+            frequency_index=min(100.0,len(exposures)*100.0/max(1.0,_parse_number(cfg.get('frequency_reference')) or 1.0))
+            ranking_scores.append(base + ew*exposure_index/100.0 + fw*frequency_index/100.0)
+        score=min(100.0,max(ranking_scores) if ranking_scores else 0.0)
         band=_risk_band(score)
         exposure=sum(x[1] for x in exposures)
         c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',(taxpayer['id'],score,band,exposure,now(),'Phase-3-Risk-Engine-Rule-Library-1.0'))
@@ -1659,20 +1670,30 @@ def _approved_legal_basis(c):
         WHERE v.version_status='Approved' AND d.status IN ('Approved','Active') ORDER BY d.title""").fetchall()
 
 def _approved_data_source_catalog(c):
+    """Return only source versions that are actually approved for VTA execution.
+
+    A newer Draft/Rejected version must never hide the last Approved version.
+    If an approved clean transformation exists for an approved source version,
+    that clean output is the controlled downstream file.
+    """
     rows=c.execute("""
-        SELECT d.id,d.source_ref,d.source_name,d.source_type,d.reporting_period,d.tax_type,d.current_version,
-               d.status,v.version_number,v.original_filename,v.file_path,v.columns_json,v.record_count,
+        SELECT d.id,d.source_ref,d.source_name,d.source_type,d.reporting_period,d.tax_type,
+               d.status AS source_status,
+               v.version_number,v.original_filename,v.file_path,v.columns_json,v.record_count,
                v.validation_status,v.version_status,
-               tr.id AS transform_run_id,tr.output_path AS transform_output_path,tr.output_rows AS transform_rows,
+               tr.id AS transform_run_id,tr.output_path AS transform_output_path,
+               tr.output_rows AS transform_rows,tr.output_columns AS transform_columns,
                tr.status AS transform_status
         FROM data_sources d
         JOIN data_source_versions v
-          ON v.source_id=d.id AND v.version_number=d.current_version
+          ON v.id=(SELECT av.id FROM data_source_versions av
+                  WHERE av.source_id=d.id AND av.version_status='Approved'
+                  ORDER BY av.version_number DESC LIMIT 1)
         LEFT JOIN data_transform_runs tr
-          ON tr.id=(SELECT MAX(id) FROM data_transform_runs x
-                    WHERE x.source_id=d.id AND x.version_number=v.version_number AND x.status='Approved')
+          ON tr.id=(SELECT MAX(tx.id) FROM data_transform_runs tx
+                    WHERE tx.source_id=d.id AND tx.version_number=v.version_number
+                      AND tx.status='Approved')
         WHERE d.status='Approved'
-          AND (v.version_status='Approved' OR tr.id IS NOT NULL)
         ORDER BY d.source_name
     """).fetchall()
     catalog=[]
@@ -1680,8 +1701,7 @@ def _approved_data_source_catalog(c):
         cols=_json_or_default(r['columns_json'],[])
         if isinstance(cols,dict): cols=list(cols.keys())
         effective_path=r['transform_output_path'] or r['file_path']
-        effective_rows=r['transform_rows'] if r['transform_output_path'] else (r['record_count'] or 0)
-        # A clean transformation can change columns. Read only the header when necessary.
+        effective_rows=(r['transform_rows'] if r['transform_output_path'] else (r['record_count'] or 0))
         if r['transform_output_path'] and Path(effective_path).exists() and pd is not None:
             try:
                 ext=data_source_ext(Path(effective_path).name)
@@ -1689,25 +1709,31 @@ def _approved_data_source_catalog(c):
                 elif ext in ('xlsx','xls'): cols=[str(x).strip() for x in pd.read_excel(effective_path,nrows=0).columns]
             except Exception:
                 pass
-        catalog.append({'id':r['id'],'ref':r['source_ref'],'name':r['source_name'],'type':r['source_type'],
-                        'period':r['reporting_period'] or 'Not specified','tax_type':r['tax_type'] or 'General',
-                        'version':r['version_number'],'file_path':effective_path,'columns':cols,
-                        'record_count':effective_rows,'transformed':bool(r['transform_output_path'])})
+        catalog.append({
+            'id':r['id'],'ref':r['source_ref'],'name':r['source_name'],'type':r['source_type'],
+            'period':r['reporting_period'] or 'Not specified','tax_type':r['tax_type'] or 'General',
+            'version':r['version_number'],'file_path':effective_path,'columns':cols,
+            'record_count':effective_rows,'transformed':bool(r['transform_output_path'])
+        })
     return catalog
 
 def _source_lookup(c, source_id):
-    row=c.execute("""
+    """Resolve the latest approved version without allowing Draft versions to shadow it."""
+    return c.execute("""
         SELECT d.*,v.version_number,v.file_path,v.columns_json,v.version_status,
-               tr.id AS transform_run_id,tr.output_path AS transform_output_path,tr.output_rows AS transform_rows,tr.status AS transform_status
+               tr.id AS transform_run_id,tr.output_path AS transform_output_path,
+               tr.output_rows AS transform_rows,tr.status AS transform_status
         FROM data_sources d
-        JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version
+        JOIN data_source_versions v
+          ON v.id=(SELECT av.id FROM data_source_versions av
+                  WHERE av.source_id=d.id AND av.version_status='Approved'
+                  ORDER BY av.version_number DESC LIMIT 1)
         LEFT JOIN data_transform_runs tr
-          ON tr.id=(SELECT MAX(id) FROM data_transform_runs x
-                    WHERE x.source_id=d.id AND x.version_number=v.version_number AND x.status='Approved')
+          ON tr.id=(SELECT MAX(tx.id) FROM data_transform_runs tx
+                    WHERE tx.source_id=d.id AND tx.version_number=v.version_number
+                      AND tx.status='Approved')
         WHERE d.id=? AND d.status='Approved'
-          AND (v.version_status='Approved' OR tr.id IS NOT NULL)
     """,(source_id,)).fetchone()
-    return row
 
 def _safe_name(value): return re.sub(r'[^A-Za-z0-9]+','_',str(value)).strip('_').lower()
 def _field_key(source_id,column): return f's{int(source_id)}__{_safe_name(column)}'
@@ -1759,81 +1785,129 @@ def _condition_text(cond,source_map):
     return f"{left_text} {op} {right_text}"
 
 def _generate_rule_natural_language(plan):
-    source_map={str(x['id']):x for x in plan.get('sources',[])}
+    """Generate a deterministic business-language explanation from the structured execution plan.
+    This text is explanatory only; the structured plan remains authoritative.
+    """
+    source_map={str(x.get('id')):x for x in plan.get('sources',[])}
     parts=[]
     base=plan.get('base_source') or {}
     if base:
         bname=source_map.get(str(base.get('source_id')),{}).get('name','the primary data source')
         parts.append(f"The system will start FROM the approved {bname} data source.")
-    joins=plan.get('joins',[])
-    if joins:
-        js=[]
-        for j in joins:
-            l=source_map.get(str(j.get('left_source_id')),{}).get('name','source')
-            r=source_map.get(str(j.get('right_source_id')),{}).get('name','source')
-            jt=j.get('join_type','INNER').upper()
-            js.append(f"{jt} JOIN {r} to {l} using {l}.{j.get('left_field','')} = {r}.{j.get('right_field','')}")
-        parts.append('The selected sources will be combined as follows: ' + '; '.join(js) + '.')
+    for j in plan.get('joins',[]):
+        l=source_map.get(str(j.get('left_source_id')),{}).get('name','source')
+        r=source_map.get(str(j.get('right_source_id')),{}).get('name','source')
+        jt=str(j.get('join_type','INNER')).upper()
+        extras=[]
+        for k in j.get('conditions',[]) or []:
+            extras.append(f"{l}.{k.get('left_field','')} = {r}.{k.get('right_field','')}")
+        rel=f"{l}.{j.get('left_field','')} = {r}.{j.get('right_field','')}"
+        if extras: rel=' AND '.join([rel]+extras)
+        parts.append(f"The system will {jt} JOIN {r} to {l} ON {rel}.")
     per=plan.get('period',{}) or {}
     if per.get('description'): parts.append(per['description'].strip().rstrip('.')+'.')
-    if per.get('from') or per.get('to'):
+    if per.get('field') and (per.get('from') or per.get('to')):
+        parts.append(f"The applicable period will be evaluated using {per['field']} FROM {per.get('from','the beginning')} TO {per.get('to','the end')}.")
+    elif per.get('from') or per.get('to'):
         parts.append(f"The applicable period will run FROM {per.get('from') or 'the beginning of the configured period'} TO {per.get('to') or 'the end of the configured period'}.")
-    if per.get('field'): parts.append(f"The period will be evaluated using the field {per['field']}.")
+    for agg in plan.get('aggregations',[]) or []:
+        fn=str(agg.get('function') or agg.get('operation') or 'SUM').upper()
+        field=agg.get('field') or agg.get('value_field') or 'the selected field'
+        groups=', '.join(str(x.get('field','')) for x in agg.get('group_by',[]) or []) or 'the rule population'
+        parts.append(f"The system will {fn} {field} GROUP BY {groups} before applying the risk comparison.")
     for f in plan.get('filters',[]):
-        text=_condition_text(f,source_map); clause=f.get('clause','WHERE')
+        text=_condition_text(f,source_map); clause=str(f.get('clause','WHERE')).upper()
         if clause=='EXCEPT': parts.append(f"The system will EXCLUDE records where {text}.")
-        elif clause=='WHEN': parts.append(f"The system will apply this rule WHEN {text}.")
-        elif clause=='WHILE': parts.append(f"The condition must remain true WHILE {text}.")
+        elif clause=='WHEN': parts.append(f"The system will apply the rule WHEN {text}.")
+        elif clause=='WHILE': parts.append(f"The system will require the condition to remain true WHILE {text}.")
+        elif clause=='STOP': parts.append(f"The system will STOP evaluation for a record when {text}.")
         else: parts.append(f"The analysis will be restricted WHERE {text}.")
     for calc in plan.get('calculations',[]):
         expr=calc.get('expression_text') or calc.get('operation','the configured calculation')
+        if calc.get('group_by'):
+            expr += ' GROUP BY ' + ', '.join(str(x.get('field','')) for x in calc.get('group_by',[]))
         parts.append(f"The system will CALCULATE {calc.get('name','the derived value')} using {expr}.")
+    wh=plan.get('while') or {}
+    if wh:
+        desc=wh.get('description') or _condition_text(wh.get('condition',{}),source_map) if wh.get('condition') else wh.get('description')
+        if desc: parts.append(f"The system will evaluate the WHILE condition across the configured period: {desc}.")
+        if wh.get('consecutive_periods'): parts.append(f"The condition must remain true for at least {wh['consecutive_periods']} consecutive periods.")
     conditions=plan.get('conditions',[])
     if conditions:
         ct=[]
         for i,cond in enumerate(conditions):
-            connector='' if i==0 else f" {cond.get('connector','AND')} "
+            connector='' if i==0 else f" {str(cond.get('connector','AND')).upper()} "
             ct.append(connector+_condition_text(cond,source_map))
         parts.append('A taxpayer will be flagged IF ' + ''.join(ct) + '.')
-    if plan.get('else_description'): parts.append('Otherwise, the system will ' + plan['else_description'].strip().rstrip('.') + '.')
     if plan.get('except_description'): parts.append('Additional EXCEPT rules: ' + plan['except_description'].strip().rstrip('.') + '.')
     stop=plan.get('stop',{}) or {}
     if stop.get('description'): parts.append('Evaluation will STOP for the affected record when ' + stop['description'].strip().rstrip('.') + '.')
     if plan.get('result',{}).get('risk_description'): parts.append(f"The resulting risk will be recorded as {plan['result']['risk_description']}.")
+    if plan.get('else_description'): parts.append('Otherwise, the system will ' + plan['else_description'].strip().rstrip('.') + '.')
     exposure=plan.get('exposure',{}) or {}
     if exposure.get('formula'): parts.append(f"Estimated revenue exposure will be calculated using {exposure['formula']}.")
-    if exposure.get('minimum'): parts.append(f"Only exposures at or above the configured minimum of UGX {exposure['minimum']} will be treated as meeting the exposure threshold.")
+    elif exposure.get('field'): parts.append(f"Estimated revenue exposure will be taken from {exposure['field']}.")
+    if exposure.get('minimum') not in (None,'','0',0): parts.append(f"Only exposures at or above UGX {exposure['minimum']} will meet the configured exposure threshold.")
     ranking=plan.get('ranking',{}) or {}
     if ranking.get('description'): parts.append(ranking['description'].strip().rstrip('.')+'.')
     return ' '.join(parts) or 'The system will execute the configured risk rule against the selected approved data sources.'
 
 def _parse_rule_plan(form,source_catalog):
     raw=form.get('rule_plan','').strip()
-    if not raw:raise ValueError('Build the rule logic before generating the system interpretation.')
-    try:plan=json.loads(raw)
-    except Exception as exc:raise ValueError(f'Invalid rule definition: {exc}')
-    if not isinstance(plan,dict):raise ValueError('The rule definition must be a structured object.')
-    allowed={int(x['id']):x for x in source_catalog};ids=set()
+    if not raw: raise ValueError('Build the rule logic before generating the system interpretation.')
+    try: plan=json.loads(raw)
+    except Exception as exc: raise ValueError(f'Invalid rule definition: {exc}')
+    if not isinstance(plan,dict): raise ValueError('The rule definition must be a structured object.')
+    allowed={int(x['id']):x for x in source_catalog}; ids=set()
+    def add_ref(ref):
+        if isinstance(ref,dict) and ref.get('source_id'): ids.add(int(ref['source_id']))
     base=plan.get('base_source') or {}
-    if base.get('source_id'):ids.add(int(base['source_id']))
-    for x in plan.get('sources',[]):
-        if x.get('id'):ids.add(int(x['id']))
-    for j in plan.get('joins',[]):
-        for k in ('left_source_id','right_source_id'):
-            if j.get(k):ids.add(int(j[k]))
-    for obj in plan.get('filters',[])+plan.get('conditions',[]):
-        for side in ('left','right'):
-            if obj.get(side,{}).get('source_id'):ids.add(int(obj[side]['source_id']))
-    for calc in plan.get('calculations',[]):
-        for side in ('left','right'):
-            if calc.get(side,{}).get('source_id'):ids.add(int(calc[side]['source_id']))
-        for x in calc.get('group_by',[]):
-            if x.get('source_id'):ids.add(int(x['source_id']))
-    missing=[str(x) for x in ids if x not in allowed]
-    if missing:raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
-    if not base.get('source_id'):raise ValueError('Select a primary data source.')
-    plan['sources']=[{'id':sid,'name':allowed[sid]['name'],'version':allowed[sid]['version'],'ref':allowed[sid]['ref'],'columns':allowed[sid]['columns']} for sid in sorted(ids)]
+    add_ref(base)
+    for x in plan.get('sources',[]) or []:
+        if isinstance(x,dict) and x.get('id'): ids.add(int(x['id']))
+    for j in plan.get('joins',[]) or []:
+        for k in ('left_source_id','right_source_id'): 
+            if j.get(k): ids.add(int(j[k]))
+        for k in ('conditions','on'):
+            for x in j.get(k,[]) or []:
+                if x.get('left_source_id'): ids.add(int(x['left_source_id']))
+                if x.get('right_source_id'): ids.add(int(x['right_source_id']))
+    for collection in ('filters','conditions','aggregations','calculations'):
+        for obj in plan.get(collection,[]) or []:
+            add_ref(obj.get('left')); add_ref(obj.get('right')); add_ref(obj.get('field')); add_ref(obj.get('value_ref'))
+            for x in obj.get('group_by',[]) or []: add_ref(x)
+    for collection in ('while','stop'):
+        obj=plan.get(collection) or {}
+        for key in ('condition','conditions'):
+            xs=obj.get(key,[]) if isinstance(obj.get(key),list) else [obj.get(key)] if obj.get(key) else []
+            for x in xs: 
+                add_ref(x.get('left')); add_ref(x.get('right'))
+    missing=[str(x) for x in sorted(ids) if x not in allowed]
+    if missing: raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
+    if not base.get('source_id'): raise ValueError('Select a primary data source.')
+    # Validate vocabulary and normalize clauses/operators.
+    valid_clauses=set(RISK_CLAUSES)|{'FROM','TO','BETWEEN','IN','NOT IN','OTHERWISE'}
+    for f in plan.get('filters',[]) or []:
+        clause=str(f.get('clause','WHERE')).upper()
+        if clause not in valid_clauses: raise ValueError(f'Unsupported rule clause: {clause}')
+        op=str(f.get('operator','')).upper()
+        if op and op not in RISK_LOGIC_OPERATORS: raise ValueError(f'Unsupported operator: {op}')
+        f['clause']=clause; f['operator']=op
+    for cond in plan.get('conditions',[]) or []:
+        op=str(cond.get('operator','')).upper()
+        if op not in RISK_LOGIC_OPERATORS: raise ValueError(f'Unsupported operator: {op}')
+        conn=str(cond.get('connector','AND')).upper()
+        if conn not in ('AND','OR'): raise ValueError(f'Unsupported condition connector: {conn}')
+        cond['operator']=op; cond['connector']=conn
+    for j in plan.get('joins',[]) or []:
+        jt=str(j.get('join_type','INNER')).upper()
+        if jt not in ('INNER','LEFT','RIGHT','OUTER','FULL'): raise ValueError(f'Unsupported join type: {jt}')
+        j['join_type']='outer' if jt=='FULL' else jt.lower()
+    plan.setdefault('aggregations',[]); plan.setdefault('calculations',[]); plan.setdefault('conditions',[]); plan.setdefault('filters',[])
+    plan['sources']=[{'id':sid,'name':allowed[sid]['name'],'version':allowed[sid]['version'],'ref':allowed[sid]['ref'],'columns':allowed[sid]['columns'],'period':allowed[sid].get('period'),'tax_type':allowed[sid].get('tax_type')} for sid in sorted(ids)]
     plan['base_source']={'source_id':int(base['source_id']),'name':allowed[int(base['source_id'])]['name']}
+    # Preserve the complete analyst-defined rule as the immutable input to execution.
+    plan['rule_language']={k:plan[k] for k in ('from','to','when','where','while','except','stop','then','else') if k in plan}
     return plan
 
 def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,requests,exposure,ranking,existing_rule_id=None):
@@ -1878,74 +1952,184 @@ def _coerce_series(series,value):
     return series.astype(str),str(value)
 
 def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
-    if pd is None:raise RuntimeError('pandas is required for rule execution.')
-    loaded={};source_rows={}
+    """Execute the analyst-approved structured rule.  The structured plan is authoritative."""
+    if pd is None: raise RuntimeError('pandas is required to execute a data-source risk rule.')
+    loaded={}; source_rows={}; source_originals={}
     for src in plan.get('sources',[]):
-        row,df,_=_load_approved_source(c,src['id']);loaded[int(src['id'])]=df;source_rows[int(src['id'])]=row
-    base_id=int(plan['base_source']['source_id']);df=loaded[base_id].copy();calc_series={}
+        sid=int(src['id']); row,df,original=_load_approved_source(c,sid)
+        loaded[sid]=df; source_rows[sid]=row; source_originals[sid]=original
+    base_id=int((plan.get('base_source') or {}).get('source_id',0))
+    if base_id not in loaded: raise ValueError('The selected primary source is not part of the approved source set.')
+
+    def field_key(ref):
+        if not ref: return None
+        if ref.get('type')=='calculation': return None
+        return _field_key(int(ref['source_id']),ref['field'])
+
+    # Source-level aggregation happens BEFORE joins. This prevents transaction-level
+    # many-to-many multiplication and implements GROUP BY as a business operation.
+    for agg in plan.get('aggregations',[]) or []:
+        sid=int(agg.get('source_id',base_id));
+        if sid not in loaded: raise ValueError(f'Aggregation source {sid} is not approved.')
+        frame=loaded[sid]; fn=str(agg.get('function') or agg.get('operation') or 'SUM').upper(); f=agg.get('field') or agg.get('value_field')
+        groups=agg.get('group_by',[]) or []
+        if not f: raise ValueError('Every aggregation requires a field.')
+        fk=_field_key(sid,f); gkeys=[_field_key(int(x['source_id']),x['field']) for x in groups]
+        missing=[x for x in [fk]+gkeys if x not in frame.columns]
+        if missing: raise ValueError(f'Aggregation field(s) not available: {missing}')
+        if not gkeys: raise ValueError('GROUP BY is required for source-level aggregation.')
+        grouped=frame.groupby(gkeys,dropna=False)[fk]
+        agg_series={'SUM':grouped.sum(),'COUNT':grouped.count(),'AVERAGE':grouped.mean(),'MIN':grouped.min(),'MAX':grouped.max()}.get(fn)
+        if agg_series is None: raise ValueError(f'Unsupported aggregation: {fn}')
+        # Keep one row per grouping key and rename the aggregate back to the requested field.
+        key_frame=frame[gkeys].drop_duplicates().copy(); vals=agg_series.reset_index(name=fk); key_frame=key_frame.merge(vals,on=gkeys,how='left')
+        keep=gkeys+[fk]
+        for col in frame.columns:
+            if col not in keep and col not in gkeys: continue
+        loaded[sid]=key_frame
+
+    df=loaded[base_id].copy(); calc_series={}
     def series_for(ref):
-        if not ref:return None
+        if not ref: return None
         if ref.get('type')=='calculation':
-            if ref.get('name') not in calc_series:raise ValueError(f"Calculated field '{ref.get('name')}' is not available.")
-            return calc_series[ref['name']]
-        key=_field_key(int(ref['source_id']),ref['field'])
-        if key not in df.columns:raise ValueError(f"Field not available after source combination: {ref['field']}.")
+            name=ref.get('name');
+            if name not in calc_series: raise ValueError(f"Calculated field '{name}' is not available at this stage.")
+            return calc_series[name]
+        sid=int(ref.get('source_id')); key=_field_key(sid,ref.get('field'))
+        if key not in df.columns: raise ValueError(f"Field '{ref.get('field')}' from source {sid} is not available after source combination.")
         return df[key]
-    for j in plan.get('joins',[]):
-        rid=int(j['right_source_id']);right=loaded[rid].copy();lk=_field_key(int(j['left_source_id']),j['left_field']);rk=_field_key(rid,j['right_field'])
-        if lk not in df.columns or rk not in right.columns:raise ValueError(f"Join field not found: {j.get('left_field')} or {j.get('right_field')}.")
-        df=df.merge(right,left_on=lk,right_on=rk,how=j.get('join_type','inner').lower(),suffixes=('','__dup'))
-    for f in plan.get('filters',[]):
-        left=series_for(f.get('left'));op=f.get('operator','');right=series_for(f.get('right')) if f.get('right_type')=='field' else ([x.strip() for x in str(f.get('value','')).split(',')] if op in ('IN','NOT IN') else f.get('value',''))
-        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):left,right=_coerce_series(left,right)
-        mask=_evaluate_operator(left,op,right);df=df.loc[~mask].copy() if f.get('clause')=='EXCEPT' else df.loc[mask].copy()
-    for calc in plan.get('calculations',[]):
-        op=calc.get('operation');a=pd.to_numeric(series_for(calc.get('left')),errors='coerce');b=pd.to_numeric(series_for(calc.get('right')),errors='coerce') if calc.get('right') else None
-        if op=='ADD':v=a+b
-        elif op=='SUBTRACT':v=a-b
-        elif op=='MULTIPLY':v=a*b
-        elif op=='DIVIDE':v=a/b.replace(0,float('nan'))
-        elif op=='PERCENTAGE DIFFERENCE':v=(a-b)/a.replace(0,float('nan'))*100
-        elif op=='PERCENTAGE OF':v=a/b.replace(0,float('nan'))*100
+
+    for j in plan.get('joins',[]) or []:
+        rid=int(j['right_source_id']); right=loaded.get(rid)
+        if right is None: raise ValueError(f'Join source {rid} is not in the approved source set.')
+        lk=_field_key(int(j['left_source_id']),j['left_field']); rk=_field_key(rid,j['right_field'])
+        if lk not in df.columns or rk not in right.columns: raise ValueError(f"Join field not found: {j.get('left_field')} or {j.get('right_field')}.")
+        how=str(j.get('join_type','inner')).lower()
+        if how not in ('inner','left','right','outer'): raise ValueError(f'Unsupported join type: {how}')
+        allow_m2m=bool(j.get('allow_many_to_many',False))
+        if not allow_m2m:
+            if (df[lk].notna() & df[lk].duplicated(keep=False)).any() and (right[rk].notna() & right[rk].duplicated(keep=False)).any():
+                raise ValueError(f"Join {j.get('left_field')} = {j.get('right_field')} would create many-to-many row multiplication. Aggregate/deduplicate first or explicitly allow it.")
+        df=df.merge(right,left_on=lk,right_on=rk,how=how,suffixes=('','__dup'))
+
+    def condition_mask(cond):
+        left=series_for(cond.get('left')); op=str(cond.get('operator','')).upper()
+        right=series_for(cond.get('right')) if cond.get('right_type')=='field' else ([x.strip() for x in str(cond.get('value','')).split(',')] if op in ('IN','NOT IN') else cond.get('value',''))
+        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):
+            left,right=_coerce_series(left,right)
+        return _evaluate_operator(left,op,right)
+
+    # WHERE/WHEN/EXCEPT/STOP operate before calculations when they reference raw fields.
+    stopped=pd.Series(False,index=df.index)
+    for f in plan.get('filters',[]) or []:
+        clause=str(f.get('clause','WHERE')).upper(); mask=condition_mask(f)
+        if clause=='STOP': stopped=stopped|mask
+        elif clause=='EXCEPT': df=df.loc[~mask].copy()
+        else: df=df.loc[mask].copy()
+    stop=plan.get('stop') or {}
+    stop_conditions=stop.get('conditions') or ([stop.get('condition')] if stop.get('condition') else [])
+    for cond in stop_conditions:
+        mask=condition_mask(cond); stopped=stopped|mask
+    # Re-align stopped after filtering; stopped records are not evaluated as risks.
+    if len(stopped): df=df.loc[~stopped.reindex(df.index,fill_value=False)].copy()
+
+    # CALCULATE supports arithmetic and GROUP BY aggregation over the current population.
+    for calc in plan.get('calculations',[]) or []:
+        name=str(calc.get('name','')).strip(); op=str(calc.get('operation','')).upper()
+        if not name: raise ValueError('Every calculation must have a name.')
+        a=pd.to_numeric(series_for(calc.get('left')),errors='coerce')
+        b=pd.to_numeric(series_for(calc.get('right')),errors='coerce') if calc.get('right') else None
+        if op=='ADD': v=a+b
+        elif op=='SUBTRACT': v=a-b
+        elif op=='MULTIPLY': v=a*b
+        elif op=='DIVIDE': v=a/b.replace(0,float('nan'))
+        elif op in ('PERCENTAGE DIFFERENCE','PERCENTAGE VARIANCE'): v=(a-b)/a.replace(0,float('nan'))*100
+        elif op=='PERCENTAGE OF': v=a/b.replace(0,float('nan'))*100
         elif op in ('SUM','COUNT','AVERAGE','MIN','MAX'):
-            if calc.get('group_by'):
-                keys=[_field_key(int(x['source_id']),x['field']) for x in calc['group_by']];basecol=_field_key(int(calc['left']['source_id']),calc['left']['field']);g=df.groupby(keys)[basecol]
+            groups=calc.get('group_by',[]) or []
+            if groups:
+                keys=[_field_key(int(x['source_id']),x['field']) for x in groups]; base_ref=calc.get('left') or {}; basecol=_field_key(int(base_ref['source_id']),base_ref['field'])
+                missing=[k for k in keys+[basecol] if k not in df.columns]
+                if missing: raise ValueError(f'Aggregation field(s) not available: {missing}')
+                g=df.groupby(keys,dropna=False)[basecol]
                 v={'SUM':g.transform('sum'),'COUNT':g.transform('count'),'AVERAGE':g.transform('mean'),'MIN':g.transform('min'),'MAX':g.transform('max')}[op]
-            else:v=a
-        else:raise ValueError(f'Unsupported calculation: {op}')
-        calc_series[calc['name']]=v
-    combined_mask=None
-    for cond in plan.get('conditions',[]):
-        left=series_for(cond.get('left'));op=cond.get('operator');right=series_for(cond.get('right')) if cond.get('right_type')=='field' else ([x.strip() for x in str(cond.get('value','')).split(',')] if op in ('IN','NOT IN') else cond.get('value',''))
-        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):left,right=_coerce_series(left,right)
-        mask=_evaluate_operator(left,op,right);combined_mask=mask if combined_mask is None else (combined_mask|mask if cond.get('connector','AND')=='OR' else combined_mask&mask)
-    if combined_mask is None:combined_mask=pd.Series(True,index=df.index)
-    result=df.loc[combined_mask].copy();exposure=plan.get('exposure',{});exposure_field=exposure.get('field')
-    result['__exposure__']=calc_series[exposure_field].loc[result.index] if exposure_field in calc_series else 0
-    summary={'records_evaluated':len(df),'records_triggered':len(result),'total_exposure':float(pd.to_numeric(result['__exposure__'],errors='coerce').fillna(0).sum()) if len(result) else 0.0}
-    cols=[]
-    for ref in plan.get('preview_fields',[]):
-        if ref.get('type')=='calculation' and ref.get('name') in calc_series:cols.append((ref['name'],calc_series[ref['name']]))
+            else: raise ValueError(f'{op} requires GROUP BY in a risk rule.')
+        else: raise ValueError(f'Unsupported calculation: {op}')
+        calc_series[name]=v
+
+    # WHILE: require a condition to persist for N consecutive periods per grouping key.
+    wh=plan.get('while') or {}
+    if wh.get('condition'):
+        mask=condition_mask(wh['condition']).fillna(False)
+        n=int(wh.get('consecutive_periods') or wh.get('min_periods') or 1)
+        group_refs=wh.get('group_by') or []
+        period_ref=wh.get('period_field')
+        if group_refs and period_ref:
+            keys=[_field_key(int(x['source_id']),x['field']) for x in group_refs]; pk=field_key(period_ref)
+            work=df[keys+[pk]].copy(); work['_while_true']=mask.values; work['_while_period']=pd.to_datetime(work[pk],errors='coerce')
+            if work['_while_period'].notna().any(): work=work.sort_values(keys+['_while_period']); grp=work.groupby(keys,dropna=False)['_while_true']; streak=grp.transform(lambda x:x.astype(int).groupby((x!=x.shift()).cumsum()).cumsum()); valid=(work['_while_true'] & (streak>=n)); df=df.loc[work.index[valid]].copy()
         else:
-            key=_field_key(int(ref['source_id']),ref['field'])
-            if key in result.columns:cols.append((f"{source_rows[int(ref['source_id'])]['source_name']}.{ref['field']}",result[key]))
+            # Without a temporal key, WHILE is treated as a maintained row-level condition.
+            df=df.loc[mask].copy()
+
+    combined_mask=None
+    for cond in plan.get('conditions',[]) or []:
+        mask=condition_mask(cond); connector=str(cond.get('connector','AND')).upper()
+        combined_mask=mask if combined_mask is None else (combined_mask|mask if connector=='OR' else combined_mask&mask)
+    if combined_mask is None: combined_mask=pd.Series(True,index=df.index)
+    result=df.loc[combined_mask.fillna(False)].copy()
+
+    exposure=plan.get('exposure',{}) or {}; exposure_field=str(exposure.get('field') or '').strip(); formula=str(exposure.get('formula') or '').strip()
+    if exposure_field:
+        if exposure_field in calc_series: exposure_series=calc_series[exposure_field].loc[result.index]
+        else:
+            direct=None
+            for sid,cols in source_originals.items():
+                for original in cols:
+                    if original==exposure_field or _field_key(sid,original)==exposure_field: direct=_field_key(sid,original); break
+                if direct: break
+            if not direct or direct not in result.columns: raise ValueError(f"Exposure field '{exposure_field}' is not a calculated field or approved source field.")
+            exposure_series=result[direct]
+    elif formula:
+        if formula in calc_series: exposure_series=calc_series[formula].loc[result.index]
+        else:
+            # Formula may reference calculation names. No arbitrary Python is executed.
+            names={k:v.loc[result.index] for k,v in calc_series.items()}; expression=formula
+            # Resolve exact calculation names from longest to shortest, then allow only arithmetic tokens.
+            for nm in sorted(names,key=len,reverse=True): expression=expression.replace(nm,f"__CALC_{len(names[nm])}_{abs(hash(nm))}__")
+            env={k:v for k,v in names.items()}
+            # Prefer a safe AST expression over eval with builtins; aliases are generated internally.
+            import ast, operator as _op
+            aliases={};
+            for i,(nm,ser) in enumerate(names.items()): aliases[f'_v{i}']=ser; expression=formula.replace(nm,f'_v{i}')
+            tree=ast.parse(expression,mode='eval')
+            allowed_nodes=(ast.Expression,ast.BinOp,ast.UnaryOp,ast.Name,ast.Constant,ast.Add,ast.Sub,ast.Mult,ast.Div,ast.Pow,ast.USub,ast.UAdd,ast.Mod,ast.Load)
+            if any(not isinstance(node,allowed_nodes) for node in ast.walk(tree)): raise ValueError('Exposure formula contains unsupported expressions.')
+            exposure_series=eval(compile(tree,'<exposure>','eval'),{'__builtins__':{}},aliases)
+    else:
+        minimum=_parse_number(exposure.get('minimum')) or 0.0; exposure_series=pd.Series(minimum,index=result.index,dtype='float64')
+    exposure_series=pd.to_numeric(exposure_series,errors='coerce').replace([float('inf'),float('-inf')],float('nan')).fillna(0.0)
+    result['__exposure__']=exposure_series
+    minimum=_parse_number(exposure.get('minimum'))
+    if minimum is not None and minimum>0: result=result.loc[result['__exposure__']>=minimum].copy()
+
+    # Optional explicit THEN/ELSE result controls are recorded in the preview; the trigger is the condition result.
+    records_evaluated=int(len(df)); records_triggered=int(len(result)); total_exposure=float(result['__exposure__'].sum()) if len(result) else 0.0
+    summary={'records_evaluated':records_evaluated,'records_triggered':records_triggered,'records_stopped':int(stopped.sum()),'records_excluded':max(0,records_evaluated-records_triggered-int(stopped.sum())),'total_exposure':total_exposure}
+    cols=[]
+    for ref in plan.get('preview_fields',[]) or []:
+        if ref.get('type')=='calculation' and ref.get('name') in calc_series: cols.append((ref['name'],calc_series[ref['name']]))
+        else:
+            sid=int(ref.get('source_id')); key=_field_key(sid,ref.get('field'))
+            if key in result.columns: cols.append((f"{source_rows[sid]['source_name']}.{ref.get('field')}",result[key]))
     if not cols:
-        for col in list(result.columns)[:8]:cols.append((col,result[col]))
+        cols=[(col,result[col]) for col in list(result.columns)[:8] if col!='__exposure__']
     preview=[]
     for _,row in result.head(sample_only).iterrows():
-        obj={name:_clean_value(series.loc[row.name]) for name,series in cols};obj['Risk Result']=plan.get('result',{}).get('risk_description','Potential Risk');obj['Estimated Exposure']=_clean_value(row.get('__exposure__',0));preview.append(obj)
+        obj={name:_clean_value(series.loc[row.name]) for name,series in cols}; obj['Risk Result']=plan.get('result',{}).get('risk_description','Potential Risk'); obj['Estimated Exposure']=_clean_value(row.get('__exposure__',0)); preview.append(obj)
     summary['preview']=preview
     if return_records:
-        summary['_result_frame']=result
-        summary['_source_rows']=source_rows
-        summary['_loaded_original_columns']={sid:list(loaded[sid].columns) for sid in loaded}
-        # loaded columns are prefixed; retain the original source column names from the source metadata where possible.
-        originals={}
-        for sid,srcrow in source_rows.items():
-            cols=_json_or_default(srcrow['columns_json'],[]) if srcrow['columns_json'] else []
-            if isinstance(cols,dict): cols=list(cols.keys())
-            originals[sid]=cols
-        summary['_loaded_original_columns']=originals
+        summary['_result_frame']=result; summary['_source_rows']=source_rows; summary['_loaded_original_columns']=source_originals
     return summary
 
 def _save_preview(c,rule_id,version,summary):
@@ -1992,7 +2176,7 @@ def risk_rules():
 def _extract_common_rule_form(c):
     name=request.form.get('rule_name','').strip();category=request.form.get('risk_category','').strip();tax_type=request.form.get('tax_type','General').strip() or 'General';scope=request.form.get('taxpayer_scope','').strip();period=request.form.get('applicable_period','').strip()
     if not name or category not in RISK_RULE_CATEGORIES:raise ValueError('Rule name and Risk Category are required.')
-    plan=_parse_rule_plan(request.form,_approved_data_source_catalog(c));plan['period']={'description':request.form.get('period_description','').strip()};plan['result']={'risk_description':request.form.get('risk_description','').strip() or name};plan['except_description']=request.form.get('except_description','').strip()
+    plan=_parse_rule_plan(request.form,_approved_data_source_catalog(c));plan['period']=dict(plan.get('period') or {});plan['period'].update({'description':request.form.get('period_description','').strip() or plan['period'].get('description',''),'from':request.form.get('period_from','').strip() or plan['period'].get('from',''),'to':request.form.get('period_to','').strip() or plan['period'].get('to',''),'field':request.form.get('period_field','').strip() or plan['period'].get('field','')});plan['tax_type']=tax_type;plan['taxpayer_scope']=scope;plan['applicable_period']=period;plan['result']={'risk_description':request.form.get('risk_description','').strip() or name};plan['except_description']=request.form.get('except_description','').strip()
     exposure={'type':request.form.get('exposure_type','Estimated Revenue Exposure'),'formula':request.form.get('exposure_formula','').strip(),'minimum':request.form.get('minimum_exposure','').strip(),'field':request.form.get('exposure_field','').strip()};ranking={'base_score':request.form.get('base_score','0'),'exposure_weight':request.form.get('exposure_weight','0'),'frequency_weight':request.form.get('frequency_weight','0'),'description':request.form.get('ranking_description','').strip()}
     legal=[int(x) for x in request.form.getlist('legal_basis') if str(x).isdigit()];requests=[];titles=request.form.getlist('request_title');purposes=request.form.getlist('request_purpose');periods=request.form.getlist('request_period');mandatory=request.form.getlist('request_mandatory');evidence=request.form.getlist('request_evidence')
     for i,title in enumerate(titles):
@@ -2048,7 +2232,18 @@ def risk_rule_approve(rule_id):
     if not r:c.close();abort(404)
     v=c.execute('SELECT * FROM risk_rule_versions WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()
     try:
-        if not v or v['preview_status']!='Completed':raise ValueError('Run the rule preview before approval.')
+        if not v or v['preview_status']!='Completed':
+            raise ValueError('Run the rule preview before approval.')
+        if not v['preview_summary_json'] or _json_or_default(v['preview_summary_json'],{}).get('records_evaluated') is None:
+            raise ValueError('The rule preview record is incomplete. Run the preview again.')
+        plan=_json_or_default(v['execution_plan_json'],{})
+        current_catalog={int(x['id']):x for x in _approved_data_source_catalog(c)}
+        for s in plan.get('sources',[]):
+            sid=int(s['id'])
+            if sid not in current_catalog:
+                raise ValueError(f"Approved source {sid} used by this rule is no longer approved. Re-run the rule against the current approved source.")
+            if int(current_catalog[sid]['version']) != int(s.get('version',current_catalog[sid]['version'])):
+                raise ValueError(f"Source {current_catalog[sid]['name']} has changed since the rule was previewed. Re-run the preview before approval.")
         if not c.execute('SELECT COUNT(*) FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()[0]:raise ValueError('A rule cannot be approved without approved Knowledge Base legal backing.')
         stamp=now()
         c.execute("UPDATE risk_rule_versions SET status='Active',approved_by=?,approved_at=?,preview_approved=1 WHERE rule_id=? AND version_number=?",(email(),stamp,rule_id,r['version_number']))
@@ -2139,8 +2334,7 @@ def data_source_new_version(source_id):
     if not src: c.close(); abort(404)
     next_v=int(src['current_version'])+1; ref=src['source_ref']; target=UPLOAD/'data_sources'; target.mkdir(parents=True,exist_ok=True); stored=f'{ref}_v{next_v}_{safe}'; path=target/stored; file.save(path)
     try:
-        summary,validation=inspect_data_source(path); c.execute("UPDATE data_source_versions SET version_status='Superseded' WHERE source_id=? AND version_status='Approved'",(source_id,))
-        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(source_id,next_v,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),summary['record_count'],summary['column_count'],json.dumps(summary['columns']),validation,json.dumps(summary),len(summary['errors']),len(summary['warnings']),change or f'New version {next_v}.'))
+        summary,validation=inspect_data_source(path); c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(source_id,next_v,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),summary['record_count'],summary['column_count'],json.dumps(summary['columns']),validation,json.dumps(summary),len(summary['errors']),len(summary['warnings']),change or f'New version {next_v}.'))
         for msg in summary['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Error',?,?)",(source_id,next_v,msg,now()))
         for msg in summary['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Warning',?,?)",(source_id,next_v,msg,now()))
         c.execute("UPDATE data_sources SET current_version=?,status='Draft',updated_at=? WHERE id=?",(next_v,now(),source_id)); c.commit()
@@ -2511,10 +2705,17 @@ def data_source_decision(source_id,decision):
     # Prefer the latest clean transformation run when one exists.
     run=c.execute('SELECT * FROM data_transform_runs WHERE source_id=? ORDER BY id DESC LIMIT 1',(source_id,)).fetchone()
     if run and run['status'] in ('Pending Approval','Created - Pending Approval'):
+        if decision=='Approved':
+            # The clean output can only become executable if its underlying source version
+            # is itself approved. Approve the underlying version first, then supersede the
+            # older approved version atomically.
+            clean_version=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,run['version_number'])).fetchone()
+            if not clean_version or clean_version['validation_status']=='Failed':
+                c.close(); flash('The clean version cannot be approved because its underlying source version failed validation.','error'); return redirect(url_for('data_sources'))
+            c.execute("UPDATE data_source_versions SET version_status='Superseded' WHERE source_id=? AND version_status='Approved' AND version_number<>?",(source_id,run['version_number']))
+            c.execute("UPDATE data_source_versions SET version_status='Approved',approved_by=?,approved_at=? WHERE source_id=? AND version_number=?",(email(),now(),source_id,run['version_number']))
         c.execute('UPDATE data_transform_runs SET status=? WHERE id=?',(decision,run['id']))
-        # A clean version is the controlled version used downstream. Keep the
-        # original uploaded source intact and record its source status separately.
-        c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',(decision,now(),source_id))
+        c.execute('UPDATE data_sources SET current_version=?,status=?,updated_at=? WHERE id=?',(run['version_number'],decision,now(),source_id))
         c.commit(); c.close()
         log('DATA_TRANSFORM_REVIEWED',f"{src['source_ref']} clean run {run['id']}: {decision}")
         flash(f"{src['source_ref']} clean version: {decision}.",'success')
@@ -2528,6 +2729,8 @@ def data_source_decision(source_id,decision):
         c.close(); flash('This source cannot be approved because validation failed.','error')
         return redirect(url_for('data_sources'))
     c.execute('INSERT INTO data_source_reviews(source_id,version_number,decision,comments,reviewed_by,reviewed_at) VALUES(?,?,?,?,?,?)',(source_id,v['version_number'],decision,'Decision made from Data Sources action bar.',email(),now()))
+    if decision=='Approved':
+        c.execute("UPDATE data_source_versions SET version_status='Superseded' WHERE source_id=? AND version_status='Approved' AND id<>?",(source_id,v['id']))
     c.execute('UPDATE data_source_versions SET version_status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,v['id']))
     c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',(decision,now(),source_id))
     c.commit(); c.close()
