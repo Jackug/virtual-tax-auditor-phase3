@@ -1,26 +1,311 @@
 {% extends 'base.html' %}
+
 {% block content %}
+
 <style>
-.rr-wrap{max-width:1400px;margin:0 auto}.rr-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}.rr-title{margin:2px 0 5px;color:#12345b}.rr-muted{color:#65727e;font-size:12px;line-height:1.5}.rr-card{background:#fff;border:1px solid #dce2e8;border-radius:7px;padding:16px;margin-top:14px}.rr-card h3{margin:0 0 6px;color:#17365d;font-size:15px}.rr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.rr-kpi{border:1px solid #dce2e8;border-radius:6px;padding:13px;background:#f8fafc}.rr-kpi .v{font-size:22px;font-weight:700;color:#17365d;margin-top:4px}.rr-kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#687682;font-weight:700}.rr-status{display:inline-block;padding:5px 10px;border-radius:14px;background:#eef2f5;font-size:11px;font-weight:700}.rr-status.good{background:#e0f1e6;color:#216438}.rr-status.warn{background:#fff0d2;color:#765300}.rr-status.bad{background:#f8dada;color:#8b2222}.rr-actions{display:flex;gap:8px;flex-wrap:wrap}.rr-btn{display:inline-block;padding:9px 13px;border-radius:5px;border:1px solid #cbd5df;background:#fff;color:#17365d;text-decoration:none;cursor:pointer;font-size:13px}.rr-btn.primary{background:#17365d;color:#fff;border-color:#17365d}.rr-btn.danger{background:#8b2222;color:#fff;border-color:#8b2222}.rr-btn:disabled{opacity:.5;cursor:not-allowed}.rr-pre{background:#102d4a;color:#fff;border-radius:6px;padding:15px;white-space:pre-wrap;line-height:1.55;font-size:12px;max-height:360px;overflow:auto}.rr-table{width:100%;border-collapse:collapse}.rr-table th,.rr-table td{border-bottom:1px solid #e1e7ec;padding:9px;text-align:left;vertical-align:top;font-size:12px}.rr-table th{background:#eef2f5;color:#314452}.rr-ok{color:#216438;font-weight:700}.rr-no{color:#8b2222;font-weight:700}.rr-note{background:#edf4ff;border:1px solid #c7d9ed;padding:12px;border-radius:6px;font-size:12px;line-height:1.5}.rr-warning{background:#fff7e6;border:1px solid #f1d38a;padding:12px;border-radius:6px;font-size:12px;line-height:1.5}.rr-error{background:#fff0f0;border:1px solid #e6b7b7;padding:12px;border-radius:6px;font-size:12px;line-height:1.5}.rr-code{font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;word-break:break-word}.rr-pill{display:inline-block;padding:3px 7px;border-radius:12px;background:#edf1f5;font-size:10px;margin-right:4px}.rr-scroll{overflow:auto}.rr-footer-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}@media(max-width:900px){.rr-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.rr-grid{grid-template-columns:1fr}}
+
+.rr-wrap{
+  max-width:1400px;
+  margin:0 auto
+}
+
+.rr-head{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:flex-start;
+  flex-wrap:wrap
+}
+
+.rr-title{
+  margin:2px 0 5px;
+  color:#12345b
+}
+
+.rr-muted{
+  color:#65727e;
+  font-size:12px;
+  line-height:1.5
+}
+
+.rr-card{
+  background:#fff;
+  border:1px solid #dce2e8;
+  border-radius:7px;
+  padding:16px;
+  margin-top:14px
+}
+
+.rr-card h3{
+  margin:0 0 6px;
+  color:#17365d;
+  font-size:15px
+}
+
+.rr-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px
+}
+
+.rr-kpi{
+  border:1px solid #dce2e8;
+  border-radius:6px;
+  padding:13px;
+  background:#f8fafc
+}
+
+.rr-kpi .v{
+  font-size:22px;
+  font-weight:700;
+  color:#17365d;
+  margin-top:4px
+}
+
+.rr-kpi .l{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  color:#687682;
+  font-weight:700
+}
+
+.rr-status{
+  display:inline-block;
+  padding:5px 10px;
+  border-radius:14px;
+  background:#eef2f5;
+  font-size:11px;
+  font-weight:700
+}
+
+.rr-status.good{
+  background:#e0f1e6;
+  color:#216438
+}
+
+.rr-status.warn{
+  background:#fff0d2;
+  color:#765300
+}
+
+.rr-status.bad{
+  background:#f8dada;
+  color:#8b2222
+}
+
+.rr-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap
+}
+
+.rr-btn{
+  display:inline-block;
+  padding:9px 13px;
+  border-radius:5px;
+  border:1px solid #cbd5df;
+  background:#fff;
+  color:#17365d;
+  text-decoration:none;
+  cursor:pointer;
+  font-size:13px
+}
+
+.rr-btn.primary{
+  background:#17365d;
+  color:#fff;
+  border-color:#17365d
+}
+
+.rr-btn.danger{
+  background:#8b2222;
+  color:#fff;
+  border-color:#8b2222
+}
+
+.rr-btn:disabled{
+  opacity:.55;
+  cursor:not-allowed
+}
+
+.rr-pre{
+  background:#102d4a;
+  color:#fff;
+  border-radius:6px;
+  padding:15px;
+  white-space:pre-wrap;
+  line-height:1.55;
+  font-size:12px;
+  max-height:360px;
+  overflow:auto
+}
+
+.rr-table{
+  width:100%;
+  border-collapse:collapse
+}
+
+.rr-table th,
+.rr-table td{
+  border-bottom:1px solid #e1e7ec;
+  padding:9px;
+  text-align:left;
+  vertical-align:top;
+  font-size:12px
+}
+
+.rr-table th{
+  background:#eef2f5;
+  color:#314452
+}
+
+.rr-ok{
+  color:#216438;
+  font-weight:700
+}
+
+.rr-no{
+  color:#8b2222;
+  font-weight:700
+}
+
+.rr-note{
+  background:#edf4ff;
+  border:1px solid #c7d9ed;
+  padding:12px;
+  border-radius:6px;
+  font-size:12px;
+  line-height:1.5
+}
+
+.rr-warning{
+  background:#fff7e6;
+  border:1px solid #f1d38a;
+  padding:12px;
+  border-radius:6px;
+  font-size:12px;
+  line-height:1.5
+}
+
+.rr-error{
+  background:#fff0f0;
+  border:1px solid #e6b7b7;
+  padding:12px;
+  border-radius:6px;
+  font-size:12px;
+  line-height:1.5
+}
+
+.rr-code{
+  font-family:Consolas,monospace;
+  font-size:11px;
+  white-space:pre-wrap;
+  word-break:break-word
+}
+
+.rr-pill{
+  display:inline-block;
+  padding:3px 7px;
+  border-radius:12px;
+  background:#edf1f5;
+  font-size:10px;
+  margin-right:4px
+}
+
+.rr-scroll{
+  overflow:auto
+}
+
+.rr-footer-actions{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:16px
+}
+
+@media(max-width:900px){
+
+  .rr-grid{
+    grid-template-columns:repeat(2,1fr)
+  }
+
+}
+
+@media(max-width:600px){
+
+  .rr-grid{
+    grid-template-columns:1fr
+  }
+
+}
+
 </style>
+
+
+<!-- ========================================================= -->
+<!-- FLASH MESSAGES -->
+<!-- ========================================================= -->
+
+<div style="margin-bottom:12px">
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+
+  {% for category, message in messages %}
+
+    <div
+      class="
+        rr-{{
+          'error'
+          if category in ['error','danger']
+          else
+          'note'
+          if category=='success'
+          else
+          'warning'
+        }}
+      "
+      style="margin-top:8px"
+    >
+      {{ message }}
+    </div>
+
+  {% endfor %}
+
+{% endwith %}
+
+</div>
+
 
 <div class="rr-wrap">
 
+  <!-- ======================================================= -->
   <!-- HEADER -->
+  <!-- ======================================================= -->
+
   <div class="rr-head">
+
     <div>
-      <div class="label">Business Rules / Execution Review</div>
+
+      <div class="label">
+        Business Rules / Execution Review
+      </div>
 
       <h2 class="rr-title">
         {{ rule.name }}
       </h2>
 
       <div class="rr-muted">
+
         {{ rule.rule_ref }}
         · Version {{ version.version_number }}
         · {{ rule.risk_category or rule.category }}
         · {{ rule.tax_type or 'General' }}
+
       </div>
+
     </div>
 
     <div class="rr-actions">
@@ -40,16 +325,33 @@
       </a>
 
     </div>
+
   </div>
 
 
+  <!-- ======================================================= -->
+  <!-- VARIABLES -->
+  <!-- ======================================================= -->
+
   {% set ps = version.preview_status or 'Not Run' %}
-  {% set evaluated = summary.get('records_evaluated',0) or 0 %}
-  {% set triggered = summary.get('records_triggered',0) or 0 %}
-  {% set exposure = summary.get('total_exposure',0) or 0 %}
+
+  {% set evaluated =
+      summary.get('records_evaluated',0) or 0
+  %}
+
+  {% set triggered =
+      summary.get('records_triggered',0) or 0
+  %}
+
+  {% set exposure =
+      summary.get('total_exposure',0) or 0
+  %}
 
 
-  <!-- EXECUTION SUMMARY -->
+  <!-- ======================================================= -->
+  <!-- KPI -->
+  <!-- ======================================================= -->
+
   <div class="rr-card">
 
     <div class="rr-grid">
@@ -66,18 +368,18 @@
         >
 
           <span
-            class="rr-status
-            {{
-              'good'
-              if rule.status in ['Active','Approved']
-
-              else
-              'warn'
-              if rule.status=='Under Review'
-
-              else
-              ''
-            }}"
+            class="
+              rr-status
+              {{
+                'good'
+                if rule.status in ['Active','Approved']
+                else
+                'warn'
+                if rule.status=='Under Review'
+                else
+                ''
+              }}
+            "
           >
             {{ rule.status }}
           </span>
@@ -99,18 +401,18 @@
         >
 
           <span
-            class="rr-status
-            {{
-              'good'
-              if ps=='Completed'
-
-              else
-              'bad'
-              if ps=='Failed'
-
-              else
-              'warn'
-            }}"
+            class="
+              rr-status
+              {{
+                'good'
+                if ps=='Completed'
+                else
+                'bad'
+                if ps=='Failed'
+                else
+                'warn'
+              }}
+            "
           >
             {{ ps }}
           </span>
@@ -163,7 +465,8 @@
           class="v"
           style="font-size:18px"
         >
-          UGX {{ '{:,.2f}'.format(exposure|float) }}
+          UGX
+          {{ '{:,.2f}'.format(exposure|float) }}
         </div>
 
       </div>
@@ -215,22 +518,23 @@
   </div>
 
 
+  <!-- ======================================================= -->
   <!-- EXECUTION ERROR -->
+  <!-- ======================================================= -->
+
   {% if ps == 'Failed' %}
 
   <div class="rr-card">
 
     <div class="rr-error">
 
-      <b>
-        Execution failed.
-      </b>
+      <b>Execution failed.</b>
 
       <br>
 
       {{ summary.get(
-        'error',
-        'The rule could not be executed. Review the rule definition and approved data source versions, then run again.'
+          'error',
+          'The rule could not be executed. Review the rule definition and approved data source versions, then run again.'
       ) }}
 
     </div>
@@ -240,7 +544,10 @@
   {% endif %}
 
 
+  <!-- ======================================================= -->
   <!-- SYSTEM INTERPRETATION -->
+  <!-- ======================================================= -->
+
   <div class="rr-card">
 
     <h3>
@@ -250,25 +557,18 @@
     <div class="rr-note">
 
       This interpretation is generated from the structured rule
-      you defined. It is the business-language description of what
-      the Risk Engine will execute.
+      you defined. It is the business-language description of
+      what the Risk Engine will execute.
 
     </div>
 
-
     <div
       class="rr-card"
-      style="
-        margin:12px 0 0;
-        background:#f8fafc
-      "
+      style="margin:12px 0 0;background:#f8fafc"
     >
 
       <div
-        style="
-          line-height:1.7;
-          font-size:13px
-        "
+        style="line-height:1.7;font-size:13px"
       >
         {{ natural_language }}
       </div>
@@ -278,7 +578,10 @@
   </div>
 
 
-  <!-- APPROVED DATA SOURCES -->
+  <!-- ======================================================= -->
+  <!-- DATA SOURCES -->
+  <!-- ======================================================= -->
+
   <div class="rr-card">
 
     <h3>
@@ -289,11 +592,12 @@
       class="rr-muted"
       style="margin-bottom:10px"
     >
+
       The execution is restricted to approved source versions.
       A newer draft or rejected source version does not silently
       replace an approved version.
-    </div>
 
+    </div>
 
     <div class="rr-scroll">
 
@@ -323,7 +627,6 @@
 
         </thead>
 
-
         <tbody>
 
         {% for s in source_state %}
@@ -344,32 +647,25 @@
 
             </td>
 
-
             <td>
               v{{ s.rule_version }}
             </td>
 
-
             <td>
 
               {% if s.current_version %}
-
                 v{{ s.current_version }}
-
               {% else %}
-
                 —
-
               {% endif %}
 
             </td>
 
-
             <td>
 
               {% if
-                s.approved
-                and s.rule_version == s.current_version
+                s.approved and
+                s.rule_version == s.current_version
               %}
 
                 <span class="rr-ok">
@@ -415,21 +711,23 @@
   </div>
 
 
-  <!-- REAL DATA EXECUTION -->
+  <!-- ======================================================= -->
+  <!-- REAL EXECUTION -->
+  <!-- ======================================================= -->
+
   <div class="rr-card">
 
     <h3>
       3. Real Data Execution Result
     </h3>
 
-
     <div class="rr-note">
 
       <b>Important:</b>
-
-      The rows displayed below are only a small display sample.
-
+      the rows displayed below are only a small display sample.
       They are <b>not the dataset used for execution</b>.
+
+      <br><br>
 
       The engine evaluates the approved real data and the totals
       above represent the complete execution result.
@@ -478,11 +776,9 @@
 
           {% if evaluated %}
 
-            {{
-              '{:.2f}'.format(
-                (triggered / evaluated * 100)
-              )
-            }}%
+            {{ '{:.2f}'.format(
+              triggered / evaluated * 100
+            ) }}%
 
           {% else %}
 
@@ -505,7 +801,8 @@
           class="v"
           style="font-size:17px"
         >
-          UGX {{ '{:,.0f}'.format(exposure|float) }}
+          UGX
+          {{ '{:,.0f}'.format(exposure|float) }}
         </div>
 
       </div>
@@ -514,10 +811,7 @@
 
 
     <h4
-      style="
-        margin:18px 0 7px;
-        color:#17365d
-      "
+      style="margin:18px 0 7px;color:#17365d"
     >
       Representative Matching Records
     </h4>
@@ -545,7 +839,6 @@
 
           </thead>
 
-
           <tbody>
 
           {% for row in preview_rows %}
@@ -570,13 +863,13 @@
 
       </div>
 
-
       <div
         class="rr-muted"
         style="margin-top:8px"
       >
 
-        Showing {{ preview_rows|length }}
+        Showing
+        {{ preview_rows|length }}
         representative matching row(s) for review.
 
         This does not limit the execution to these rows.
@@ -596,7 +889,10 @@
   </div>
 
 
+  <!-- ======================================================= -->
   <!-- STRUCTURED PLAN -->
+  <!-- ======================================================= -->
+
   <div class="rr-card">
 
     <h3>
@@ -604,13 +900,16 @@
     </h3>
 
     <div class="rr-pre rr-code">
-{{ plan|tojson(indent=2) }}
+      {{ plan|tojson(indent=2) }}
     </div>
 
   </div>
 
 
-  <!-- APPROVAL GATE -->
+  <!-- ======================================================= -->
+  <!-- APPROVAL -->
+  <!-- ======================================================= -->
+
   <div class="rr-card">
 
     <h3>
@@ -620,7 +919,8 @@
 
     {% if
       ps == 'Completed'
-      and legal_count > 0
+      and
+      legal_count > 0
     %}
 
       <div class="rr-note">
@@ -628,8 +928,8 @@
         The rule has been executed against approved data and has
         approved Knowledge Base legal backing.
 
-        Approval will activate the rule and rebuild the Risk Universe
-        from the approved rule library.
+        Approval will activate the rule and rebuild the Risk
+        Universe from the approved rule library.
 
       </div>
 
@@ -660,10 +960,7 @@
 
         <form
           method="post"
-          action="{{ url_for(
-            'risk_rule_preview',
-            rule_id=rule.id
-          ) }}"
+          action="{{ url_for('risk_rule_preview',rule_id=rule.id) }}"
           style="margin:0"
         >
 
@@ -679,10 +976,7 @@
 
         <a
           class="rr-btn"
-          href="{{ url_for(
-            'risk_rule_edit',
-            rule_id=rule.id
-          ) }}"
+          href="{{ url_for('risk_rule_edit',rule_id=rule.id) }}"
         >
           Edit / Rebuild Rule
         </a>
@@ -692,30 +986,19 @@
 
       <form
         method="post"
-        action="{{ url_for(
-          'risk_rule_approve',
-          rule_id=rule.id
-        ) }}"
+        action="{{ url_for('risk_rule_approve',rule_id=rule.id) }}"
         style="margin:0"
       >
 
         <button
           class="rr-btn primary"
           type="submit"
-
-          {% if
-            ps != 'Completed'
-            or legal_count == 0
-          %}
-
+          {% if ps != 'Completed' or legal_count == 0 %}
             disabled
             title="Successful execution and approved legal backing are required"
-
           {% endif %}
         >
-
           Approve Rule & Populate Risk Universe
-
         </button>
 
       </form>
@@ -725,7 +1008,10 @@
   </div>
 
 
+  <!-- ======================================================= -->
   <!-- LATEST PRODUCTION RUN -->
+  <!-- ======================================================= -->
+
   {% if latest_run %}
 
   <div class="rr-card">
@@ -759,7 +1045,6 @@
 
       </tr>
 
-
       <tr>
 
         <th>
@@ -773,7 +1058,6 @@
         </td>
 
       </tr>
-
 
       <tr>
 
@@ -789,7 +1073,6 @@
 
       </tr>
 
-
       <tr>
 
         <th>
@@ -797,13 +1080,13 @@
         </th>
 
         <td>
-          UGX {{ '{:,.2f}'.format(
+          UGX
+          {{ '{:,.2f}'.format(
             (latest_run.total_exposure or 0)|float
           ) }}
         </td>
 
       </tr>
-
 
       <tr>
 
@@ -816,7 +1099,6 @@
         </td>
 
       </tr>
-
 
       <tr>
 
