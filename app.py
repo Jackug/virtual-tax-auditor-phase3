@@ -631,20 +631,124 @@ def ensure_approved_knowledge_indexed():
     return missing
 
 def knowledge_context_for_case(c, case_id):
-    case = c.execute('SELECT * FROM audit_cases WHERE id=?', (case_id,)).fetchone()
+    """
+    Build a broader, case-aware retrieval query and search APPROVED Knowledge Base
+    content only. The retrieval is intentionally deterministic and bounded.
+
+    The existing VTA audit engine currently analyses sales/imports/purchases.
+    We therefore include the case facts plus legal concepts that commonly
+    govern those reconciliation issues. This does not create or approve a
+    finding; it only supplies approved knowledge context to the analysis.
+    """
+    case = c.execute(
+        'SELECT * FROM audit_cases WHERE id=?',
+        (case_id,)
+    ).fetchone()
+
     if not case:
-        return [], ''
-    taxpayer = c.execute('SELECT * FROM taxpayers WHERE id=?', (case['taxpayer_id'],)).fetchone()
-    query = f"tax audit {taxpayer['sector']} {taxpayer['financial_year']} sales imports purchases compliance reconciliation"
-    # Search uses its own connection so it can record retrievals cleanly.
-    rows = search_approved_knowledge(query, limit=5, case_id=case_id)
+        return [], 'No audit case was found for Knowledge Base retrieval.'
+
+    taxpayer = c.execute(
+        'SELECT * FROM taxpayers WHERE id=?',
+        (case['taxpayer_id'],)
+    ).fetchone()
+
+    if not taxpayer:
+        return [], 'No taxpayer record was found for Knowledge Base retrieval.'
+
+    # Pull the latest risk assessment and its drivers where available.
+    assessment = c.execute(
+        'SELECT * FROM risk_assessments WHERE taxpayer_id=? '
+        'ORDER BY id DESC LIMIT 1',
+        (taxpayer['id'],)
+    ).fetchone()
+
+    drivers = []
+    if assessment:
+        drivers = c.execute(
+            'SELECT rd.description, rr.name, rr.natural_language, '
+            'rr.category, rr.structured_logic '
+            'FROM risk_drivers rd '
+            'JOIN risk_rules rr ON rr.id=rd.rule_id '
+            'WHERE rd.assessment_id=? ORDER BY rd.id',
+            (assessment['id'],)
+        ).fetchall()
+
+    # Use the actual audit case/risk language plus controlled legal concepts.
+    # Terms are deliberately broad enough to retrieve relevant provisions from
+    # an Act while remaining tied to this case.
+    query_parts = [
+        'tax law',
+        'income tax',
+        'tax liability',
+        'business income',
+        'sales',
+        'turnover',
+        'purchases',
+        'imports',
+        'customs',
+        'declaration',
+        'assessment',
+        'records',
+        'returns',
+        taxpayer['sector'] or '',
+        taxpayer['financial_year'] or ''
+    ]
+
+    for driver in drivers:
+        query_parts.extend([
+            driver['name'] or '',
+            driver['category'] or '',
+            driver['natural_language'] or '',
+            driver['structured_logic'] or '',
+            driver['description'] or ''
+        ])
+
+    # Also incorporate the latest AI findings if the case has already been
+    # analysed. This makes subsequent analyses more targeted without relying
+    # on unapproved knowledge.
+    findings = c.execute(
+        'SELECT risk_category, description, audit_test, explanation '
+        'FROM findings WHERE case_id=? ORDER BY id DESC LIMIT 10',
+        (case_id,)
+    ).fetchall()
+
+    for finding in findings:
+        query_parts.extend([
+            finding['risk_category'] or '',
+            finding['description'] or '',
+            finding['audit_test'] or '',
+            finding['explanation'] or ''
+        ])
+
+    query = ' '.join(str(x) for x in query_parts if x)
+
+    # Search only approved, indexed knowledge. A single combined query keeps
+    # retrieval bounded and produces one clean audit-trail query for this run.
+    rows = search_approved_knowledge(
+        query,
+        limit=8,
+        case_id=case_id
+    )
+
     if not rows:
-        return [], 'No approved Knowledge Base content matched this case. The analysis therefore did not rely on unapproved or general knowledge.'
-    context = []
-    for row in rows:
-        context.append(
-            f"[{row['document_ref']} v{row['version_number']} | {row['title']} | {row['category']} | page/sheet {row['page_number']}] {row['text_content']}"
+        return [], (
+            'No approved Knowledge Base content matched this case after '
+            'case-aware legal retrieval. The analysis therefore did not rely '
+            'on unapproved or general knowledge.'
         )
+
+    context = []
+    for rank, row in enumerate(rows, start=1):
+        context.append(
+            f"[{rank}] {row['document_ref']} v{row['version_number']} | "
+            f"{row['title']} | {row['category']} | "
+            f"{row['document_type']} | Tax Type: {row['tax_type'] or 'General'} | "
+            f"Page/Sheet: {row['page_number']} | "
+            f"Source: {row['source_filename']}\n"
+            f"{row['text_content']}"
+        )
+
     return rows, '\n\n'.join(context)
 
 
