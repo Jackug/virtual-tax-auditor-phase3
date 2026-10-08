@@ -7,21 +7,17 @@
     margin-bottom: 18px;
   }
 
-  .page-header h2 {
-    margin-bottom: 6px;
-  }
-
   .section {
     margin-top: 18px;
   }
 
   .section-title {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
   }
 
@@ -31,30 +27,33 @@
 
   .actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
-    margin-top: 14px;
+    align-items: center;
   }
 
   .btn {
     display: inline-block;
-    padding: 9px 14px;
     border: 0;
     border-radius: 5px;
+    padding: 8px 12px;
     background: #17365d;
     color: white;
     text-decoration: none;
     cursor: pointer;
-    font: inherit;
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .btn:hover {
-    opacity: .9;
+    opacity: .88;
   }
 
   .btn-secondary {
     background: #66727d;
+  }
+
+  .btn-warning {
+    background: #9a6a00;
   }
 
   .btn-success {
@@ -65,20 +64,13 @@
     background: #a52a2a;
   }
 
-  .btn-warning {
-    background: #9a6a00;
-  }
-
-  .btn-info {
-    background: #286090;
-  }
-
   .status {
     display: inline-block;
     padding: 4px 9px;
     border-radius: 12px;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
+    white-space: nowrap;
   }
 
   .status-approved {
@@ -86,7 +78,6 @@
     color: #216438;
   }
 
-  .status-draft,
   .status-pending {
     background: #fff0d2;
     color: #765300;
@@ -107,25 +98,51 @@
     color: #59636c;
   }
 
-  .notice {
-    margin-bottom: 15px;
+  .action-icon {
+    display: inline-block;
+    border: 1px solid #cbd5df;
+    border-radius: 5px;
+    padding: 6px 9px;
+    background: white;
+    color: #17365d;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
   }
 
-  .small {
-    font-size: 11px;
+  .action-icon:hover {
+    opacity: .85;
   }
 
-  .muted {
-    line-height: 1.5;
+  .action-transform {
+    border-color: #a9c5da;
+    color: #17365d;
+    background: #f4f8fb;
   }
 
-  .empty {
-    padding: 20px;
-    text-align: center;
-    color: #687682;
-    border: 1px dashed #cbd5df;
-    background: #fafbfc;
-    border-radius: 6px;
+  .action-approve {
+    border-color: #a9d1b5;
+    color: #216438;
+    background: #f3faf5;
+  }
+
+  .action-reject {
+    border-color: #e0b0b0;
+    color: #8b2222;
+    background: #fff5f5;
+  }
+
+  .action-version {
+    border-color: #c8c8d8;
+    color: #4d4d88;
+    background: #fafaff;
+  }
+
+  .action-icon:disabled {
+    opacity: .45;
+    cursor: not-allowed;
   }
 
   .table-wrap {
@@ -133,66 +150,73 @@
   }
 
   .table td {
-    max-width: 260px;
-    word-break: break-word;
+    vertical-align: middle;
   }
 
-  .required {
-    color: #a52a2a;
+  .empty {
+    padding: 20px;
+    text-align: center;
+    border: 1px dashed #ccd5dd;
+    border-radius: 6px;
+    background: #fafbfc;
+  }
+
+  .muted {
+    line-height: 1.5;
+  }
+
+  .small {
+    font-size: 10px;
   }
 
   .control-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
   }
 
   .control-card {
-    border: 1px solid #dfe5ea;
-    border-radius: 7px;
-    padding: 14px;
+    border: 1px solid #dce2e7;
+    border-radius: 6px;
+    padding: 13px;
     background: #fafbfc;
   }
 
-  .control-number {
+  .control-card-title {
     font-size: 11px;
     font-weight: 700;
     color: #17365d;
     margin-bottom: 5px;
   }
 
-  .transform-note {
-    border-left: 4px solid #9a6a00;
-    background: #fff9ec;
-    padding: 12px 14px;
-    margin-top: 12px;
-    line-height: 1.5;
+  .transform-status {
+    margin-top: 5px;
+    font-size: 10px;
   }
 
-  @media(max-width: 1000px) {
+  .pending-clean {
+    background: #fff9e8;
+    border: 1px solid #ead79d;
+    padding: 7px 9px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+  }
+
+  @media(max-width:900px) {
+    .form-grid,
     .control-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  @media(max-width: 800px) {
-    .form-grid {
       grid-template-columns: 1fr;
     }
 
     .form-grid .full {
       grid-column: auto;
     }
-
-    .control-grid {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
 
 
 <!-- ============================================================
-     PAGE HEADER
+     HEADER
 ============================================================ -->
 
 <div class="card page-header">
@@ -206,28 +230,20 @@
   </h2>
 
   <p class="muted">
-    Register, validate, review, transform and approve the data sources
+    Register, validate, transform, review and approve the data sources
     that may be used by the Virtual Tax Auditor.
   </p>
 
-  <div class="notice" style="margin-top:12px;">
+  <div style="margin-top:12px"
+       class="notice">
 
     <b>Control principle:</b>
 
-    Uploading a data source does not make it available to the VTA engine.
+    Uploading a source does not automatically make it available to
+    the Virtual Tax Auditor.
 
-    A source must pass validation and receive human approval before it can
-    be used for Taxpayer 360, Risk Assessment or AI Audit Analysis.
-
-  </div>
-
-  <div class="transform-note">
-
-    <b>Step 2C — Data Quality & Transformation:</b>
-
-    Data transformation creates a controlled clean version of the source.
-    The original uploaded file remains unchanged and is retained for
-    auditability. Transformations must be explicitly applied and recorded.
+    The original source remains unchanged. Transformation creates a
+    separate controlled clean version.
 
   </div>
 
@@ -235,7 +251,7 @@
 
 
 <!-- ============================================================
-     REGISTER NEW DATA SOURCE
+     REGISTER DATA SOURCE
 ============================================================ -->
 
 <div class="card section">
@@ -252,17 +268,14 @@
 
     <div class="form-grid">
 
-      <!-- SOURCE NAME -->
-
       <div>
 
-        <label for="source_name">
-          Source Name <span class="required">*</span>
+        <label>
+          Source Name <span style="color:#a52a2a">*</span>
         </label>
 
         <input
           type="text"
-          id="source_name"
           name="source_name"
           placeholder="e.g. DT Payments"
           required
@@ -271,16 +284,13 @@
       </div>
 
 
-      <!-- SOURCE TYPE -->
-
       <div>
 
-        <label for="source_type">
-          Source Type <span class="required">*</span>
+        <label>
+          Source Type <span style="color:#a52a2a">*</span>
         </label>
 
         <select
-          id="source_type"
           name="source_type"
           required
         >
@@ -289,10 +299,10 @@
             -- Select Source Type --
           </option>
 
-          {% for source_type in source_types %}
+          {% for item in source_types %}
 
-          <option value="{{ source_type }}">
-            {{ source_type }}
+          <option value="{{ item }}">
+            {{ item }}
           </option>
 
           {% endfor %}
@@ -302,27 +312,22 @@
       </div>
 
 
-      <!-- TAX TYPE -->
-
       <div>
 
-        <label for="tax_type">
+        <label>
           Tax Type
         </label>
 
-        <select
-          id="tax_type"
-          name="tax_type"
-        >
+        <select name="tax_type">
 
           <option value="">
             -- Select Tax Type --
           </option>
 
-          {% for tax_type in tax_types %}
+          {% for item in tax_types %}
 
-          <option value="{{ tax_type }}">
-            {{ tax_type }}
+          <option value="{{ item }}">
+            {{ item }}
           </option>
 
           {% endfor %}
@@ -332,17 +337,14 @@
       </div>
 
 
-      <!-- REPORTING PERIOD -->
-
       <div>
 
-        <label for="reporting_period">
+        <label>
           Reporting Period
         </label>
 
         <input
           type="text"
-          id="reporting_period"
           name="reporting_period"
           placeholder="e.g. FY 2025/26"
         >
@@ -350,17 +352,14 @@
       </div>
 
 
-      <!-- OWNER -->
-
       <div>
 
-        <label for="owner_department">
+        <label>
           Source Owner / Department
         </label>
 
         <input
           type="text"
-          id="owner_department"
           name="owner_department"
           placeholder="e.g. Domestic Taxes"
         >
@@ -368,48 +367,39 @@
       </div>
 
 
-      <!-- DESCRIPTION -->
-
       <div>
 
-        <label for="source_description">
+        <label>
           Description
         </label>
 
         <input
           type="text"
-          id="source_description"
           name="description"
-          placeholder="Brief description of the source"
+          placeholder="Description of the data source"
         >
 
       </div>
 
 
-      <!-- FILE -->
-
       <div class="full">
 
-        <label for="data_file">
-          Data File <span class="required">*</span>
+        <label>
+          Data File <span style="color:#a52a2a">*</span>
         </label>
 
         <input
           type="file"
-          id="data_file"
           name="data_file"
           accept=".csv,.xls,.xlsx"
           required
         >
 
-        <div class="muted small" style="margin-top:6px;">
+        <div class="muted small"
+             style="margin-top:5px">
 
-          Supported formats:
-
-          <b>CSV, XLS and XLSX.</b>
-
-          The system will inspect the file before it becomes eligible
-          for approval.
+          Accepted files:
+          <b>CSV, XLS and XLSX</b>.
 
         </div>
 
@@ -418,7 +408,7 @@
     </div>
 
 
-    <div class="actions">
+    <div style="margin-top:14px">
 
       <button
         type="submit"
@@ -445,10 +435,7 @@
   </h3>
 
   <p class="muted">
-
-    These sources have been uploaded but are not yet approved for use
-    by the Virtual Tax Auditor.
-
+    Newly registered sources awaiting review and approval.
   </p>
 
 
@@ -462,50 +449,17 @@
 
         <tr>
 
-          <th>
-            Source
-          </th>
-
-          <th>
-            Reference
-          </th>
-
-          <th>
-            Version
-          </th>
-
-          <th>
-            File
-          </th>
-
-          <th>
-            Records
-          </th>
-
-          <th>
-            Validation
-          </th>
-
-          <th>
-            Status
-          </th>
-
-          <th>
-            Uploaded By
-          </th>
-
-          <th>
-            Uploaded
-          </th>
-
-          <th>
-            Action
-          </th>
+          <th>Source</th>
+          <th>Reference</th>
+          <th>Version</th>
+          <th>Records</th>
+          <th>Validation</th>
+          <th>Status</th>
+          <th>Actions</th>
 
         </tr>
 
       </thead>
-
 
       <tbody>
 
@@ -513,52 +467,32 @@
 
         <tr>
 
-          <!-- SOURCE -->
-
           <td>
 
             <b>
               {{ source.source_name }}
             </b>
 
-            {% if source.source_type %}
-
             <div class="muted small">
               {{ source.source_type }}
             </div>
 
-            {% endif %}
-
           </td>
 
-
-          <!-- REFERENCE -->
 
           <td>
             {{ source.source_ref }}
           </td>
 
 
-          <!-- VERSION -->
-
           <td>
             v{{ source.version_number }}
           </td>
 
 
-          <!-- FILE -->
-
-          <td>
-            {{ source.original_filename }}
-          </td>
-
-
-          <!-- RECORDS -->
-
           <td>
 
-            {% if source.record_count is defined
-                  and source.record_count is not none %}
+            {% if source.record_count is not none %}
 
               {{ "{:,}".format(source.record_count) }}
 
@@ -571,21 +505,12 @@
           </td>
 
 
-          <!-- VALIDATION -->
-
           <td>
 
             {% if source.validation_status == 'Passed' %}
 
               <span class="status status-approved">
                 Passed
-              </span>
-
-            {% elif source.validation_status == 'Warnings'
-                  or source.validation_status == 'Warning' %}
-
-              <span class="status status-pending">
-                Warnings
               </span>
 
             {% elif source.validation_status == 'Failed' %}
@@ -605,44 +530,30 @@
           </td>
 
 
-          <!-- STATUS -->
-
           <td>
 
-            {% set s =
-              source.version_status
-              or source.status
-              or 'Draft'
-            %}
-
-            {% if s == 'Approved' %}
+            {% if source.version_status == 'Approved' %}
 
               <span class="status status-approved">
                 Approved
               </span>
 
-            {% elif s == 'Rejected' %}
+            {% elif source.version_status == 'Rejected' %}
 
               <span class="status status-rejected">
                 Rejected
               </span>
 
-            {% elif s == 'Needs Revision' %}
+            {% elif source.version_status == 'Needs Revision' %}
 
               <span class="status status-revision">
                 Needs Revision
               </span>
 
-            {% elif s == 'Superseded' %}
-
-              <span class="status status-superseded">
-                Superseded
-              </span>
-
             {% else %}
 
-              <span class="status status-draft">
-                {{ s }}
+              <span class="status status-pending">
+                Draft
               </span>
 
             {% endif %}
@@ -650,48 +561,119 @@
           </td>
 
 
-          <!-- UPLOADED BY -->
-
-          <td>
-            {{ source.uploaded_by or '—' }}
-          </td>
-
-
-          <!-- UPLOADED -->
-
-          <td>
-            {{ source.uploaded_at or '—' }}
-          </td>
-
-
-          <!-- ACTION -->
-
           <td>
 
             <div class="actions">
 
-              {% if source.id is defined %}
-
               <a
-                class="btn btn-secondary"
-                href="{{ url_for(
-                  'data_source_versions',
-                  source_id=source.id
-                ) }}"
-              >
-                Review
-              </a>
-
-
-              <a
-                class="btn btn-warning"
+                class="action-icon action-transform"
                 href="{{ url_for(
                   'data_source_transform',
                   source_id=source.id
                 ) }}"
               >
-                Transform Data
+                ↻ Transform
               </a>
+
+
+              {% set tr = transform_status.get(source.id) %}
+
+              {% if tr and tr.status in [
+                'Pending Approval',
+                'Created - Pending Approval'
+              ] %}
+
+                <form
+                  method="POST"
+                  action="{{ url_for(
+                    'data_source_decision',
+                    source_id=source.id,
+                    decision='Approved'
+                  ) }}"
+                  style="display:inline"
+                >
+
+                  <button
+                    type="submit"
+                    class="action-icon action-approve"
+                    onclick="return confirm(
+                      'Approve the latest clean transformed version?'
+                    );"
+                  >
+                    ✓ Approve
+                  </button>
+
+                </form>
+
+
+                <form
+                  method="POST"
+                  action="{{ url_for(
+                    'data_source_decision',
+                    source_id=source.id,
+                    decision='Rejected'
+                  ) }}"
+                  style="display:inline"
+                >
+
+                  <button
+                    type="submit"
+                    class="action-icon action-reject"
+                    onclick="return confirm(
+                      'Reject the latest clean transformed version?'
+                    );"
+                  >
+                    ✕ Reject
+                  </button>
+
+                </form>
+
+              {% else %}
+
+                <form
+                  method="POST"
+                  action="{{ url_for(
+                    'data_source_decision',
+                    source_id=source.id,
+                    decision='Approved'
+                  ) }}"
+                  style="display:inline"
+                >
+
+                  <button
+                    type="submit"
+                    class="action-icon action-approve"
+                    {% if source.version_status == 'Approved' %}
+                    disabled
+                    {% endif %}
+                  >
+                    ✓ Approve
+                  </button>
+
+                </form>
+
+
+                <form
+                  method="POST"
+                  action="{{ url_for(
+                    'data_source_decision',
+                    source_id=source.id,
+                    decision='Rejected'
+                  ) }}"
+                  style="display:inline"
+                >
+
+                  <button
+                    type="submit"
+                    class="action-icon action-reject"
+                    {% if source.version_status == 'Rejected' %}
+                    disabled
+                    {% endif %}
+                  >
+                    ✕ Reject
+                  </button>
+
+                </form>
 
               {% endif %}
 
@@ -717,13 +699,6 @@
       No data sources are currently awaiting approval.
     </b>
 
-    <div
-      class="muted"
-      style="margin-top:6px;"
-    >
-      Newly uploaded sources will appear here after validation.
-    </div>
-
   </div>
 
   {% endif %}
@@ -742,10 +717,8 @@
   </h3>
 
   <p class="muted">
-
-    All registered data sources and their current approval status.
-    Previous versions remain retained for auditability.
-
+    All registered data sources, their current version and their
+    transformation/approval status.
   </p>
 
 
@@ -759,45 +732,15 @@
 
         <tr>
 
-          <th>
-            Source
-          </th>
-
-          <th>
-            Reference
-          </th>
-
-          <th>
-            Type
-          </th>
-
-          <th>
-            Tax Type
-          </th>
-
-          <th>
-            Period
-          </th>
-
-          <th>
-            Version
-          </th>
-
-          <th>
-            Records
-          </th>
-
-          <th>
-            Status
-          </th>
-
-          <th>
-            Current Use
-          </th>
-
-          <th>
-            Action
-          </th>
+          <th>Source</th>
+          <th>Reference</th>
+          <th>Type</th>
+          <th>Tax Type</th>
+          <th>Period</th>
+          <th>Version</th>
+          <th>Records</th>
+          <th>Status</th>
+          <th>Actions</th>
 
         </tr>
 
@@ -808,9 +751,9 @@
 
         {% for source in rows %}
 
-        <tr>
+        {% set tr = transform_status.get(source.id) %}
 
-          <!-- SOURCE -->
+        <tr>
 
           <td>
 
@@ -829,47 +772,34 @@
           </td>
 
 
-          <!-- REFERENCE -->
-
           <td>
             {{ source.source_ref }}
           </td>
 
-
-          <!-- TYPE -->
 
           <td>
             {{ source.source_type or '—' }}
           </td>
 
 
-          <!-- TAX TYPE -->
-
           <td>
             {{ source.tax_type or 'General' }}
           </td>
 
-
-          <!-- PERIOD -->
 
           <td>
             {{ source.reporting_period or '—' }}
           </td>
 
 
-          <!-- VERSION -->
-
           <td>
             v{{ source.version_number or 1 }}
           </td>
 
 
-          <!-- RECORDS -->
-
           <td>
 
-            {% if source.record_count is defined
-                  and source.record_count is not none %}
+            {% if source.record_count is not none %}
 
               {{ "{:,}".format(source.record_count) }}
 
@@ -882,44 +812,45 @@
           </td>
 
 
-          <!-- STATUS -->
-
           <td>
 
-            {% set s =
-              source.version_status
-              or source.status
-              or 'Draft'
-            %}
+            {% if tr and tr.status in [
+              'Pending Approval',
+              'Created - Pending Approval'
+            ] %}
 
-            {% if s == 'Approved' %}
+              <span class="status status-pending">
+                Clean Version Pending Approval
+              </span>
+
+            {% elif tr and tr.status == 'Approved' %}
+
+              <span class="status status-approved">
+                Clean Version Approved
+              </span>
+
+            {% elif tr and tr.status == 'Rejected' %}
+
+              <span class="status status-rejected">
+                Clean Version Rejected
+              </span>
+
+            {% elif source.version_status == 'Approved' %}
 
               <span class="status status-approved">
                 Approved
               </span>
 
-            {% elif s == 'Rejected' %}
+            {% elif source.version_status == 'Rejected' %}
 
               <span class="status status-rejected">
                 Rejected
               </span>
 
-            {% elif s == 'Needs Revision' %}
-
-              <span class="status status-revision">
-                Needs Revision
-              </span>
-
-            {% elif s == 'Superseded' %}
-
-              <span class="status status-superseded">
-                Superseded
-              </span>
-
             {% else %}
 
-              <span class="status status-draft">
-                {{ s }}
+              <span class="status status-pending">
+                {{ source.version_status or 'Draft' }}
               </span>
 
             {% endif %}
@@ -927,55 +858,119 @@
           </td>
 
 
-          <!-- CURRENT USE -->
+          <!-- ====================================================
+               THREE MAIN ICONS
+          ==================================================== -->
 
           <td>
-
-            {% if s == 'Approved' %}
-
-              <span class="status status-approved">
-                Available to VTA
-              </span>
-
-            {% else %}
-
-              <span class="status status-draft">
-                Not Available
-              </span>
-
-            {% endif %}
-
-          </td>
-
-
-          <!-- ACTIONS -->
-
-          <td>
-
-            {% if source.id is defined %}
 
             <div class="actions">
 
-              <a
-                class="btn btn-secondary"
-                href="{{ url_for(
-                  'data_source_versions',
-                  source_id=source.id
-                ) }}"
-              >
-                Versions
-              </a>
-
+              <!-- TRANSFORM -->
 
               <a
-                class="btn btn-warning"
                 href="{{ url_for(
                   'data_source_transform',
                   source_id=source.id
                 ) }}"
+                class="action-icon action-transform"
+                title="Transform this data source"
               >
-                Transform Data
+                ↻ Transform
               </a>
+
+
+              <!-- APPROVE -->
+
+              <form
+                method="POST"
+                action="{{ url_for(
+                  'data_source_decision',
+                  source_id=source.id,
+                  decision='Approved'
+                ) }}"
+                style="display:inline"
+              >
+
+                <button
+                  type="submit"
+                  class="action-icon action-approve"
+                  {% if tr and tr.status == 'Approved' %}
+                  disabled
+                  {% endif %}
+                  onclick="return confirm(
+                    'Approve the latest available version of this data source?'
+                  );"
+                >
+                  ✓ Approve
+                </button>
+
+              </form>
+
+
+              <!-- REJECT -->
+
+              <form
+                method="POST"
+                action="{{ url_for(
+                  'data_source_decision',
+                  source_id=source.id,
+                  decision='Rejected'
+                ) }}"
+                style="display:inline"
+              >
+
+                <button
+                  type="submit"
+                  class="action-icon action-reject"
+                  {% if tr and tr.status == 'Rejected' %}
+                  disabled
+                  {% endif %}
+                  onclick="return confirm(
+                    'Reject the latest available version of this data source?'
+                  );"
+                >
+                  ✕ Reject
+                </button>
+
+              </form>
+
+
+              <!-- VERSIONS -->
+
+              <a
+                href="{{ url_for(
+                  'data_source_versions',
+                  source_id=source.id
+                ) }}"
+                class="action-icon action-version"
+                title="View source versions"
+              >
+                ◉ Versions
+              </a>
+
+            </div>
+
+
+            {% if tr and tr.status in [
+              'Pending Approval',
+              'Created - Pending Approval'
+            ] %}
+
+            <div class="pending-clean">
+
+              <b>Clean version awaiting approval</b>
+
+              <div class="muted small">
+
+                Run:
+                {{ tr.id }}
+
+                {% if tr.output_filename %}
+                · {{ tr.output_filename }}
+                {% endif %}
+
+              </div>
 
             </div>
 
@@ -1001,13 +996,6 @@
       No registered data sources yet.
     </b>
 
-    <div
-      class="muted"
-      style="margin-top:6px;"
-    >
-      Use the registration form above to upload the first data source.
-    </div>
-
   </div>
 
   {% endif %}
@@ -1016,264 +1004,108 @@
 
 
 <!-- ============================================================
-     STEP 2C CONTROL INFORMATION
+     STEP 2C CONTROL
 ============================================================ -->
 
 <div class="card section">
 
-  <h3 class="section-title">
+  <h3>
     Step 2C — Data Quality & Transformation
   </h3>
 
-  <p class="muted">
-
-    Data cleaning and transformation are controlled processes.
-    The original uploaded source is not overwritten.
-
-  </p>
-
-
   <div class="control-grid">
 
-
-    <!-- 1 -->
-
     <div class="control-card">
 
-      <div class="control-number">
-        STEP 1 — ORIGINAL SOURCE
+      <div class="control-card-title">
+        1. Original Data
       </div>
 
-      <div class="muted">
-
-        The original uploaded file is retained exactly as received.
-        It remains the source record for auditability.
-
-      </div>
-
-    </div>
-
-
-    <!-- 2 -->
-
-    <div class="control-card">
-
-      <div class="control-number">
-        STEP 2 — PROFILE & VALIDATE
-      </div>
-
-      <div class="muted">
-
-        The system checks columns, records, missing values,
-        duplicate structures and other initial quality indicators.
-
-      </div>
-
-    </div>
-
-
-    <!-- 3 -->
-
-    <div class="control-card">
-
-      <div class="control-number">
-        STEP 3 — TRANSFORM
-      </div>
-
-      <div class="muted">
-
-        Use the Transform Data workspace to apply controlled
-        operations such as trimming, renaming, filtering,
-        type conversion and duplicate handling.
-
-      </div>
-
-    </div>
-
-
-    <!-- 4 -->
-
-    <div class="control-card">
-
-      <div class="control-number">
-        STEP 4 — PREVIEW
-      </div>
-
-      <div class="muted">
-
-        Applied transformations are previewed before a clean
-        version is created.
-
-      </div>
-
-    </div>
-
-
-    <!-- 5 -->
-
-    <div class="control-card">
-
-      <div class="control-number">
-        STEP 5 — CLEAN VERSION
-      </div>
-
-      <div class="muted">
-
-        Applying the recipe creates a separate controlled clean
-        data file. The original source is not modified.
-
-      </div>
-
-    </div>
-
-
-    <!-- 6 -->
-
-    <div class="control-card">
-
-      <div class="control-number">
-        STEP 6 — APPROVAL
-      </div>
-
-      <div class="muted">
-
-        The clean version is intended to go through controlled
-        human approval before downstream VTA use.
-
-      </div>
-
-    </div>
-
-
-  </div>
-
-</div>
-
-
-<!-- ============================================================
-     DATA QUALITY PRINCIPLES
-============================================================ -->
-
-<div class="card section">
-
-  <h3 class="section-title">
-    Data Quality Principles
-  </h3>
-
-
-  <div class="grid">
-
-
-    <div class="card">
-
-      <div class="label">
-        Original Data
-      </div>
-
-      <div class="muted">
-
-        Original uploaded files are retained and are not silently
+      <div class="muted small">
+        The original uploaded file is retained and is never
         overwritten by transformations.
-
       </div>
 
     </div>
 
 
-    <div class="card">
+    <div class="control-card">
 
-      <div class="label">
-        Controlled Transformation
+      <div class="control-card-title">
+        2. Transform
       </div>
 
-      <div class="muted">
-
-        Each transformation is recorded as part of a transformation
-        recipe.
-
-      </div>
-
-    </div>
-
-
-    <div class="card">
-
-      <div class="label">
-        Exceptions
-      </div>
-
-      <div class="muted">
-
-        Suspicious or ambiguous records should be flagged rather than
-        silently discarded.
-
+      <div class="muted small">
+        Apply controlled transformations through the Transform Data
+        workspace.
       </div>
 
     </div>
 
 
-    <div class="card">
+    <div class="control-card">
 
-      <div class="label">
-        Traceability
+      <div class="control-card-title">
+        3. Applied Steps
       </div>
 
-      <div class="muted">
-
-        The system retains the relationship between the original
-        source and the generated clean version.
-
-      </div>
-
-    </div>
-
-
-    <div class="card">
-
-      <div class="label">
-        Human Control
-      </div>
-
-      <div class="muted">
-
-        Cleaning should not become an uncontrolled process that
-        changes the evidence used by the VTA.
-
+      <div class="muted small">
+        Every transformation is recorded individually and can be
+        edited or deleted.
       </div>
 
     </div>
 
 
-    <div class="card">
+    <div class="control-card">
 
-      <div class="label">
-        Downstream Use
+      <div class="control-card-title">
+        4. Clean Version
       </div>
 
-      <div class="muted">
-
-        Only data versions that satisfy the required approval
-        controls should become available to downstream VTA engines.
-
+      <div class="muted small">
+        Saving creates a separate clean data file.
       </div>
 
     </div>
 
+
+    <div class="control-card">
+
+      <div class="control-card-title">
+        5. Human Approval
+      </div>
+
+      <div class="muted small">
+        The clean version must be approved before downstream use.
+      </div>
+
+    </div>
+
+
+    <div class="control-card">
+
+      <div class="control-card-title">
+        6. Reject
+      </div>
+
+      <div class="muted small">
+        A reviewer can reject the clean version and return the source
+        to the transformation/review cycle.
+      </div>
+
+    </div>
 
   </div>
 
 </div>
 
-
-<!-- ============================================================
-     BACK TO DASHBOARD
-============================================================ -->
 
 <div style="margin-top:20px">
 
   <a
-    class="task"
     href="{{ url_for('tasks') }}"
+    class="task"
   >
 
     <div>
