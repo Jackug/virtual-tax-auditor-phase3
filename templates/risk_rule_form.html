@@ -1,0 +1,1115 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+    .rule-page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 25px;
+    }
+
+    .header {
+        margin-bottom: 22px;
+    }
+
+    .header h1 {
+        margin: 0;
+        color: #172033;
+        font-size: 28px;
+    }
+
+    .header p {
+        margin-top: 7px;
+        color: #667085;
+        font-size: 14px;
+    }
+
+    .back {
+        display: inline-block;
+        margin-bottom: 15px;
+        color: #1f4e78;
+        text-decoration: none;
+        font-size: 13px;
+    }
+
+    .card {
+        background: white;
+        border: 1px solid #e4e7ec;
+        border-radius: 9px;
+        padding: 22px;
+        margin-bottom: 18px;
+    }
+
+    .card h2 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        color: #172033;
+    }
+
+    .help {
+        color: #667085;
+        font-size: 12px;
+        margin-bottom: 18px;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    .full {
+        grid-column: 1 / -1;
+    }
+
+    label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #344054;
+        margin-bottom: 6px;
+    }
+
+    input,
+    select,
+    textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 11px;
+        border: 1px solid #d0d5dd;
+        border-radius: 6px;
+        font-size: 13px;
+        background: white;
+        color: #344054;
+    }
+
+    textarea {
+        min-height: 90px;
+        resize: vertical;
+    }
+
+    .logic-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+    }
+
+    .legal-item {
+        border: 1px solid #dfe3e8;
+        border-radius: 7px;
+        padding: 13px;
+        margin-bottom: 10px;
+        background: #fafbfc;
+    }
+
+    .legal-item label {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0;
+    }
+
+    .legal-item input[type="checkbox"] {
+        width: auto;
+        margin-top: 2px;
+    }
+
+    .legal-meta {
+        margin-top: 7px;
+        margin-left: 25px;
+        font-size: 11px;
+        color: #667085;
+    }
+
+    .request {
+        border: 1px solid #dfe3e8;
+        border-radius: 7px;
+        padding: 15px;
+        margin-bottom: 12px;
+        background: #fafbfc;
+        position: relative;
+    }
+
+    .remove-request {
+        position: absolute;
+        right: 12px;
+        top: 10px;
+        border: none;
+        background: none;
+        color: #b42318;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .request-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        padding-right: 65px;
+    }
+
+    .check-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 10px;
+    }
+
+    .check-row input {
+        width: auto;
+    }
+
+    .add-btn {
+        padding: 9px 14px;
+        border: 1px solid #1f4e78;
+        border-radius: 6px;
+        background: white;
+        color: #1f4e78;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .add-btn:hover {
+        background: #f4f8fb;
+    }
+
+    .exposure-grid,
+    .ranking-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .btn {
+        padding: 10px 17px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+    .btn-secondary {
+        border: 1px solid #d0d5dd;
+        background: white;
+        color: #344054;
+    }
+
+    .btn-primary {
+        border: 1px solid #1f4e78;
+        background: #1f4e78;
+        color: white;
+    }
+
+    .notice {
+        padding: 12px 14px;
+        border-radius: 6px;
+        background: #f8f9fb;
+        border: 1px solid #e4e7ec;
+        color: #475467;
+        font-size: 12px;
+        margin-top: 12px;
+    }
+
+    @media (max-width: 800px) {
+        .grid,
+        .logic-grid,
+        .exposure-grid,
+        .ranking-grid,
+        .request-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .full {
+            grid-column: auto;
+        }
+    }
+</style>
+
+
+<div class="rule-page">
+
+    <a href="{{ url_for('risk_rules') }}" class="back">
+        ← Back to Risk Rule Library
+    </a>
+
+    <div class="header">
+
+        <h1>
+            {% if rule %}
+                Edit Risk Rule
+            {% else %}
+                Create Risk Rule
+            {% endif %}
+        </h1>
+
+        <p>
+            Define a reusable business rule that the Virtual Tax Auditor
+            can use to identify taxpayer risks.
+        </p>
+
+    </div>
+
+
+    <form method="post">
+
+
+        <!-- ========================================================= -->
+        <!-- RULE DEFINITION -->
+        <!-- ========================================================= -->
+
+        <div class="card">
+
+            <h2>1. Rule Definition</h2>
+
+            <div class="help">
+                Define the business problem the rule is intended to detect.
+            </div>
+
+            <div class="grid">
+
+                <div>
+
+                    <label>
+                        Rule Name *
+                    </label>
+
+                    <input
+                        type="text"
+                        name="rule_name"
+                        required
+                        value="{{ rule['name'] if rule else '' }}"
+                        placeholder="e.g. Sales Understatement"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Risk Category *
+                    </label>
+
+                    <select
+                        name="risk_category"
+                        required
+                    >
+
+                        <option value="">
+                            Select Risk Category
+                        </option>
+
+                        {% for x in categories %}
+
+                            <option
+                                value="{{ x }}"
+                                {% if rule and (rule['risk_category'] or rule['category']) == x %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ x }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Tax Type
+                    </label>
+
+                    <select name="tax_type">
+
+                        {% for x in tax_types %}
+
+                            <option
+                                value="{{ x }}"
+                                {% if rule and rule['tax_type'] == x %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ x }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Taxpayer Scope
+                    </label>
+
+                    <input
+                        type="text"
+                        name="taxpayer_scope"
+                        value="{{ rule['taxpayer_scope'] if rule else '' }}"
+                        placeholder="e.g. VAT registered SMEs"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Applicable Period
+                    </label>
+
+                    <input
+                        type="text"
+                        name="applicable_period"
+                        value="{{ rule['applicable_period'] if rule else '' }}"
+                        placeholder="e.g. FY 2025/26"
+                    >
+
+                </div>
+
+
+                <div class="full">
+
+                    <label>
+                        Analyst Description / Natural Language
+                    </label>
+
+                    <textarea
+                        name="natural_language"
+                        placeholder="Describe what this rule is intended to detect."
+                    >{{ rule['natural_language'] if rule else '' }}</textarea>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ========================================================= -->
+        <!-- DETECTION LOGIC -->
+        <!-- ========================================================= -->
+
+        <div class="card">
+
+            <h2>2. Detection Logic</h2>
+
+            <div class="help">
+                The analyst defines the condition using controlled fields.
+                The Risk Engine executes the structured rule rather than
+                executing arbitrary Python code.
+            </div>
+
+            {% set d = rule['detection_logic_json']|fromjson if rule else {} %}
+
+            <div class="logic-grid">
+
+                <div>
+
+                    <label>
+                        Field 1 *
+                    </label>
+
+                    <input
+                        type="text"
+                        name="field_1"
+                        required
+                        value="{{ d.get('field_1', '') }}"
+                        placeholder="Observed Sales"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Operator *
+                    </label>
+
+                    <select
+                        name="operator"
+                        required
+                    >
+
+                        <option value="">
+                            Select Operator
+                        </option>
+
+                        {% for x in operators %}
+
+                            <option
+                                value="{{ x }}"
+                                {% if d.get('operator') == x %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ x }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Field 2
+                    </label>
+
+                    <input
+                        type="text"
+                        name="field_2"
+                        value="{{ d.get('field_2', '') }}"
+                        placeholder="Declared Sales"
+                    >
+
+                </div>
+
+            </div>
+
+
+            <div class="grid" style="margin-top:15px;">
+
+                <div>
+
+                    <label>
+                        Threshold
+                    </label>
+
+                    <input
+                        type="text"
+                        name="threshold"
+                        value="{{ d.get('threshold', '') }}"
+                        placeholder="e.g. 20%"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Minimum Exposure
+                    </label>
+
+                    <input
+                        type="number"
+                        step="any"
+                        name="minimum_exposure"
+                        value="{{ d.get('minimum_exposure', '') }}"
+                        placeholder="e.g. 10000000"
+                    >
+
+                </div>
+
+            </div>
+
+
+            <div class="notice">
+
+                Example:
+
+                <strong>
+                    Observed Sales > Declared Sales + 20%
+                </strong>
+
+                means the rule should identify taxpayers where the observed
+                sales exceed declared sales by the configured threshold.
+
+            </div>
+
+        </div>
+
+
+        <!-- ========================================================= -->
+        <!-- LEGAL BACKING -->
+        <!-- ========================================================= -->
+
+        <div class="card">
+
+            <h2>3. Legal Backing — Knowledge Base</h2>
+
+            <div class="help">
+                Select the approved Knowledge Base material that legally
+                supports this risk rule.
+            </div>
+
+            {% set selected = selected_basis|default([]) %}
+
+
+            {% for x in legal_basis %}
+
+                <div class="legal-item">
+
+                    <label>
+
+                        <input
+                            type="checkbox"
+                            name="legal_basis"
+                            value="{{ x['document_id'] }}"
+
+                            {% if x['document_id'] in selected %}
+                                checked
+                            {% endif %}
+                        >
+
+                        <span>
+
+                            {{ x['title'] }}
+
+                            —
+                            {{ x['document_ref'] }}
+
+                            —
+                            Version {{ x['version_number'] }}
+
+                        </span>
+
+                    </label>
+
+
+                    <div class="legal-meta">
+
+                        {{ x['category'] }}
+
+                        |
+
+                        {{ x['document_type'] }}
+
+                        |
+
+                        {{ x['tax_type'] or 'General' }}
+
+                        |
+
+                        {{ x['issuing_authority'] or 'Authority not specified' }}
+
+                    </div>
+
+                </div>
+
+            {% else %}
+
+                <div class="notice">
+
+                    No approved Knowledge Base documents are currently
+                    available for selection.
+
+                    A rule cannot be approved until appropriate legal
+                    backing has been attached.
+
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+
+        <!-- ========================================================= -->
+        <!-- INFORMATION REQUESTS -->
+        <!-- ========================================================= -->
+
+        <div class="card">
+
+            <h2>4. Information Requests</h2>
+
+            <div class="help">
+                Define the information or evidence that the auditor should
+                request when this risk rule is triggered.
+            </div>
+
+
+            <div id="requests">
+
+                {% for x in requests|default([]) %}
+
+                    <div class="request">
+
+                        <button
+                            type="button"
+                            class="remove-request"
+                            onclick="this.parentElement.remove()"
+                        >
+                            Remove
+                        </button>
+
+
+                        <div class="request-grid">
+
+                            <div>
+
+                                <label>
+                                    Request
+                                </label>
+
+                                <input
+                                    name="request_title"
+                                    value="{{ x['request_title'] }}"
+                                    placeholder="e.g. Sales Ledger"
+                                >
+
+                            </div>
+
+
+                            <div>
+
+                                <label>
+                                    Evidence Type
+                                </label>
+
+                                <input
+                                    name="request_evidence"
+                                    value="{{ x['evidence_type'] or '' }}"
+                                    placeholder="e.g. Excel / PDF / EFRIS"
+                                >
+
+                            </div>
+
+
+                            <div>
+
+                                <label>
+                                    Purpose
+                                </label>
+
+                                <input
+                                    name="request_purpose"
+                                    value="{{ x['purpose'] or '' }}"
+                                    placeholder="Why is this evidence required?"
+                                >
+
+                            </div>
+
+
+                            <div>
+
+                                <label>
+                                    Period
+                                </label>
+
+                                <input
+                                    name="request_period"
+                                    value="{{ x['period'] or '' }}"
+                                    placeholder="e.g. FY 2025/26"
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="check-row">
+
+                            <input
+                                type="hidden"
+                                name="request_mandatory"
+                                value="0"
+                            >
+
+                            <input
+                                type="checkbox"
+                                name="request_mandatory"
+                                value="1"
+                                {% if x['mandatory'] %}
+                                    checked
+                                {% endif %}
+                            >
+
+                            <span style="font-size:12px;">
+                                Mandatory evidence
+                            </span>
+
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+
+            <button
+                type="button"
+                class="add-btn"
+                onclick="addRequest()"
+            >
+                + Add Information Request
+            </button>
+
+        </div>
+
+
+        <!-- ========================================================= -->
+        <!-- REVENUE EXPOSURE -->
+        <!-- ========================================================= -->
+
+        <div class="card">
+
+            <h2>5. Revenue Exposure</h2>
+
+            <div class="help">
+                Define how potential revenue exposure should be estimated.
+                This is an estimated risk exposure and is not an established
+                tax liability.
+            </div>
+
+            {% set e = rule['exposure_config_json']|fromjson if rule else {} %}
+
+            <div class="exposure-grid">
+
+                <div>
+
+                    <label>
+                        Exposure Type
+                    </label>
+
+                    <select name="exposure_type">
+
+                        {% for x in exposure_types %}
+
+                            <option
+                                value="{{ x }}"
+                                {% if e.get('type') == x %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ x }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Rate
+                    </label>
+
+                    <input
+                        type="text"
+                        name="exposure_rate"
+                        value="{{ e.get('rate', '') }}"
+                        placeholder="e.g. 18%"
+                    >
+
+                </div>
+
+
+                <div style="grid-column:1/-1;">
+
+                    <label>
+                        Exposure Formula
+                    </label>
+
+                    <textarea
+                        name="exposure_formula"
+                        placeholder="e.g. Sales Variance × VAT Rate"
+                    >{{ e.get('formula', '') }}</textarea>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ========================================================= -->
+        <!-- RISK RANKING -->
+        <!-- ========================================================= -->
+
+        <div class="card">
+
+            <h2>6. Risk Ranking</h2>
+
+            <div class="help">
+                Configure the factors used to rank taxpayers when this rule
+                identifies a risk.
+            </div>
+
+            {% set rnk = rule['ranking_config_json']|fromjson if rule else {} %}
+
+            <div class="ranking-grid">
+
+                <div>
+
+                    <label>
+                        Base Score
+                    </label>
+
+                    <input
+                        type="number"
+                        step="any"
+                        name="base_score"
+                        value="{{ rnk.get('base_score', '0') }}"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Exposure Weight
+                    </label>
+
+                    <input
+                        type="number"
+                        step="any"
+                        name="exposure_weight"
+                        value="{{ rnk.get('exposure_weight', '0') }}"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Frequency Weight
+                    </label>
+
+                    <input
+                        type="number"
+                        step="any"
+                        name="frequency_weight"
+                        value="{{ rnk.get('frequency_weight', '0') }}"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Low Maximum
+                    </label>
+
+                    <input
+                        type="number"
+                        name="low_max"
+                        value="{{ rnk.get('low_max', '39') }}"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Medium Maximum
+                    </label>
+
+                    <input
+                        type="number"
+                        name="medium_max"
+                        value="{{ rnk.get('medium_max', '69') }}"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        High Maximum
+                    </label>
+
+                    <input
+                        type="number"
+                        name="high_max"
+                        value="{{ rnk.get('high_max', '89') }}"
+                    >
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Critical Minimum
+                    </label>
+
+                    <input
+                        type="number"
+                        name="critical_min"
+                        value="{{ rnk.get('critical_min', '90') }}"
+                    >
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ========================================================= -->
+        <!-- ACTIONS -->
+        <!-- ========================================================= -->
+
+        <div class="actions">
+
+            <a
+                href="{{ url_for('risk_rules') }}"
+                class="btn btn-secondary"
+            >
+                Cancel
+            </a>
+
+            <button
+                type="submit"
+                class="btn btn-primary"
+            >
+                {% if rule %}
+                    Save New Version as Draft
+                {% else %}
+                    Save Risk Rule as Draft
+                {% endif %}
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<script>
+
+function addRequest() {
+
+    const container =
+        document.getElementById("requests");
+
+
+    const request =
+        document.createElement("div");
+
+
+    request.className = "request";
+
+
+    request.innerHTML = `
+
+        <button
+            type="button"
+            class="remove-request"
+            onclick="this.parentElement.remove()"
+        >
+            Remove
+        </button>
+
+
+        <div class="request-grid">
+
+            <div>
+
+                <label>
+                    Request
+                </label>
+
+                <input
+                    name="request_title"
+                    placeholder="e.g. Sales Ledger"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Evidence Type
+                </label>
+
+                <input
+                    name="request_evidence"
+                    placeholder="e.g. Excel / PDF / EFRIS"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Purpose
+                </label>
+
+                <input
+                    name="request_purpose"
+                    placeholder="Why is this evidence required?"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Period
+                </label>
+
+                <input
+                    name="request_period"
+                    placeholder="e.g. FY 2025/26"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="check-row">
+
+            <input
+                type="hidden"
+                name="request_mandatory"
+                value="0"
+            >
+
+            <input
+                type="checkbox"
+                name="request_mandatory"
+                value="1"
+            >
+
+            <span style="font-size:12px;">
+                Mandatory evidence
+            </span>
+
+        </div>
+    `;
+
+
+    container.appendChild(request);
+
+}
+
+</script>
+
+{% endblock %}
