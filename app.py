@@ -1032,7 +1032,37 @@ def dashboard():
             for v in r.get(key) or []: out[v]=out.get(v,0)+1
         return sorted(out.items(),key=lambda x:(-x[1],x[0]))
     categories=counts_for('category_list'); tax_types=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
-    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
+    # Build the complete context expected by the Risk Command Centre template.
+    # Keep legacy dashboard variables as aliases so older template sections remain compatible.
+    taxpayers_analysed = c.execute('SELECT COUNT(*) FROM taxpayers').fetchone()[0] or 0
+    high_risk = c.execute("SELECT COUNT(*) FROM (SELECT taxpayer_id, MAX(id) AS latest_id FROM risk_assessments GROUP BY taxpayer_id) x JOIN risk_assessments ra ON ra.id=x.latest_id WHERE ra.band='High'").fetchone()[0] or 0
+    critical_risk = c.execute("SELECT COUNT(*) FROM (SELECT taxpayer_id, MAX(id) AS latest_id FROM risk_assessments GROUP BY taxpayer_id) x JOIN risk_assessments ra ON ra.id=x.latest_id WHERE ra.band='Critical'").fetchone()[0] or 0
+    in_audit = c.execute("SELECT COUNT(DISTINCT taxpayer_id) FROM audit_cases WHERE COALESCE(status,'') NOT IN ('Closed','Rejected')").fetchone()[0] or 0
+    pending_validation = c.execute("SELECT COUNT(*) FROM findings WHERE COALESCE(status,'AI Generated') NOT IN ('Human Validated','Rejected')").fetchone()[0] or 0
+    financial_years = [r[0] for r in c.execute("SELECT DISTINCT financial_year FROM taxpayers WHERE COALESCE(financial_year,'')<>'' ORDER BY financial_year DESC").fetchall()]
+    stations = [r[0] for r in c.execute("SELECT DISTINCT station FROM taxpayers WHERE COALESCE(station,'')<>'' ORDER BY station").fetchall()]
+    financial_year = request.args.get('financial_year','').strip()
+    tax_type = request.args.get('tax_type','').strip()
+    risk_distribution = [(label, sum(1 for r in rows if r.get('band') == label)) for label in ('Critical','High','Medium','Low')]
+    risk_distribution = [(label, count) for label, count in risk_distribution if count]
+    driver_rows = c.execute("SELECT COALESCE(rr.name,rd.description,'Unspecified risk') AS name, COALESCE(rr.category,'Uncategorised') AS category, COUNT(DISTINCT ra.taxpayer_id) AS n, SUM(COALESCE(ra.exposure,0)) AS exposure FROM risk_drivers rd JOIN risk_assessments ra ON ra.id=rd.assessment_id LEFT JOIN risk_rules rr ON rr.id=rd.rule_id GROUP BY COALESCE(rr.name,rd.description,'Unspecified risk'), COALESCE(rr.category,'Uncategorised') ORDER BY n DESC, exposure DESC LIMIT 8").fetchall()
+    top_drivers = [dict(r) for r in driver_rows]
+    validation_queue = {
+        'findings': c.execute("SELECT COUNT(*) FROM findings WHERE COALESCE(status,'AI Generated') NOT IN ('Human Validated','Rejected')").fetchone()[0] or 0,
+        'communications': c.execute("SELECT COUNT(*) FROM communications WHERE COALESCE(status,'') NOT IN ('Closed','Cancelled')").fetchone()[0] or 0,
+        'evidence': c.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] or 0
+    }
+    attention = rows
+    c.close()
+    return render_template('dashboard.html', rows=rows, total=total, open_count=open_count,
+        closed_count=closed_count, high=high, critical=critical, categories=categories,
+        tax_types=tax_types, station_counts=station_counts, stage_counts=stage_counts,
+        band=band, category=category, station=station, stage=stage, q=q,
+        taxpayers_analysed=taxpayers_analysed, high_risk=high_risk, critical_risk=critical_risk,
+        in_audit=in_audit, pending_validation=pending_validation, financial_years=financial_years,
+        financial_year=financial_year, tax_type=tax_type, stations=stations,
+        risk_distribution=risk_distribution, top_drivers=top_drivers,
+        validation_queue=validation_queue, attention=attention)
 
 @app.route('/risk/<int:assessment_id>')
 @login_required
