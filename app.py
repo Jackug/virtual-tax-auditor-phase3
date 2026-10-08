@@ -27,8 +27,10 @@ except Exception:
 
 try:
     from openpyxl import load_workbook
+    from openpyxl.styles import Alignment as OpenpyxlAlignment
 except Exception:
     load_workbook = None
+    OpenpyxlAlignment = None
 
 try:
     import xlrd
@@ -1437,7 +1439,18 @@ def data_sources():
     c=db()
     rows=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_errors,v.validation_warnings,v.version_status,v.uploaded_by,v.uploaded_at,v.approved_by,v.approved_at FROM data_sources d LEFT JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version ORDER BY d.id DESC").fetchall()
     pending=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_summary,v.validation_errors,v.validation_warnings,v.uploaded_at,v.uploaded_by FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft' ORDER BY d.id DESC").fetchall()
-    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES)
+    transform_rows=c.execute("""
+        SELECT r.*
+        FROM data_transform_runs r
+        JOIN (
+            SELECT source_id, MAX(id) AS max_id
+            FROM data_transform_runs
+            GROUP BY source_id
+        ) x ON x.max_id=r.id
+        ORDER BY r.id DESC
+    """).fetchall()
+    transform_status={row['source_id']: row for row in transform_rows}
+    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES,transform_status=transform_status)
 
 @app.route('/data-sources/register',methods=['POST'])
 @login_required
@@ -1531,6 +1544,33 @@ def transform_read_source(path):
 
 def transform_apply_step(df, step):
     operation=step.get('operation')
+
+    # Replace the column headers with a user-selected row.
+    # row_number is 1-based so that it matches the visible spreadsheet row number.
+    # The selected row becomes the header and all rows above it are removed.
+    if operation=='replace_headers_with_row':
+        try:
+            row_number=max(int(step.get('row_number',1) or 1),1)
+        except (TypeError,ValueError):
+            row_number=1
+        position=row_number-1
+        if position >= len(df):
+            return df
+        header_values=df.iloc[position].tolist()
+        new_columns=[]
+        used={}
+        for index,value in enumerate(header_values):
+            if pd.isna(value) or str(value).strip()=='':
+                base=f'Column{index+1}'
+            else:
+                base=str(value).strip()
+            # Ensure headers are unique because pandas columns must be addressable.
+            count=used.get(base,0)+1
+            used[base]=count
+            new_columns.append(base if count==1 else f'{base}_{count}')
+        result=df.iloc[position+1:].copy()
+        result.columns=new_columns
+        return result.reset_index(drop=True)
 
     if operation=='remove_columns':
         columns=step.get('columns',[])
@@ -1687,21 +1727,28 @@ def data_source_transform(source_id):
 
     if request.method=='POST':
         action=request.form.get('action','')
-        if action=='add_step':
+        if action in ('add_step','edit_step'):
             operation=request.form.get('operation','').strip()
             if not operation:
                 c.close(); flash('No transformation operation was selected.','error')
                 return redirect(url_for('data_source_transform',source_id=source_id))
             step={'operation':operation}
-            if operation in ('remove_columns','select_columns','remove_duplicates'):
+            if operation in ('remove_columns','select_columns','remove_duplicates','trim','alignment'):
                 step['columns']=request.form.getlist('columns')
-            elif operation=='trim':
-                step['columns']=request.form.getlist('columns') or ([request.form.get('column','')] if request.form.get('column','') else [])
+                if not step['columns'] and request.form.get('column',''):
+                    step['columns']=[request.form.get('column')]
+                if operation=='alignment':
+                    step['alignment']=request.form.get('alignment','left')
+            elif operation=='replace_headers_with_row':
+                try:
+                    step['row_number']=max(int(request.form.get('row_number','1') or 1),1)
+                except (TypeError,ValueError):
+                    step['row_number']=1
             elif operation=='rename_column':
                 step['old_name']=request.form.get('old_name','').strip(); step['new_name']=request.form.get('new_name','').strip()
             elif operation in ('remove_top_rows','remove_bottom_rows','keep_top_rows'):
                 try: step['count']=max(int(request.form.get('count',0) or 0),0)
-                except ValueError: step['count']=0
+                except (TypeError,ValueError): step['count']=0
             elif operation=='filter':
                 step['column']=request.form.get('column',''); step['operator']=request.form.get('operator','contains'); step['value']=request.form.get('value','')
             elif operation in ('replace_value','replace_text'):
@@ -1712,10 +1759,33 @@ def data_source_transform(source_id):
                 step['column']=request.form.get('column','')
             elif operation=='sort':
                 step['column']=request.form.get('column',''); step['direction']=request.form.get('direction','ascending')
-            steps.append(step)
+
+            if action=='edit_step':
+                try: idx=int(request.form.get('step_index','-1'))
+                except (TypeError,ValueError): idx=-1
+                if idx < 0 or idx >= len(steps):
+                    c.close(); flash('The selected transformation step could not be found.','error')
+                    return redirect(url_for('data_source_transform',source_id=source_id))
+                steps[idx]=step
+                event='DATA_TRANSFORM_STEP_EDITED'
+            else:
+                steps.append(step)
+                event='DATA_TRANSFORM_STEP_ADDED'
             c.execute('UPDATE data_transform_recipes SET steps_json=?,updated_at=? WHERE id=?',(json.dumps(steps),now(),recipe['id']))
             c.commit(); c.close()
-            log('DATA_TRANSFORM_STEP_ADDED',f"{source['source_ref']} v{version['version_number']}: {operation}")
+            log(event,f"{source['source_ref']} v{version['version_number']}: {operation}")
+            return redirect(url_for('data_source_transform',source_id=source_id))
+
+        if action=='delete_step':
+            try: idx=int(request.form.get('step_index','-1'))
+            except (TypeError,ValueError): idx=-1
+            if idx < 0 or idx >= len(steps):
+                c.close(); flash('The selected transformation step could not be found.','error')
+                return redirect(url_for('data_source_transform',source_id=source_id))
+            removed=steps.pop(idx)
+            c.execute('UPDATE data_transform_recipes SET steps_json=?,updated_at=? WHERE id=?',(json.dumps(steps),now(),recipe['id']))
+            c.commit(); c.close()
+            log('DATA_TRANSFORM_STEP_DELETED',f"{source['source_ref']} v{version['version_number']}: step={idx+1}; {removed.get('operation')}")
             return redirect(url_for('data_source_transform',source_id=source_id))
 
         if action=='undo':
@@ -1733,9 +1803,49 @@ def data_source_transform(source_id):
         if action=='save_recipe':
             recipe_name=request.form.get('recipe_name','').strip() or f"Transform {source['source_name']} v{version['version_number']}"
             c.execute("UPDATE data_transform_recipes SET recipe_name=?,status='Saved',updated_at=? WHERE id=?",(recipe_name,now(),recipe['id']))
-            c.commit(); c.close(); log('DATA_TRANSFORM_RECIPE_SAVED',f"{source['source_ref']} v{version['version_number']}: {recipe_name}")
-            flash('Transformation recipe saved.','success')
-            return redirect(url_for('data_source_transform',source_id=source_id))
+            c.commit(); c.close()
+
+            # Save means: save the recipe AND create the controlled clean version.
+            # The user is then returned to the main Data Sources page where the
+            # clean version can be Approved or Rejected. The original source is
+            # never overwritten.
+            try:
+                df=transform_read_source(source_path)
+                cleaned=transform_apply_recipe(df.copy(),steps)
+                target=UPLOAD/'data_sources'/'cleaned'; target.mkdir(parents=True,exist_ok=True)
+                stamp=datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
+                output_filename=f"{source['source_ref']}_v{version['version_number']}_CLEAN_{stamp}.xlsx"
+                output_path=target/output_filename
+                cleaned.to_excel(output_path,index=False)
+
+                alignment_steps=[step for step in steps if step.get('operation')=='alignment' and step.get('columns')]
+                if alignment_steps:
+                    if load_workbook is None or OpenpyxlAlignment is None:
+                        raise RuntimeError('Excel alignment requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
+                    wb=load_workbook(output_path)
+                    ws=wb.active
+                    header_map={str(cell.value):cell.column for cell in ws[1]}
+                    for step in alignment_steps:
+                        horizontal=step.get('alignment','left')
+                        for column_name in step.get('columns',[]):
+                            col_idx=header_map.get(str(column_name))
+                            if not col_idx: continue
+                            for row in ws.iter_rows(min_row=2,min_col=col_idx,max_col=col_idx):
+                                row[0].alignment=OpenpyxlAlignment(horizontal=horizontal,vertical='center')
+                    wb.save(output_path)
+
+                c=db()
+                c.execute('INSERT INTO data_transform_runs(recipe_id,source_id,version_number,output_filename,output_path,output_rows,output_columns,transformation_count,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(recipe['id'],source_id,version['version_number'],output_filename,str(output_path),len(cleaned),len(cleaned.columns),len(steps),'Pending Approval',email(),now()))
+                c.execute("UPDATE data_transform_recipes SET status='Applied',updated_at=? WHERE id=?",(now(),recipe['id']))
+                c.commit(); run_id=c.execute('SELECT last_insert_rowid()').fetchone()[0]; c.close()
+                log('DATA_TRANSFORM_RECIPE_SAVED',f"{source['source_ref']} v{version['version_number']}: {recipe_name}; clean_run={run_id}")
+                flash('Transformation saved and clean version created. It is now awaiting approval.','success')
+                return redirect(url_for('data_sources'))
+            except Exception as exc:
+                try: c.close()
+                except Exception: pass
+                flash(f'Transformation was saved, but the clean version could not be created: {exc}','error')
+                return redirect(url_for('data_source_transform',source_id=source_id))
 
         c.close()
 
@@ -1751,6 +1861,44 @@ def data_source_transform(source_id):
         return redirect(url_for('data_sources'))
 
     return render_template('data_transform.html',source=source,version=version,recipe=recipe,steps=steps,original_rows=original_rows,original_columns=original_columns,preview_rows=preview_rows,preview_columns=preview_columns,preview_records=preview_records)
+
+@app.route('/data-sources/<int:source_id>/decision/<decision>',methods=['POST'])
+@login_required
+def data_source_decision(source_id,decision):
+    if decision not in ('Approved','Rejected'):
+        flash('Invalid data-source decision.','error')
+        return redirect(url_for('data_sources'))
+    c=db()
+    src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
+    if not src:
+        c.close(); abort(404)
+
+    # Prefer the latest clean transformation run when one exists.
+    run=c.execute('SELECT * FROM data_transform_runs WHERE source_id=? ORDER BY id DESC LIMIT 1',(source_id,)).fetchone()
+    if run and run['status'] in ('Pending Approval','Created - Pending Approval'):
+        c.execute('UPDATE data_transform_runs SET status=? WHERE id=?',(decision,run['id']))
+        # A clean version is the controlled version used downstream. Keep the
+        # original uploaded source intact and record its source status separately.
+        c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',(decision,now(),source_id))
+        c.commit(); c.close()
+        log('DATA_TRANSFORM_REVIEWED',f"{src['source_ref']} clean run {run['id']}: {decision}")
+        flash(f"{src['source_ref']} clean version: {decision}.",'success')
+        return redirect(url_for('data_sources'))
+
+    # If no clean version is pending, retain the original source approval flow.
+    v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone()
+    if not v:
+        c.close(); abort(404)
+    if decision=='Approved' and v['validation_status']=='Failed':
+        c.close(); flash('This source cannot be approved because validation failed.','error')
+        return redirect(url_for('data_sources'))
+    c.execute('INSERT INTO data_source_reviews(source_id,version_number,decision,comments,reviewed_by,reviewed_at) VALUES(?,?,?,?,?,?)',(source_id,v['version_number'],decision,'Decision made from Data Sources action bar.',email(),now()))
+    c.execute('UPDATE data_source_versions SET version_status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,v['id']))
+    c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',(decision,now(),source_id))
+    c.commit(); c.close()
+    log('DATA_SOURCE_REVIEWED',f"{src['source_ref']} v{v['version_number']}: {decision}")
+    flash(f"{src['source_ref']} Version {v['version_number']}: {decision}.",'success')
+    return redirect(url_for('data_sources'))
 
 @app.route('/data-sources/<int:source_id>/transform/apply',methods=['POST'])
 @login_required
@@ -1776,6 +1924,26 @@ def data_source_transform_apply(source_id):
         output_filename=f"{source['source_ref']}_v{version['version_number']}_CLEAN_{stamp}.xlsx"
         output_path=target/output_filename
         cleaned.to_excel(output_path,index=False)
+
+        # Apply presentation-only alignment steps to the generated Excel file.
+        # These steps do not alter the underlying data values.
+        alignment_steps=[step for step in steps if step.get('operation')=='alignment' and step.get('columns')]
+        if alignment_steps:
+            if load_workbook is None or OpenpyxlAlignment is None:
+                raise RuntimeError('Excel alignment requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
+            wb=load_workbook(output_path)
+            ws=wb.active
+            header_map={str(cell.value):cell.column for cell in ws[1]}
+            for step in alignment_steps:
+                horizontal=step.get('alignment','left')
+                for column_name in step.get('columns',[]):
+                    col_idx=header_map.get(str(column_name))
+                    if not col_idx:
+                        continue
+                    for row in ws.iter_rows(min_row=2,min_col=col_idx,max_col=col_idx):
+                        row[0].alignment=OpenpyxlAlignment(horizontal=horizontal,vertical='center')
+            wb.save(output_path)
+
         c.execute('INSERT INTO data_transform_runs(recipe_id,source_id,version_number,output_filename,output_path,output_rows,output_columns,transformation_count,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(recipe['id'],source_id,version['version_number'],output_filename,str(output_path),len(cleaned),len(cleaned.columns),len(steps),'Created - Pending Approval',email(),now()))
         c.execute("UPDATE data_transform_recipes SET status='Applied',updated_at=? WHERE id=?",(now(),recipe['id']))
         c.commit(); run_id=c.execute('SELECT last_insert_rowid()').fetchone()[0]; c.close()
