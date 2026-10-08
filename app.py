@@ -1610,20 +1610,12 @@ def case_detail(cid):
     ).fetchone()
 
     # ---------------------------------------------------------
-    # Knowledge Base retrievals used by the AI analysis
-    #
-    # IMPORTANT:
-    # We join:
-    # knowledge_retrievals
-    #      -> knowledge_chunks
-    #      -> knowledge_documents
-    #      -> knowledge_document_versions
-    #
-    # and ONLY allow Approved versions.
+    # APPROVED KNOWLEDGE RETRIEVED FOR THIS ANALYSIS
     # ---------------------------------------------------------
     knowledge_retrievals = []
 
     if analysis:
+
         knowledge_retrievals = c.execute(
             '''
             SELECT
@@ -1670,40 +1662,35 @@ def case_detail(cid):
         ).fetchall()
 
     # ---------------------------------------------------------
-    # Clean methodology for display
+    # CLEAN METHODOLOGY
     #
-    # The current analysis record contains the retrieved KB
-    # text inside methodology. We do NOT want to display that
-    # huge block there anymore.
+    # Remove the large Knowledge Base text from Methodology.
+    # It remains available through the Legal Basis section.
     # ---------------------------------------------------------
     methodology_display = ''
 
     if analysis:
+
         methodology_display = analysis['methodology'] or ''
 
-        marker = (
-            'Approved Knowledge Base context retrieved for this analysis:'
-        )
-
-        if marker in methodology_display:
-            methodology_display = methodology_display.split(
-                marker,
-                1
-            )[0].strip()
-
-        # Handle the older wording as well.
-        marker2 = (
+        markers = [
+            'Approved Knowledge Base context retrieved for this analysis:',
             'Approved Knowledge Base context retrieved for this analysis'
-        )
+        ]
 
-        if marker2 in methodology_display:
-            methodology_display = methodology_display.split(
-                marker2,
-                1
-            )[0].strip()
+        for marker in markers:
+
+            if marker in methodology_display:
+
+                methodology_display = methodology_display.split(
+                    marker,
+                    1
+                )[0].strip()
+
+                break
 
     # ---------------------------------------------------------
-    # Workflow state
+    # WORKFLOW STATE
     # ---------------------------------------------------------
     open_actions = [
         a for a in acts
@@ -1729,10 +1716,10 @@ def case_detail(cid):
 
         analysis=analysis,
 
-        # Clean methodology shown to auditor
+        # Clean methodology
         methodology_display=methodology_display,
 
-        # Approved legal material retrieved by AI
+        # Approved legal material
         knowledge_retrievals=knowledge_retrievals,
 
         findings=findings,
