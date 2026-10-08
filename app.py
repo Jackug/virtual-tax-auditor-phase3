@@ -1625,14 +1625,6 @@ def data_source_clean_approve(source_id):
     if not clean: c.close(); flash('No controlled clean version exists.','error'); return redirect(url_for('data_sources')+'#source-'+str(source_id))
     c.execute('UPDATE data_source_cleaned_versions SET status=?,review_comments=?,approved_by=?,approved_at=? WHERE id=?',(decision,comments,email(),now() if decision=='Approved' else None,clean['id'])); c.commit(); c.close(); log('DATA_SOURCE_CLEAN_VERSION_REVIEWED',f'{src["source_ref"]}: clean version {clean["cleaned_version"]} {decision}; {comments}'); flash(f'Clean version {clean["cleaned_version"]}: {decision}.','success'); return redirect(url_for('data_sources')+'#source-'+str(source_id))
 
-@app.route('/data-sources')
-@login_required
-def data_sources():
-    c=db()
-    rows=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_errors,v.validation_warnings,v.version_status,v.uploaded_by,v.uploaded_at,v.approved_by,v.approved_at FROM data_sources d LEFT JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version ORDER BY d.id DESC").fetchall()
-    pending=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_summary,v.validation_errors,v.validation_warnings,v.uploaded_at,v.uploaded_by FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft' ORDER BY d.id DESC").fetchall()
-    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES)
-
 @app.route('/data-sources/register',methods=['POST'])
 @login_required
 def data_source_register():
