@@ -1043,12 +1043,61 @@ def risk_detail(assessment_id):
     case=c.execute('SELECT * FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1',(risk['taxpayer_id'],)).fetchone(); findings=c.execute('SELECT * FROM findings WHERE case_id=? ORDER BY id',(case['id'],)).fetchall() if case else []
     c.close(); return render_template('risk_detail.html',risk=risk,drivers=drivers,case=case,findings=findings)
 
-@app.route('/risk/<int:assessment_id>/execute',methods=['POST'])
+@app.route('/risk/<int:assessment_id>/execute',methods=['GET','POST'])
 @login_required
 def execute_risk(assessment_id):
-    c=db(); risk=c.execute('SELECT * FROM risk_assessments WHERE id=?',(assessment_id,)).fetchone(); c.close()
-    if not risk: abort(404)
-    return redirect(url_for('case_detail',cid=case_for(risk['taxpayer_id'])))
+    c=db()
+    risk=c.execute("SELECT ra.*,t.name taxpayer_name,t.tin,t.sector,t.station,t.financial_year,t.status taxpayer_status FROM risk_assessments ra JOIN taxpayers t ON t.id=ra.taxpayer_id WHERE ra.id=?",(assessment_id,)).fetchone()
+    if not risk:
+        c.close(); abort(404)
+
+    drivers=c.execute("SELECT rd.*,rr.name rule_name,rr.natural_language,rr.category rule_category,COALESCE(rv.risk_category,rr.category) risk_category,rv.tax_type,rv.version_number rule_version,rv.status rule_version_status,rv.legal_basis_json,rv.execution_plan_json FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=? ORDER BY rd.id",(assessment_id,)).fetchall()
+
+    case=c.execute('SELECT * FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1',(risk['taxpayer_id'],)).fetchone()
+
+    if request.method=='POST':
+        decision=request.form.get('decision','').strip().upper()
+        reason=request.form.get('reason','').strip()
+        if decision not in ('APPROVE','REJECT'):
+            c.close(); flash('Select Approve or Reject before continuing.','error')
+            return redirect(url_for('execute_risk',assessment_id=assessment_id))
+        if not reason:
+            c.close(); flash('A review reason is required before the risk decision is recorded.','error')
+            return redirect(url_for('execute_risk',assessment_id=assessment_id))
+
+        cid=case['id'] if case else case_for(risk['taxpayer_id'])
+        case=c.execute('SELECT * FROM audit_cases WHERE id=?',(cid,)).fetchone()
+        if decision=='APPROVE':
+            status='Execution Approved - Pending AI Analysis'
+            event='RISK_EXECUTION_APPROVED'
+            detail=f'Risk assessment {assessment_id} approved for controlled audit execution. Reason: {reason}'
+        else:
+            status='Rejected'
+            event='RISK_EXECUTION_REJECTED'
+            detail=f'Risk assessment {assessment_id} rejected at execution review. Reason: {reason}'
+        c.execute('UPDATE audit_cases SET status=?,updated_at=? WHERE id=?',(status,now(),cid))
+        c.commit(); case_ref=case['case_ref']; c.close()
+        log(event,detail,case_ref)
+        flash('Risk execution decision recorded.','success')
+        return redirect(url_for('execute_risk',assessment_id=assessment_id))
+
+    case=c.execute('SELECT * FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1',(risk['taxpayer_id'],)).fetchone()
+    analysis=c.execute('SELECT * FROM audit_analyses WHERE case_id=? ORDER BY id DESC LIMIT 1',(case['id'],)).fetchone() if case else None
+    findings=c.execute('SELECT * FROM findings WHERE case_id=? ORDER BY id',(case['id'],)).fetchall() if case else []
+
+    legal=[]
+    for d in drivers:
+        if d['rule_version']:
+            rows=c.execute("SELECT rlb.*,kd.document_ref,kd.title,kd.category FROM risk_rule_legal_basis rlb JOIN knowledge_documents kd ON kd.id=rlb.document_id WHERE rlb.rule_id=(SELECT rule_id FROM risk_drivers WHERE id=?) AND rlb.version_number=? ORDER BY rlb.id",(d['id'],d['rule_version'])).fetchall()
+            legal.extend(rows)
+    seen=set(); legal_unique=[]
+    for item in legal:
+        key=(item['document_ref'],item['version_number'],item['chunk_id'],item['legal_passage'])
+        if key not in seen:
+            seen.add(key); legal_unique.append(item)
+
+    c.close()
+    return render_template('risk_execution.html',risk=risk,drivers=drivers,case=case,analysis=analysis,findings=findings,legal_basis=legal_unique)
 
 @app.route('/tasks')
 @login_required
