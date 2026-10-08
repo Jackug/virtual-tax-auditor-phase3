@@ -283,12 +283,6 @@ CREATE INDEX IF NOT EXISTS idx_rule_run_results_tin ON risk_rule_run_results(tax
         CREATE INDEX IF NOT EXISTS idx_rule_run_results_tin ON risk_rule_run_results(taxpayer_tin);
     ''')
 
-    # Business Risk Logic Stage 6: retain rule/taxpayer explanations in the Risk Universe.
-    driver_cols={row['name'] for row in c.execute('PRAGMA table_info(risk_drivers)').fetchall()}
-    driver_additions={'rule_explanation':'TEXT','taxpayer_explanation':'TEXT','detection_logic':'TEXT','conditions_satisfied':'TEXT','evidence_json':"TEXT DEFAULT '{}'"}
-    for col,definition in driver_additions.items():
-        if col not in driver_cols: c.execute(f'ALTER TABLE risk_drivers ADD COLUMN {col} {definition}')
-
     # Step 3B migration: execution-plan governance and preview results.
     rule_version_cols={row['name'] for row in c.execute('PRAGMA table_info(risk_rule_versions)').fetchall()}
     rule_version_additions={'execution_plan_json':"TEXT DEFAULT '{}'",'generated_natural_language':'TEXT','preview_summary_json':"TEXT DEFAULT '{}'",'preview_status':"TEXT DEFAULT 'Not Run'",'preview_run_at':'TEXT','preview_approved':'INTEGER DEFAULT 0'}
@@ -365,44 +359,48 @@ def _rule_exposure_from_row(row, plan):
     return minimum or 0.0
 
 def _execute_approved_rule_for_engine(c, rule, version, plan):
-    # Production execution is always full-data; the five-record limit applies only to preview UI.
-    summary=_execute_rule_plan(c,plan,sample_only=None,return_records=True)
+    summary=_execute_rule_plan(c,plan,sample_only=5,return_records=True)
     run_stamp=now()
     c.execute('INSERT INTO risk_rule_runs(rule_id,version_number,run_status,records_evaluated,records_triggered,total_exposure,executed_at,executed_by) VALUES(?,?,?,?,?,?,?,?)',
               (rule['id'],version['version_number'],'Completed',summary['records_evaluated'],summary['records_triggered'],summary['total_exposure'],run_stamp,email()))
     run_id=c.execute('SELECT last_insert_rowid()').fetchone()[0]
-    result=summary.get('_result_frame'); source_rows=summary.get('_source_rows',{})
+    result=summary.get('_result_frame')
+    source_rows=summary.get('_source_rows',{})
     if result is None or len(result)==0:
         return {'run_id':run_id,'triggered_tins':set(),'summary':summary}
-    mappings={int(x['source_id']):x for x in plan.get('identity_mappings',[]) or []}
-    base_id=int(plan['base_source']['source_id']); base_map=mappings.get(base_id,{})
-    tin_key=_field_key(base_id,base_map.get('tin_field')) if base_map.get('tin_field') else None
-    name_key=_field_key(base_id,base_map.get('name_field')) if base_map.get('name_field') else None
+    # Identify a TIN from any source participating in the rule.
+    tin_series=None
+    for sid,srcrow in source_rows.items():
+        dfcols=summary.get('_loaded_original_columns',{}).get(int(sid),[])
+        tin_col=None
+        for col in dfcols:
+            if _normalise_header(col) in {'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno','taxpayeridentificationnumbertin'}:
+                tin_col=col; break
+        if tin_col:
+            key=_field_key(int(sid),tin_col)
+            if key in result.columns:
+                tin_series=result[key]
+                break
     triggered_tins=set()
-    source_map={str(x['id']):x for x in plan.get('sources',[])}
-    condition_texts=[_condition_label(x,source_map) for x in plan.get('conditions',[]) or []]
-    risk_name=plan.get('result',{}).get('risk_description','Potential Risk')
-    for idx in result.index:
-        if not tin_key or tin_key not in result.columns: continue
-        tin=_clean_value(result.loc[idx,tin_key])
-        if tin is None or str(tin).strip()=='': continue
-        tin=str(tin).strip(); exposure=_clean_value(result.loc[idx,'__exposure__']) if '__exposure__' in result.columns else 0
-        try: exposure=float(exposure or 0)
-        except Exception: exposure=0.0
-        obj={}
-        for col in result.columns[:50]:
-            if col=='__exposure__': continue
-            try: obj[col]=_clean_value(result.loc[idx,col])
-            except Exception: pass
-        taxpayer_name=_clean_value(result.loc[idx,name_key]) if name_key and name_key in result.columns else None
-        explanation=_taxpayer_explanation(rule['name'],risk_name,obj,condition_texts,exposure)
-        obj.update({'TIN':tin,'Taxpayer Name':taxpayer_name,'Risk Name':rule['name'],'Risk Category':rule['risk_category'] if 'risk_category' in rule.keys() and rule['risk_category'] else rule['category'],
-                    'Tax Type':rule['tax_type'] if 'tax_type' in rule.keys() else None,'Detection Logic in Words':summary.get('detection_logic_words'),
-                    'Conditions Satisfied':condition_texts,'Taxpayer Risk Explanation':explanation})
-        c.execute('INSERT INTO risk_rule_run_results(run_id,rule_id,version_number,taxpayer_tin,exposure,result_json,created_at) VALUES(?,?,?,?,?,?,?)',
-                  (run_id,rule['id'],version['version_number'],tin,exposure,json.dumps(obj,default=str,ensure_ascii=False),run_stamp))
-        triggered_tins.add(tin)
-    summary['production_explanations']=True
+    if tin_series is not None:
+        exposure_series=result.get('__exposure__')
+        for idx in result.index:
+            tin=_clean_value(tin_series.loc[idx])
+            if tin is None or str(tin).strip()=='':
+                continue
+            tin=str(tin).strip()
+            exposure=_clean_value(exposure_series.loc[idx]) if exposure_series is not None else 0
+            try: exposure=float(exposure or 0)
+            except Exception: exposure=0.0
+            obj={}
+            # Store a compact auditable row from preview fields / result columns.
+            for col in result.columns[:30]:
+                if col=='__exposure__': continue
+                try: obj[col]=_clean_value(result.loc[idx,col])
+                except Exception: pass
+            c.execute('INSERT INTO risk_rule_run_results(run_id,rule_id,version_number,taxpayer_tin,exposure,result_json,created_at) VALUES(?,?,?,?,?,?,?)',
+                      (run_id,rule['id'],version['version_number'],tin,exposure,json.dumps(obj,default=str,ensure_ascii=False),run_stamp))
+            triggered_tins.add(tin)
     return {'run_id':run_id,'triggered_tins':triggered_tins,'summary':summary}
 
 def _refresh_risk_universe_from_active_rules(c):
@@ -447,17 +445,10 @@ def _refresh_risk_universe_from_active_rules(c):
         score=min(100.0,score)
         band=_risk_band(score)
         exposure=sum(x[1] for x in exposures)
-        c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',(taxpayer['id'],score,band,exposure,now(),RULE_ENGINE_VERSION))
+        c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',(taxpayer['id'],score,band,exposure,now(),'Phase-3-Risk-Engine-Rule-Library-1.0'))
         aid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
         for rule,exp,pct,desc in exposures:
-            rrrows=c.execute('SELECT result_json FROM risk_rule_run_results WHERE run_id=? AND taxpayer_tin=? ORDER BY id DESC LIMIT 1',(run_id,tin)).fetchall()
-            detail=_json_or_default(rrrows[0]['result_json'],{}) if rrrows else {}
-            explanation=detail.get('Taxpayer Risk Explanation') or f"{desc}: approved rule triggered for TIN {tin}; estimated exposure UGX {exp:,.0f}."
-            detection=detail.get('Detection Logic in Words') or rule['natural_language'] if 'natural_language' in rule.keys() and rule['natural_language'] else desc
-            conditions=json.dumps(detail.get('Conditions Satisfied',[]),ensure_ascii=False)
-            evidence=json.dumps(detail,default=str,ensure_ascii=False)
-            c.execute('INSERT INTO risk_drivers(assessment_id,rule_id,description,variance,variance_pct,rule_explanation,taxpayer_explanation,detection_logic,conditions_satisfied,evidence_json) VALUES(?,?,?,?,?,?,?,?,?,?)',
-                      (aid,rule['id'],f"{desc}: {explanation}",exp,pct,rule['natural_language'] if 'natural_language' in rule.keys() and rule['natural_language'] else desc,explanation,detection,conditions,evidence))
+            c.execute('INSERT INTO risk_drivers(assessment_id,rule_id,description,variance,variance_pct) VALUES(?,?,?,?,?)',(aid,rule['id'],f"{desc}: approved rule triggered for TIN {tin}; estimated exposure UGX {exp:,.0f}.",exp,pct))
         count+=1
     return count
 
@@ -958,7 +949,7 @@ def run_analysis(cid):
 def ai_draft(f): return f'''Dear Taxpayer,\n\nDuring a review of your records for {f["financial_year"]}, a reconciliation issue requiring clarification was identified.\n\nIssue: {f["description"]}\nExpected/declared value: UGX {f["expected_value"]:,.0f}\nObserved value: UGX {f["observed_value"]:,.0f}\nVariance: UGX {f["variance"]:,.0f} ({f["variance_pct"]:.2f}%)\n\nPlease explain the difference and provide supporting records. This is a request for clarification and is not a final finding of non-compliance.\n\nRegards,\nVirtual Tax Auditor'''
 
 @app.route('/')
-def index(): return redirect(url_for('tasks' if email() else 'login'))
+def index(): return redirect(url_for('dashboard' if email() else 'login'))
 @app.route('/login')
 def login(): return render_template('login.html')
 @app.route('/authorize')
@@ -989,7 +980,7 @@ def callback():
             return redirect(url_for('send_comm', mid=pending_mid))
 
         log('LOGIN', 'Google OAuth login successful', actor=e)
-        return redirect(url_for('tasks'))
+        return redirect(url_for('dashboard'))
     except Exception as ex:
         session.pop('oauth_state', None)
         session.pop('oauth_code_verifier', None)
@@ -1000,187 +991,68 @@ def logout(): session.clear(); return redirect(url_for('login'))
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Risk Command Centre dashboard."""
-    c = db()
-    financial_year = request.args.get('financial_year', '').strip()
-    tax_type = request.args.get('tax_type', '').strip()
-    station = request.args.get('station', '').strip()
-    band = request.args.get('band', '').strip()
-    q = request.args.get('q', '').strip()
-
-    latest = "ra.id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id)"
-    params = []
-    where = [latest]
-    if financial_year:
-        where.append('t.financial_year=?')
-        params.append(financial_year)
-    if station:
-        where.append('t.station=?')
-        params.append(station)
-    if band:
-        where.append('ra.band=?')
-        params.append(band)
-    if q:
-        like = '%' + q + '%'
-        where.append('(t.tin LIKE ? OR t.name LIKE ? OR t.sector LIKE ? OR t.station LIKE ?)')
-        params.extend([like, like, like, like])
-    if tax_type:
-        where.append("""EXISTS (
-            SELECT 1
-            FROM risk_drivers rd2
-            JOIN risk_rules rr2 ON rr2.id=rd2.rule_id
-            LEFT JOIN risk_rule_versions rv2
-              ON rv2.rule_id=rr2.id AND rv2.version_number=rr2.version_number
-            WHERE rd2.assessment_id=ra.id
-              AND COALESCE(rv2.tax_type,rr2.tax_type)=?
-        )""")
-        params.append(tax_type)
-
-    filtered = ' AND '.join(where)
-    base_filters = [x for x in where if x != latest]
-    base_filter_sql = ' AND '.join(base_filters) if base_filters else '1=1'
-
-    financial_years = [r[0] for r in c.execute(
-        "SELECT DISTINCT financial_year FROM taxpayers WHERE financial_year IS NOT NULL AND TRIM(financial_year)<>'' ORDER BY financial_year DESC"
-    ).fetchall()]
-    stations = [r[0] for r in c.execute(
-        "SELECT DISTINCT station FROM taxpayers WHERE station IS NOT NULL AND TRIM(station)<>'' ORDER BY station"
-    ).fetchall()]
-    tax_types = [r[0] for r in c.execute("""
-        SELECT DISTINCT tax_type FROM (
-            SELECT tax_type FROM risk_rules WHERE tax_type IS NOT NULL AND TRIM(tax_type)<>''
-            UNION
-            SELECT tax_type FROM risk_rule_versions WHERE tax_type IS NOT NULL AND TRIM(tax_type)<>''
-        ) ORDER BY tax_type
-    """).fetchall()]
-
-    taxpayers_analysed = c.execute(
-        f'''SELECT COUNT(*) FROM taxpayers t JOIN risk_assessments ra ON ra.taxpayer_id=t.id WHERE {filtered}''',
-        params
-    ).fetchone()[0]
-    high_risk = c.execute(
-        f'''SELECT COUNT(*) FROM taxpayers t JOIN risk_assessments ra ON ra.taxpayer_id=t.id WHERE {filtered} AND ra.band='High' ''',
-        params
-    ).fetchone()[0]
-    critical_risk = c.execute(
-        f'''SELECT COUNT(*) FROM taxpayers t JOIN risk_assessments ra ON ra.taxpayer_id=t.id WHERE {filtered} AND ra.band='Critical' ''',
-        params
-    ).fetchone()[0]
-
-    in_audit = c.execute(f'''
-        SELECT COUNT(DISTINCT ac.taxpayer_id)
-        FROM audit_cases ac
-        JOIN taxpayers t ON t.id=ac.taxpayer_id
-        JOIN risk_assessments ra ON ra.taxpayer_id=t.id AND {latest}
-        WHERE ac.status NOT IN ('Closed','Rejected')
-          AND {base_filter_sql}
-    ''', params).fetchone()[0]
-
-    pending_validation = c.execute(f'''
-        SELECT COUNT(DISTINCT ac.taxpayer_id)
-        FROM findings f
-        JOIN audit_cases ac ON ac.id=f.case_id
-        JOIN taxpayers t ON t.id=ac.taxpayer_id
-        JOIN risk_assessments ra ON ra.taxpayer_id=t.id AND {latest}
-        WHERE f.status='AI Generated'
-          AND {base_filter_sql}
-    ''', params).fetchone()[0]
-
-    dist_rows = c.execute(f'''
-        SELECT ra.band, COUNT(*) n
+    band=request.args.get('band','').strip(); category=request.args.get('category','').strip(); station=request.args.get('station','').strip(); stage=request.args.get('stage','').strip(); q=request.args.get('q','').strip()
+    c=db()
+    sql="""
+        SELECT ra.id assessment_id,ra.taxpayer_id,ra.score,ra.band,ra.exposure,ra.assessed_at,ra.engine_version,
+               t.tin,t.name taxpayer_name,t.sector,t.station,t.financial_year,
+               (SELECT ac.id FROM audit_cases ac WHERE ac.taxpayer_id=t.id ORDER BY ac.id DESC LIMIT 1) case_id,
+               COALESCE((SELECT ac.status FROM audit_cases ac WHERE ac.taxpayer_id=t.id ORDER BY ac.id DESC LIMIT 1),'Detected') case_status,
+               COALESCE((SELECT GROUP_CONCAT(DISTINCT COALESCE(rv.risk_category,rr.category)) FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=ra.id),'Uncategorised') categories,
+               COALESCE((SELECT GROUP_CONCAT(DISTINCT COALESCE(rv.tax_type,'General')) FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=ra.id),'General') tax_types,
+               (SELECT GROUP_CONCAT(description,' | ') FROM risk_drivers WHERE assessment_id=ra.id) drivers
         FROM taxpayers t JOIN risk_assessments ra ON ra.taxpayer_id=t.id
-        WHERE {filtered}
-        GROUP BY ra.band
-    ''', params).fetchall()
-    dist_map = {str(r['band'] or 'Unclassified'): int(r['n']) for r in dist_rows}
-    risk_distribution = [(b, dist_map.get(b, 0)) for b in ('Critical','High','Medium','Low')]
+        WHERE ra.id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id)
+    """
+    params=[]
+    if band in ('Low','Medium','High','Critical'): sql+=' AND ra.band=?'; params.append(band)
+    if category:
+        sql+=""" AND EXISTS (SELECT 1 FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=ra.id AND LOWER(COALESCE(rv.risk_category,rr.category,''))=LOWER(?))"""; params.append(category)
+    if station: sql+=' AND COALESCE(t.station,\'\')=?'; params.append(station)
+    if q: sql+=' AND (t.tin LIKE ? OR t.name LIKE ? OR t.sector LIKE ? OR t.station LIKE ?)'; like='%'+q+'%'; params += [like]*4
+    sql+=" ORDER BY CASE ra.band WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,ra.score DESC,ra.exposure DESC"
+    rows=[dict(r) for r in c.execute(sql,params).fetchall()]
+    def stage_for(status):
+        status=(status or 'Detected').strip()
+        if status in ('Closed','Rejected') or status.startswith('Closed'): return 'Closed'
+        if status in ('Selected for Virtual Audit','AI Analysis Completed'): return 'Review'
+        if 'Finding' in status or status=='Needs Review': return 'Human Review'
+        if 'Communication' in status or 'Sent' in status: return 'Communication'
+        if 'Response' in status: return 'Client Response'
+        if 'Further Action' in status or 'More Evidence' in status: return 'Further Action'
+        if 'Outcome' in status: return 'Final Decision'
+        return 'Open'
+    for r in rows:
+        r['stage']=stage_for(r['case_status']); r['open']=r['stage']!='Closed'; r['category_list']=[x.strip() for x in (r.get('categories') or 'Uncategorised').split(',') if x.strip()]; r['tax_type_list']=[x.strip() for x in (r.get('tax_types') or 'General').split(',') if x.strip()]
+    if stage in ('Open','Closed','Review','Human Review','Communication','Client Response','Further Action','Final Decision'): rows=[r for r in rows if r['stage']==stage]
+    total=len(rows); open_count=sum(r['open'] for r in rows); closed_count=total-open_count; high=sum(1 for r in rows if r['band']=='High'); critical=sum(1 for r in rows if r['band']=='Critical')
+    def counts_for(key):
+        out={}
+        for r in rows:
+            for v in r.get(key) or []: out[v]=out.get(v,0)+1
+        return sorted(out.items(),key=lambda x:(-x[1],x[0]))
+    categories=counts_for('category_list'); tax_types=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
+    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
 
-    driver_rows = c.execute(f'''
-        SELECT rr.name,
-               COALESCE(rr.risk_category,rr.category,'Unclassified') category,
-               COUNT(DISTINCT ra.taxpayer_id) n,
-               COALESCE(SUM(CASE WHEN rd.variance IS NOT NULL THEN rd.variance ELSE 0 END),0) exposure
-        FROM risk_drivers rd
-        JOIN risk_assessments ra ON ra.id=rd.assessment_id
-        JOIN taxpayers t ON t.id=ra.taxpayer_id
-        JOIN risk_rules rr ON rr.id=rd.rule_id
-        WHERE {filtered}
-        GROUP BY rr.id,rr.name,COALESCE(rr.risk_category,rr.category,'Unclassified')
-        ORDER BY n DESC, exposure DESC
-        LIMIT 10
-    ''', params).fetchall()
-    top_drivers = [dict(r) for r in driver_rows]
+@app.route('/risk/<int:assessment_id>')
+@login_required
+def risk_detail(assessment_id):
+    c=db(); risk=c.execute('SELECT ra.*,t.name taxpayer_name,t.tin,t.sector,t.station,t.financial_year,t.status taxpayer_status FROM risk_assessments ra JOIN taxpayers t ON t.id=ra.taxpayer_id WHERE ra.id=?',(assessment_id,)).fetchone()
+    if not risk: c.close(); abort(404)
+    drivers=c.execute("""SELECT rd.*,rr.name rule_name,rr.natural_language,rr.category rule_category,COALESCE(rv.risk_category,rr.category) risk_category,rv.tax_type,rv.version_number rule_version,rv.status rule_version_status FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=? ORDER BY rd.id""",(assessment_id,)).fetchall()
+    case=c.execute('SELECT * FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1',(risk['taxpayer_id'],)).fetchone(); findings=c.execute('SELECT * FROM findings WHERE case_id=? ORDER BY id',(case['id'],)).fetchall() if case else []
+    c.close(); return render_template('risk_detail.html',risk=risk,drivers=drivers,case=case,findings=findings)
 
-    attention_rows = c.execute(f'''
-        SELECT t.id taxpayer_id,t.tin,t.name taxpayer_name,t.sector,
-               ra.score,ra.band,ra.exposure,ra.assessed_at
-        FROM taxpayers t
-        JOIN risk_assessments ra ON ra.taxpayer_id=t.id
-        WHERE {filtered}
-        ORDER BY CASE ra.band WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,
-                 ra.score DESC,ra.exposure DESC
-        LIMIT 50
-    ''', params).fetchall()
-
-    attention = []
-    for r in attention_rows:
-        case = c.execute(
-            "SELECT status FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1",
-            (r['taxpayer_id'],)
-        ).fetchone()
-        if case:
-            stage = case['status'] or 'Case Open'
-        else:
-            finding = c.execute('''
-                SELECT f.status FROM findings f
-                JOIN audit_cases ac ON ac.id=f.case_id
-                WHERE ac.taxpayer_id=?
-                ORDER BY f.id DESC LIMIT 1
-            ''', (r['taxpayer_id'],)).fetchone()
-            stage = 'Pending Validation' if finding and finding['status']=='AI Generated' else 'Risk Identified'
-        attention.append({
-            'taxpayer_id': r['taxpayer_id'],
-            'tin': r['tin'],
-            'taxpayer_name': r['taxpayer_name'],
-            'sector': r['sector'],
-            'score': r['score'] or 0,
-            'band': r['band'] or 'Low',
-            'exposure': r['exposure'] or 0,
-            'stage': stage,
-        })
-
-    validation_queue = {
-        'findings': pending_validation,
-        'communications': c.execute("SELECT COUNT(*) FROM communications WHERE status='Draft'").fetchone()[0],
-        'evidence': c.execute("SELECT COUNT(*) FROM evidence e JOIN audit_cases ac ON ac.id=e.case_id WHERE ac.status NOT IN ('Closed','Rejected')").fetchone()[0],
-    }
-
-    c.close()
-    return render_template(
-        'dashboard.html',
-        financial_years=financial_years,
-        tax_types=tax_types,
-        stations=stations,
-        financial_year=financial_year,
-        tax_type=tax_type,
-        station=station,
-        band=band,
-        q=q,
-        taxpayers_analysed=taxpayers_analysed,
-        high_risk=high_risk,
-        critical_risk=critical_risk,
-        in_audit=in_audit,
-        pending_validation=pending_validation,
-        risk_distribution=risk_distribution,
-        top_drivers=top_drivers,
-        validation_queue=validation_queue,
-        attention=attention,
-    )
+@app.route('/risk/<int:assessment_id>/execute',methods=['POST'])
+@login_required
+def execute_risk(assessment_id):
+    c=db(); risk=c.execute('SELECT * FROM risk_assessments WHERE id=?',(assessment_id,)).fetchone(); c.close()
+    if not risk: abort(404)
+    return redirect(url_for('case_detail',cid=case_for(risk['taxpayer_id'])))
 
 @app.route('/tasks')
 @login_required
-def tasks():
-    return redirect(url_for('dashboard'))
+def tasks(): return redirect(url_for('dashboard'))
 
 ALLOWED_KB_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'}
 KB_CATEGORIES = ['Tax Laws', 'Regulations', 'Procedures', 'Audit Guidance', 'Sector Knowledge', 'Risk Knowledge']
@@ -1789,7 +1661,7 @@ RISK_RULE_STATUSES=['Draft','Under Review','Approved','Active','Suspended','Reti
 RISK_RULE_CATEGORIES=['Sales Reconciliation','Purchases / Imports Reconciliation','VAT Risk','CIT Risk','PAYE Risk','WHT Risk','Registration Risk','Payment Behaviour','Assessment Behaviour','Third-Party Mismatch','Sector / Peer Risk','Other']
 RISK_RULE_TAX_TYPES=['General','VAT','CIT','PAYE','WHT','Excise Duty','Customs','Other']
 RISK_LOGIC_OPERATORS=['=','!=','>','>=','<','<=','CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS']
-RISK_CALC_OPERATIONS=['ADD','SUBTRACT','MULTIPLY','DIVIDE','PERCENTAGE DIFFERENCE','PERCENTAGE OF','SUM','COUNT','AVERAGE','MIN','MAX','GROWTH %','DECLINE %','FREQUENCY','PERSISTENCE']
+RISK_CALC_OPERATIONS=['ADD','SUBTRACT','MULTIPLY','DIVIDE','PERCENTAGE DIFFERENCE','PERCENTAGE OF','SUM','COUNT','AVERAGE','MIN','MAX']
 RISK_EXPOSURE_TYPES=['Estimated Revenue Exposure','Potential VAT Exposure','Potential Income Tax Exposure','Potential PAYE Exposure','Potential WHT Exposure','Potential Excise Exposure','No Exposure Calculation']
 RISK_CLAUSES=['FROM','TO','WHERE','WHEN','IF','AND','OR','WHILE','EXCEPT','THEN','ELSE','STOP','GROUP BY','JOIN','CALCULATE']
 RULE_PREVIEW_SAMPLE_SIZE=5
@@ -1971,118 +1843,33 @@ def _generate_rule_natural_language(plan):
     if ranking.get('description'): parts.append(ranking['description'].strip().rstrip('.')+'.')
     return ' '.join(parts) or 'The system will execute the configured risk rule against the selected approved data sources.'
 
-def _normalise_rule_column(value):
-    return re.sub(r'[^a-z0-9]','',str(value or '').strip().lower())
-
-def _detect_identity_columns(columns):
-    """Best-effort identity detection. The analyst remains the authority."""
-    tin_aliases={
-        'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno',
-        'taxidentificationnumber','taxidentificationno','tinno','tinumber'
-    }
-    name_aliases={
-        'taxpayername','taxpayer','name','taxpayerlegalname','registeredname',
-        'businessname','companyname','entityname'
-    }
-    tin=None; name=None
-    for col in columns or []:
-        n=_normalise_rule_column(col)
-        if tin is None and n in tin_aliases: tin=col
-        if name is None and n in name_aliases: name=col
-    return tin,name
-
-def _identity_mappings_for_plan(plan,source_catalog):
-    provided={int(x.get('source_id')):x for x in (plan.get('identity_mappings') or []) if x.get('source_id')}
-    out=[]
-    for src in plan.get('sources',[]) or []:
-        sid=int(src['id']); cols=src.get('columns') or []
-        tin_auto,name_auto=_detect_identity_columns(cols)
-        m=dict(provided.get(sid,{}))
-        tin=m.get('tin_field') or tin_auto
-        name=m.get('name_field') or name_auto
-        out.append({'source_id':sid,'tin_field':tin,'name_field':name,
-                    'tin_auto_detected':bool(tin_auto and tin==tin_auto),
-                    'name_auto_detected':bool(name_auto and name==name_auto)})
-    return out
-
-def _validate_identity_mappings(plan):
-    mappings={int(x['source_id']):x for x in plan.get('identity_mappings',[]) if x.get('source_id')}
-    errors=[]
-    for src in plan.get('sources',[]) or []:
-        sid=int(src['id']); m=mappings.get(sid,{})
-        if not m.get('tin_field'):
-            errors.append(f"{src.get('name','Source')} requires a TIN column selection.")
-        if not m.get('name_field'):
-            errors.append(f"{src.get('name','Source')} requires a Taxpayer Name column selection.")
-        cols=set(src.get('columns') or [])
-        if m.get('tin_field') and m['tin_field'] not in cols:
-            errors.append(f"TIN field '{m['tin_field']}' is not present in {src.get('name','Source')}.")
-        if m.get('name_field') and m['name_field'] not in cols:
-            errors.append(f"Taxpayer Name field '{m['name_field']}' is not present in {src.get('name','Source')}.")
-    if errors:
-        raise ValueError('Identity mapping is incomplete. ' + ' '.join(errors))
-    plan['identity_mappings']=[mappings[int(src['id'])] for src in plan.get('sources',[]) or []]
-    return plan
-
-def _format_value(v):
-    if v is None or (isinstance(v,float) and math.isnan(v)): return 'not available'
-    try:
-        if isinstance(v,(int,float)) and math.isfinite(float(v)):
-            return f"UGX {float(v):,.2f}"
-    except Exception: pass
-    return str(v)
-
-def _taxpayer_explanation(rule_name, risk_description, row_obj, conditions=None, exposure=0):
-    pairs=[]
-    for k,v in row_obj.items():
-        if k.startswith('__') or k in {'Risk Result','Estimated Exposure'}: continue
-        if len(pairs)>=6: break
-        pairs.append(f"{k} = {_format_value(v)}")
-    base=f"The taxpayer was identified under the {rule_name} risk because the configured detection conditions were satisfied."
-    if risk_description: base += f" The risk is defined as: {risk_description.strip().rstrip('.')} ."
-    if pairs: base += " Evidence used by the rule includes " + '; '.join(pairs) + "."
-    if conditions: base += " Conditions satisfied: " + '; '.join(conditions) + "."
-    if exposure is not None: base += f" Estimated exposure is {_format_value(exposure)}."
-    return base
-
-def _condition_label(cond, source_map):
-    try: return _condition_text(cond,source_map)
-    except Exception: return str(cond)
-
 def _parse_rule_plan(form,source_catalog):
     raw=form.get('rule_plan','').strip()
-    if not raw: raise ValueError('Build the rule logic before generating the system interpretation.')
-    try: plan=json.loads(raw)
-    except Exception as exc: raise ValueError(f'Invalid rule definition: {exc}')
-    if not isinstance(plan,dict): raise ValueError('The rule definition must be a structured object.')
-    allowed={int(x['id']):x for x in source_catalog}; ids=set()
+    if not raw:raise ValueError('Build the rule logic before generating the system interpretation.')
+    try:plan=json.loads(raw)
+    except Exception as exc:raise ValueError(f'Invalid rule definition: {exc}')
+    if not isinstance(plan,dict):raise ValueError('The rule definition must be a structured object.')
+    allowed={int(x['id']):x for x in source_catalog};ids=set()
     base=plan.get('base_source') or {}
-    if base.get('source_id'): ids.add(int(base['source_id']))
+    if base.get('source_id'):ids.add(int(base['source_id']))
     for x in plan.get('sources',[]):
-        if x.get('id'): ids.add(int(x['id']))
+        if x.get('id'):ids.add(int(x['id']))
     for j in plan.get('joins',[]):
         for k in ('left_source_id','right_source_id'):
-            if j.get(k): ids.add(int(j[k]))
+            if j.get(k):ids.add(int(j[k]))
     for obj in plan.get('filters',[])+plan.get('conditions',[]):
         for side in ('left','right'):
-            if obj.get(side,{}).get('source_id'): ids.add(int(obj[side]['source_id']))
+            if obj.get(side,{}).get('source_id'):ids.add(int(obj[side]['source_id']))
     for calc in plan.get('calculations',[]):
         for side in ('left','right'):
-            if calc.get(side,{}).get('source_id'): ids.add(int(calc[side]['source_id']))
+            if calc.get(side,{}).get('source_id'):ids.add(int(calc[side]['source_id']))
         for x in calc.get('group_by',[]):
-            if x.get('source_id'): ids.add(int(x['source_id']))
+            if x.get('source_id'):ids.add(int(x['source_id']))
     missing=[str(x) for x in ids if x not in allowed]
-    if missing: raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
-    if not base.get('source_id'): raise ValueError('Select a primary data source.')
+    if missing:raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
+    if not base.get('source_id'):raise ValueError('Select a primary data source.')
     plan['sources']=[{'id':sid,'name':allowed[sid]['name'],'version':allowed[sid]['version'],'ref':allowed[sid]['ref'],'columns':allowed[sid]['columns']} for sid in sorted(ids)]
     plan['base_source']={'source_id':int(base['source_id']),'name':allowed[int(base['source_id'])]['name']}
-    # Every participating dataset must have an explicit taxpayer identity mapping.
-    plan['identity_mappings']=_identity_mappings_for_plan(plan,source_catalog)
-    _validate_identity_mappings(plan)
-    # Persist analyst-confirmed mappings separately from auto-detection metadata.
-    for m in plan['identity_mappings']:
-        if not m.get('tin_field') or not m.get('name_field'):
-            raise ValueError('Select both TIN and Taxpayer Name for every participating dataset.')
     return plan
 
 def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,requests,exposure,ranking,existing_rule_id=None):
@@ -2093,7 +1880,7 @@ def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,
         version=int(r['version_number'] or 0)+1;rid=r['id'];ref=r['rule_ref']
     else:ref=_rule_ref(c);version=1;rid=None
     if rid is None:
-        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
     else:
         c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural,json.dumps(plan),category,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,stamp,rid))
     c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at,execution_plan_json,generated_natural_language,preview_summary_json,preview_status,preview_approved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,version,name,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp,plan_json,natural,'{}','Not Run',0))
@@ -2140,9 +1927,7 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
     if pd is None:
         raise RuntimeError('pandas is required for rule execution.')
 
-    _validate_identity_mappings(plan)
     loaded={}; source_rows={}; source_originals={}
-    identity_by_source={int(x['source_id']):x for x in plan.get('identity_mappings',[]) or []}
     for src in plan.get('sources',[]):
         sid=int(src['id'])
         row,df,original=_load_approved_source(c,sid)
@@ -2150,17 +1935,6 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         source_rows[sid]=row
         source_originals[sid]=original
 
-    data_quality=[]
-    for sid,m in identity_by_source.items():
-        df0=loaded.get(sid)
-        if df0 is None: continue
-        tk=_field_key(sid,m['tin_field']); nk=_field_key(sid,m['name_field'])
-        if tk in df0.columns:
-            miss=int(df0[tk].isna().sum()+((df0[tk].astype(str).str.strip()=='').sum()))
-            if miss: data_quality.append({'type':'Missing TIN','source_id':sid,'count':miss,'severity':'High'})
-        if nk in df0.columns:
-            miss=int(df0[nk].isna().sum()+((df0[nk].astype(str).str.strip()=='').sum()))
-            if miss: data_quality.append({'type':'Missing Taxpayer Name','source_id':sid,'count':miss,'severity':'Medium'})
     base_id=int(plan['base_source']['source_id'])
     if base_id not in loaded:
         raise ValueError('The selected primary source is not part of the approved source set.')
@@ -2207,15 +1981,7 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
                     f"Join {j.get('left_field')} = {j.get('right_field')} would create a many-to-many row multiplication. "
                     'Aggregate or deduplicate the source, or explicitly allow many-to-many joins in the rule.'
                 )
-        left_keys=set(df[lk].dropna().astype(str).str.strip()) if lk in df.columns else set()
-        right_keys=set(right[rk].dropna().astype(str).str.strip()) if rk in right.columns else set()
-        unmatched_left=len(left_keys-right_keys); unmatched_right=len(right_keys-left_keys)
-        if unmatched_left: data_quality.append({'type':'Unmatched join keys (left)','left_field':j.get('left_field'),'right_field':j.get('right_field'),'count':unmatched_left,'severity':'Medium'})
-        if unmatched_right: data_quality.append({'type':'Unmatched join keys (right)','left_field':j.get('left_field'),'right_field':j.get('right_field'),'count':unmatched_right,'severity':'Low'})
-        before=len(df)
         df=df.merge(right,left_on=lk,right_on=rk,how=how,suffixes=('','__dup'))
-        if len(df)>before and not allow_m2m and len(df)>max(before,1):
-            data_quality.append({'type':'Join row expansion','count':int(len(df)-before),'severity':'High'})
 
     for f in plan.get('filters',[]):
         left=series_for(f.get('left'))
@@ -2306,8 +2072,7 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
     summary={
         'records_evaluated':int(len(df)),
         'records_triggered':int(len(result)),
-        'total_exposure':float(result['__exposure__'].sum()) if len(result) else 0.0,
-        'data_quality':data_quality
+        'total_exposure':float(result['__exposure__'].sum()) if len(result) else 0.0
     }
 
     cols=[]
@@ -2323,35 +2088,13 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         for col in list(result.columns)[:8]:
             cols.append((col,result[col]))
 
-    limit = None if sample_only is None else int(sample_only)
     preview=[]
-    for _,row in result.head(limit).iterrows():
+    for _,row in result.head(sample_only).iterrows():
         obj={name:_clean_value(series.loc[row.name]) for name,series in cols}
         obj['Risk Result']=plan.get('result',{}).get('risk_description','Potential Risk')
         obj['Estimated Exposure']=_clean_value(row.get('__exposure__',0))
         preview.append(obj)
     summary['preview']=preview
-    # Top five taxpayer risks are ranked by the rule's exposure measure.
-    ranked=result.sort_values('__exposure__',ascending=False).head(5) if len(result) else result
-    top5=[]
-    base_identity=identity_by_source.get(base_id,{})
-    tin_key=_field_key(base_id,base_identity.get('tin_field')) if base_identity.get('tin_field') else None
-    name_key=_field_key(base_id,base_identity.get('name_field')) if base_identity.get('name_field') else None
-    source_map={str(x['id']):x for x in plan.get('sources',[])}
-    condition_texts=[_condition_label(x,source_map) for x in plan.get('conditions',[]) or []]
-    for rank,(_,rr) in enumerate(ranked.iterrows(),1):
-        tin=_clean_value(rr[tin_key]) if tin_key in ranked.columns else None
-        tname=_clean_value(rr[name_key]) if name_key in ranked.columns else None
-        evidence={}
-        for name,series in cols:
-            try: evidence[name]=_clean_value(series.loc[rr.name])
-            except Exception: pass
-        top5.append({'rank':rank,'tin':tin,'taxpayer_name':tname,'exposure':_clean_value(rr.get('__exposure__',0)),
-                     'risk':plan.get('result',{}).get('risk_description','Potential Risk'),
-                     'conditions_satisfied':condition_texts,'evidence':evidence,
-                     'explanation':_taxpayer_explanation(plan.get('result',{}).get('risk_description','Potential Risk'),plan.get('result',{}).get('risk_description',''),evidence,condition_texts,_clean_value(rr.get('__exposure__',0)))})
-    summary['top5_risks']=top5
-    summary['detection_logic_words']=_generate_rule_natural_language(plan)
 
     if return_records:
         summary['_result_frame']=result
@@ -2402,9 +2145,7 @@ def _rule_form_context(c,rule=None):
 @app.route('/business')
 @login_required
 def business_rules():
-    # Legacy Business Rules / Risk Rule Library page retired.
-    # Business now opens the current Stage 1-6 risk-rule workflow directly.
-    return redirect(url_for('risk_rule_new'))
+    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
 
 @app.route('/business/rules/create')
 @login_required
@@ -2425,10 +2166,11 @@ def business_rule_versions(rule_id):return redirect(url_for('risk_rule_detail',r
 @app.route('/risk-rules')
 @login_required
 def risk_rules():
-    # Legacy Risk Rule Library page retired.
-    # Keep the URL valid so old bookmarks/navigation links do not produce
-    # TemplateNotFound errors. Open the current Stage 1-6 rule workflow.
-    return redirect(url_for('risk_rule_new'))
+    q=request.args.get('q','').strip();status=request.args.get('status','').strip();category=request.args.get('category','').strip();c=db();sql='SELECT * FROM risk_rules WHERE 1=1';params=[]
+    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)';like='%'+q+'%';params += [like,like,like]
+    if status:sql+=' AND status=?';params.append(status)
+    if category:sql+=' AND COALESCE(risk_category,category)=?';params.append(category)
+    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC";rows=c.execute(sql,params).fetchall();c.close();return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
 
 def _extract_common_rule_form(c):
     name=request.form.get('rule_name','').strip();category=request.form.get('risk_category','').strip();tax_type=request.form.get('tax_type','General').strip() or 'General';scope=request.form.get('taxpayer_scope','').strip();period=request.form.get('applicable_period','').strip()
@@ -2515,8 +2257,7 @@ def risk_rule_review(rule_id):
         natural_language=v['generated_natural_language'] or r['natural_language'],
         summary=_json_or_default(v['preview_summary_json'],{}),
         preview_rows=[_json_or_default(x['result_json'],{}) for x in previews],
-        latest_run=latest_run,legal_count=legal_count,source_state=source_state,
-        top5_risks=_json_or_default(_json_or_default(v['preview_summary_json'],{}).get('top5_risks'),[]) if isinstance(_json_or_default(v['preview_summary_json'],{}).get('top5_risks'),str) else _json_or_default(v['preview_summary_json'],{}).get('top5_risks',[]))
+        latest_run=latest_run,legal_count=legal_count,source_state=source_state)
 
 @app.route('/risk-rules/<int:rule_id>/preview',methods=['POST'])
 @login_required
@@ -2546,10 +2287,6 @@ def risk_rule_approve(rule_id):
     if not r:c.close();abort(404)
     v=c.execute('SELECT * FROM risk_rule_versions WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()
     try:
-        confirmations=['confirm_interpretation','confirm_sources','confirm_relationships','confirm_calculations','confirm_conditions','confirm_results']
-        missing_confirmations=[x for x in confirmations if request.form.get(x) not in ('1','on','true','yes')]
-        if missing_confirmations:
-            raise ValueError('Approval requires confirmation of the system interpretation, data sources, relationships, calculations, conditions and test results.')
         if not v or v['preview_status']!='Completed':
             raise ValueError('Run the rule preview before approval.')
         if not v['preview_summary_json'] or _json_or_default(v['preview_summary_json'],{}).get('records_evaluated') is None:
@@ -2843,19 +2580,7 @@ def transform_get_recipe(c,source_id,version_number):
     if not row: return None
     try: steps=json.loads(row['steps_json']) if row['steps_json'] else []
     except Exception: steps=[]
-    # Always return template-safe, JSON-safe recipe data.
-    if not isinstance(steps, list):
-        steps=[]
-    safe_steps=[]
-    for item in steps:
-        if isinstance(item, dict):
-            safe_steps.append(item)
-    return {
-        'id': row['id'],
-        'recipe_name': row['recipe_name'] or '',
-        'steps': safe_steps,
-        'status': row['status'] or 'Draft'
-    }
+    return {'id':row['id'],'recipe_name':row['recipe_name'],'steps':steps,'status':row['status']}
 
 def transform_get_source(source_id):
     c=db()
@@ -2882,15 +2607,7 @@ def data_source_transform(source_id):
         c.execute('INSERT INTO data_transform_recipes(source_id,version_number,recipe_name,steps_json,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',(source_id,version['version_number'],f"Transform {source['source_name']} v{version['version_number']}",'[]','Draft',email(),now(),now()))
         c.commit()
         recipe=transform_get_recipe(c,source_id,version['version_number'])
-    # Normalize the recipe before it reaches Jinja. This prevents an empty,
-    # malformed, or legacy recipe from ever becoming an Undefined value in
-    # data_transform.html.
-    steps=recipe.get('steps',[]) if isinstance(recipe,dict) else []
-    if not isinstance(steps,list):
-        steps=[]
-    steps=[step for step in steps if isinstance(step,dict)]
-    recipe['steps']=steps
-    recipe['recipe_name']=recipe.get('recipe_name','') or ''
+    steps=recipe['steps']
 
     if request.method=='POST':
         action=request.form.get('action','')
@@ -3027,18 +2744,7 @@ def data_source_transform(source_id):
         flash(f'Transformation preview failed: {exc}','error')
         return redirect(url_for('data_sources'))
 
-    return render_template(
-        'data_transform.html',
-        source=source,
-        version=version,
-        recipe=recipe or {'recipe_name':'','steps':[],'status':'Draft'},
-        steps=steps or [],
-        original_rows=original_rows,
-        original_columns=original_columns,
-        preview_rows=preview_rows,
-        preview_columns=preview_columns,
-        preview_records=preview_records
-    )
+    return render_template('data_transform.html',source=source,version=version,recipe=recipe,steps=steps,original_rows=original_rows,original_columns=original_columns,preview_rows=preview_rows,preview_columns=preview_columns,preview_records=preview_records)
 
 @app.route('/data-sources/<int:source_id>/decision/<decision>',methods=['POST'])
 @login_required
