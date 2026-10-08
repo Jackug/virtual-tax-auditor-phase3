@@ -3,13 +3,18 @@
 <style>
 .vta-dash{max-width:1500px;margin:0 auto}.vta-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.vta-head h1{margin:2px 0 4px;color:#17365d}.muted{color:#687782;font-size:12px}.grid{display:grid;gap:12px}.kpis{grid-template-columns:repeat(6,1fr);margin:16px 0}.card{background:#fff;border:1px solid #dce2e8;border-radius:8px;padding:15px}.kpi{min-height:82px}.kpi a{text-decoration:none;color:inherit;display:block}.kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#687782;font-weight:700}.kpi .value{font-size:27px;font-weight:800;color:#17365d;margin-top:6px}.kpi.open .value{color:#9b4b00}.kpi.closed .value{color:#216438}.kpi.critical .value{color:#8b2222}.panels{grid-template-columns:repeat(2,1fr)}.barrow{display:flex;align-items:center;gap:8px;margin:9px 0}.barrow a{display:flex;align-items:center;gap:8px;width:100%;text-decoration:none;color:#17365d}.barlabel{width:145px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar{height:9px;background:#e9eef3;border-radius:8px;flex:1;overflow:hidden}.fill{height:100%;background:#53799e}.num{font-weight:700;font-size:12px;width:42px;text-align:right}.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.filters input,.filters select{padding:9px;border:1px solid #cbd5df;border-radius:5px;background:#fff;font-size:12px}.btn{display:inline-block;padding:9px 13px;border-radius:5px;border:1px solid #cbd5df;background:#fff;color:#17365d;text-decoration:none;font-size:12px;cursor:pointer}.btn.primary{background:#17365d;color:#fff;border-color:#17365d}.tablewrap{overflow:auto}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{padding:9px;border-bottom:1px solid #e5e9ed;text-align:left;font-size:12px;vertical-align:top}.tbl th{background:#f1f4f7;color:#314452;position:sticky;top:0}.pill{display:inline-block;padding:4px 8px;border-radius:12px;background:#eef2f5;font-size:10px;font-weight:700}.pill.critical{background:#f8dada;color:#8b2222}.pill.high{background:#fff0d2;color:#765300}.pill.closed{background:#e0f1e6;color:#216438}.pill.open{background:#edf4ff;color:#23557f}.actions{display:flex;gap:5px;flex-wrap:wrap}.empty{padding:35px;text-align:center;color:#687782}.filter-active{font-size:11px;color:#765300;margin-left:8px}@media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.kpis,.panels{grid-template-columns:1fr}.barlabel{width:100px}}
 </style>
+
 <div class="vta-dash">
+
   <div class="vta-head">
     <div>
       <div class="muted">VIRTUAL TAX AUDITOR · OPERATIONAL RISK MANAGEMENT</div>
       <h1>Risk Dashboard</h1>
-      <div class="muted">Detected risks generated from the approved Detection Logic and approved data sources.</div>
+      <div class="muted">
+        Detected risks generated from the approved Detection Logic and approved data sources.
+      </div>
     </div>
+
     <div class="actions">
       <a class="btn" href="{{ url_for('risk_universe') }}">Risk Universe</a>
       <a class="btn" href="{{ url_for('cases') }}">Cases</a>
@@ -17,58 +22,449 @@
   </div>
 
   <div class="grid kpis">
-    <div class="card kpi"><a href="{{ url_for('dashboard') }}"><div class="label">Total Risks</div><div class="value">{{ '{:,}'.format(total) }}</div></a></div>
-    <div class="card kpi open"><a href="{{ url_for('dashboard',stage='Open') }}"><div class="label">Open</div><div class="value">{{ '{:,}'.format(open_count) }}</div></a></div>
-    <div class="card kpi closed"><a href="{{ url_for('dashboard',stage='Closed') }}"><div class="label">Closed</div><div class="value">{{ '{:,}'.format(closed_count) }}</div></a></div>
-    <div class="card kpi critical"><a href="{{ url_for('dashboard',band='Critical') }}"><div class="label">Critical</div><div class="value">{{ '{:,}'.format(critical) }}</div></a></div>
-    <div class="card kpi"><a href="{{ url_for('dashboard',band='High') }}"><div class="label">High</div><div class="value">{{ '{:,}'.format(high) }}</div></a></div>
-    <div class="card kpi"><a href="{{ url_for('risk_rules') if false else url_for('risk_universe') }}"><div class="label">Detected Taxpayers</div><div class="value">{{ '{:,}'.format(rows|length) }}</div></a></div>
+
+    <div class="card kpi">
+      <a href="{{ url_for('dashboard') }}">
+        <div class="label">Total Risks</div>
+        <div class="value">{{ '{:,}'.format(total) }}</div>
+      </a>
+    </div>
+
+    <div class="card kpi open">
+      <a href="{{ url_for('dashboard',stage='Open') }}">
+        <div class="label">Open</div>
+        <div class="value">{{ '{:,}'.format(open_count) }}</div>
+      </a>
+    </div>
+
+    <div class="card kpi closed">
+      <a href="{{ url_for('dashboard',stage='Closed') }}">
+        <div class="label">Closed</div>
+        <div class="value">{{ '{:,}'.format(closed_count) }}</div>
+      </a>
+    </div>
+
+    <div class="card kpi critical">
+      <a href="{{ url_for('dashboard',band='Critical') }}">
+        <div class="label">Critical</div>
+        <div class="value">{{ '{:,}'.format(critical) }}</div>
+      </a>
+    </div>
+
+    <div class="card kpi">
+      <a href="{{ url_for('dashboard',band='High') }}">
+        <div class="label">High</div>
+        <div class="value">{{ '{:,}'.format(high) }}</div>
+      </a>
+    </div>
+
+    <div class="card kpi">
+      <a href="{{ url_for('risk_universe') }}">
+        <div class="label">Detected Taxpayers</div>
+        <div class="value">{{ '{:,}'.format(rows|length) }}</div>
+      </a>
+    </div>
+
   </div>
 
   <div class="card" style="margin-bottom:12px">
+
     <form class="filters" method="get" action="{{ url_for('dashboard') }}">
-      <input name="q" value="{{ q|default('',true) }}" placeholder="Search TIN, taxpayer, sector or station" style="min-width:260px">
-      <select name="band"><option value="">All risk levels</option>{% for x in ['Critical','High','Medium','Low'] %}<option value="{{ x }}" {% if band==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-      <select name="stage"><option value="">All stages</option>{% for x in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] %}<option value="{{ x }}" {% if stage==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+
+      <input
+        name="q"
+        value="{{ q|default('',true) }}"
+        placeholder="Search TIN, taxpayer, sector or station"
+        style="min-width:260px"
+      >
+
+      <select name="band">
+        <option value="">All risk levels</option>
+
+        {% for x in ['Critical','High','Medium','Low'] %}
+        <option value="{{ x }}" {% if band==x %}selected{% endif %}>
+          {{ x }}
+        </option>
+        {% endfor %}
+
+      </select>
+
+      <select name="stage">
+        <option value="">All stages</option>
+
+        {% for x in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] %}
+        <option value="{{ x }}" {% if stage==x %}selected{% endif %}>
+          {{ x }}
+        </option>
+        {% endfor %}
+
+      </select>
+
       <button class="btn primary" type="submit">Filter</button>
+
       <a class="btn" href="{{ url_for('dashboard') }}">Clear</a>
-      {% if q or band or stage or category or station %}<span class="filter-active">Filtered view</span>{% endif %}
+
+      {% if q or band or stage or category or station %}
+      <span class="filter-active">Filtered view</span>
+      {% endif %}
+
     </form>
+
   </div>
 
   <div class="grid panels">
-    <div class="card"><h3 style="margin:0 0 10px;color:#17365d">Risk Stage</h3>
+
+    <div class="card">
+
+      <h3 style="margin:0 0 10px;color:#17365d">
+        Risk Stage
+      </h3>
+
       {% set mx=stage_counts|map(attribute=1)|max if stage_counts else 1 %}
-      {% for label,n in stage_counts %}<div class="barrow"><a href="{{ url_for('dashboard',stage=label) }}"><span class="barlabel">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"></span></span><span class="num">{{ n }}</span></a></div>{% else %}<div class="empty">No risk stages yet.</div>{% endfor %}
+
+      {% for label,n in stage_counts %}
+
+      <div class="barrow">
+
+        <a href="{{ url_for('dashboard',stage=label) }}">
+
+          <span class="barlabel">
+            {{ label }}
+          </span>
+
+          <span class="bar">
+            <span
+              class="fill"
+              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
+            ></span>
+          </span>
+
+          <span class="num">
+            {{ n }}
+          </span>
+
+        </a>
+
+      </div>
+
+      {% else %}
+
+      <div class="empty">
+        No risk stages yet.
+      </div>
+
+      {% endfor %}
+
     </div>
-    <div class="card"><h3 style="margin:0 0 10px;color:#17365d">Risk Category</h3>
+
+
+    <div class="card">
+
+      <h3 style="margin:0 0 10px;color:#17365d">
+        Risk Category
+      </h3>
+
       {% set mx=categories[0][1] if categories else 1 %}
-      {% for label,n in categories[:10] %}<div class="barrow"><a href="{{ url_for('dashboard',category=label) }}"><span class="barlabel" title="{{ label }}">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"></span></span><span class="num">{{ n }}</span></a></div>{% else %}<div class="empty">No categories yet.</div>{% endfor %}
+
+      {% for label,n in categories[:10] %}
+
+      <div class="barrow">
+
+        <a href="{{ url_for('dashboard',category=label) }}">
+
+          <span class="barlabel" title="{{ label }}">
+            {{ label }}
+          </span>
+
+          <span class="bar">
+            <span
+              class="fill"
+              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
+            ></span>
+          </span>
+
+          <span class="num">
+            {{ n }}
+          </span>
+
+        </a>
+
+      </div>
+
+      {% else %}
+
+      <div class="empty">
+        No categories yet.
+      </div>
+
+      {% endfor %}
+
     </div>
-    <div class="card"><h3 style="margin:0 0 10px;color:#17365d">Station Distribution</h3>
+
+
+    <div class="card">
+
+      <h3 style="margin:0 0 10px;color:#17365d">
+        Station Distribution
+      </h3>
+
       {% set mx=station_counts[0][1] if station_counts else 1 %}
-      {% for label,n in station_counts[:10] %}<div class="barrow"><a href="{{ url_for('dashboard',station=label) }}"><span class="barlabel" title="{{ label }}">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"></span></span><span class="num">{{ n }}</span></a></div>{% else %}<div class="empty">No station distribution yet.</div>{% endfor %}
+
+      {% for label,n in station_counts[:10] %}
+
+      <div class="barrow">
+
+        <a href="{{ url_for('dashboard',station=label) }}">
+
+          <span class="barlabel" title="{{ label }}">
+            {{ label }}
+          </span>
+
+          <span class="bar">
+            <span
+              class="fill"
+              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
+            ></span>
+          </span>
+
+          <span class="num">
+            {{ n }}
+          </span>
+
+        </a>
+
+      </div>
+
+      {% else %}
+
+      <div class="empty">
+        No station distribution yet.
+      </div>
+
+      {% endfor %}
+
     </div>
-    <div class="card"><h3 style="margin:0 0 10px;color:#17365d">Tax Type</h3>
+
+
+    <div class="card">
+
+      <h3 style="margin:0 0 10px;color:#17365d">
+        Tax Type
+      </h3>
+
       {% set mx=tax_types[0][1] if tax_types else 1 %}
-      {% for label,n in tax_types[:10] %}<div class="barrow"><a href="{{ url_for('dashboard') }}"><span class="barlabel">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"></span></span><span class="num">{{ n }}</span></a></div>{% else %}<div class="empty">No tax-type distribution yet.</div>{% endfor %}
+
+      {% for label,n in tax_types[:10] %}
+
+      <div class="barrow">
+
+        <a href="{{ url_for('dashboard') }}">
+
+          <span class="barlabel">
+            {{ label }}
+          </span>
+
+          <span class="bar">
+            <span
+              class="fill"
+              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
+            ></span>
+          </span>
+
+          <span class="num">
+            {{ n }}
+          </span>
+
+        </a>
+
+      </div>
+
+      {% else %}
+
+      <div class="empty">
+        No tax-type distribution yet.
+      </div>
+
+      {% endfor %}
+
     </div>
+
   </div>
 
+
   <div class="card" style="margin-top:12px">
-    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><h3 style="margin:0;color:#17365d">Detected Risks</h3><div class="muted">Click a risk to inspect the evidence, detection logic and available action.</div></div><div class="muted">{{ '{:,}'.format(rows|length) }} shown</div></div>
-    <div class="tablewrap" style="margin-top:10px">
-      <table class="tbl"><thead><tr><th>Risk</th><th>Taxpayer</th><th>Category</th><th>Station</th><th>Level</th><th>Exposure</th><th>Stage</th><th>Action</th></tr></thead>
-      <tbody>{% for r in rows %}<tr>
-        <td><a href="{{ url_for('risk_detail',assessment_id=r.assessment_id) }}"><b>#{{ r.assessment_id }}</b></a><br><span class="muted">{{ r.assessed_at }}</span></td>
-        <td><b>{{ r.taxpayer_name }}</b><br><span class="muted">{{ r.tin }} · {{ r.sector or '—' }}</span></td>
-        <td>{{ r.categories or 'Uncategorised' }}</td><td>{{ r.station or '—' }}</td>
-        <td><span class="pill {{ 'critical' if r.band=='Critical' else 'high' if r.band=='High' else '' }}">{{ r.band }}</span></td>
-        <td>UGX {{ '{:,.0f}'.format((r.exposure or 0)|float) }}</td>
-        <td><span class="pill {{ 'closed' if r.stage=='Closed' else 'open' }}">{{ r.stage }}</span></td>
-        <td><div class="actions"><a class="btn" href="{{ url_for('risk_detail',assessment_id=r.assessment_id) }}">View</a>{% if r.stage!='Closed' %}<form method="post" action="{{ url_for('execute_risk',assessment_id=r.assessment_id) }}" style="margin:0"><button class="btn primary" type="submit">Execute</button></form>{% endif %}</div></td>
-      </tr>{% else %}<tr><td colspan="8" class="empty">No detected risks match the current view.</td></tr>{% endfor %}</tbody></table>
+
+    <div
+      style="
+        display:flex;
+        justify-content:space-between;
+        gap:10px;
+        align-items:center;
+        flex-wrap:wrap
+      "
+    >
+
+      <div>
+
+        <h3 style="margin:0;color:#17365d">
+          Detected Risks
+        </h3>
+
+        <div class="muted">
+          Click a risk to inspect the evidence, detection logic and available action.
+        </div>
+
+      </div>
+
+      <div class="muted">
+        {{ '{:,}'.format(rows|length) }} shown
+      </div>
+
     </div>
+
+
+    <div class="tablewrap" style="margin-top:10px">
+
+      <table class="tbl">
+
+        <thead>
+
+          <tr>
+            <th>Risk</th>
+            <th>Taxpayer</th>
+            <th>Category</th>
+            <th>Station</th>
+            <th>Level</th>
+            <th>Exposure</th>
+            <th>Stage</th>
+            <th>Action</th>
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for r in rows %}
+
+          <tr>
+
+            <td>
+
+              <a href="{{ url_for('risk_detail',assessment_id=r.assessment_id) }}">
+                <b>#{{ r.assessment_id }}</b>
+              </a>
+
+              <br>
+
+              <span class="muted">
+                {{ r.assessed_at }}
+              </span>
+
+            </td>
+
+            <td>
+
+              <b>{{ r.taxpayer_name }}</b>
+
+              <br>
+
+              <span class="muted">
+                {{ r.tin }} · {{ r.sector or '—' }}
+              </span>
+
+            </td>
+
+            <td>
+              {{ r.categories or 'Uncategorised' }}
+            </td>
+
+            <td>
+              {{ r.station or '—' }}
+            </td>
+
+            <td>
+
+              <span
+                class="pill
+                {{ 'critical' if r.band=='Critical'
+                   else 'high' if r.band=='High'
+                   else '' }}"
+              >
+                {{ r.band }}
+              </span>
+
+            </td>
+
+            <td>
+              UGX {{ '{:,.0f}'.format((r.exposure or 0)|float) }}
+            </td>
+
+            <td>
+
+              <span
+                class="pill
+                {{ 'closed' if r.stage=='Closed'
+                   else 'open' }}"
+              >
+                {{ r.stage }}
+              </span>
+
+            </td>
+
+            <td>
+
+              <div class="actions">
+
+                <a
+                  class="btn"
+                  href="{{ url_for('risk_detail',assessment_id=r.assessment_id) }}"
+                >
+                  View
+                </a>
+
+                {% if r.stage!='Closed' %}
+
+                <form
+                  method="post"
+                  action="{{ url_for('execute_risk',assessment_id=r.assessment_id) }}"
+                  style="margin:0"
+                >
+
+                  <button
+                    class="btn primary"
+                    type="submit"
+                  >
+                    Execute
+                  </button>
+
+                </form>
+
+                {% endif %}
+
+              </div>
+
+            </td>
+
+          </tr>
+
+          {% else %}
+
+          <tr>
+            <td colspan="8" class="empty">
+              No detected risks match the current view.
+            </td>
+          </tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
   </div>
+
 </div>
+
 {% endblock %}
