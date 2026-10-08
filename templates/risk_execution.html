@@ -1,0 +1,919 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+    .execution-page{
+        max-width:1400px;
+        margin:0 auto;
+    }
+
+    .execution-header{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:20px;
+        flex-wrap:wrap;
+        margin-bottom:16px;
+    }
+
+    .eyebrow{
+        font-size:11px;
+        color:#667784;
+        letter-spacing:.5px;
+        margin-bottom:5px;
+    }
+
+    .title{
+        margin:0;
+        color:#17365d;
+        font-size:27px;
+    }
+
+    .subtitle{
+        color:#687782;
+        font-size:12px;
+        margin-top:5px;
+        line-height:1.5;
+    }
+
+    .actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+    }
+
+    .btn{
+        display:inline-block;
+        padding:10px 15px;
+        border-radius:5px;
+        border:1px solid #cbd5df;
+        background:#fff;
+        color:#17365d;
+        text-decoration:none;
+        font-size:12px;
+        cursor:pointer;
+    }
+
+    .btn-primary{
+        background:#17365d;
+        color:#fff;
+        border-color:#17365d;
+    }
+
+    .btn-success{
+        background:#287a46;
+        color:#fff;
+        border-color:#287a46;
+    }
+
+    .btn-danger{
+        background:#8b2222;
+        color:#fff;
+        border-color:#8b2222;
+    }
+
+    .card{
+        background:#fff;
+        border:1px solid #dce3e9;
+        border-radius:8px;
+        padding:17px;
+        margin-bottom:14px;
+    }
+
+    .section-title{
+        margin:0;
+        color:#17365d;
+        font-size:17px;
+    }
+
+    .section-subtitle{
+        color:#687782;
+        font-size:12px;
+        margin-top:4px;
+        margin-bottom:13px;
+    }
+
+    .metric-grid{
+        display:grid;
+        grid-template-columns:repeat(5,1fr);
+        gap:10px;
+    }
+
+    .metric{
+        background:#f7f9fb;
+        border:1px solid #e0e6eb;
+        border-radius:6px;
+        padding:12px;
+    }
+
+    .metric-label{
+        color:#667784;
+        text-transform:uppercase;
+        font-size:9px;
+        font-weight:700;
+        letter-spacing:.5px;
+    }
+
+    .metric-value{
+        color:#17365d;
+        font-size:17px;
+        font-weight:800;
+        margin-top:6px;
+    }
+
+    .two-column{
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:14px;
+    }
+
+    .detail-table{
+        width:100%;
+        border-collapse:collapse;
+    }
+
+    .detail-table td{
+        border-bottom:1px solid #edf0f2;
+        padding:8px 4px;
+        font-size:12px;
+        vertical-align:top;
+    }
+
+    .detail-table td:first-child{
+        width:36%;
+        color:#687782;
+        font-weight:700;
+    }
+
+    .driver{
+        border:1px solid #dce3e9;
+        border-radius:7px;
+        margin-bottom:10px;
+        overflow:hidden;
+    }
+
+    .driver-header{
+        background:#f2f5f8;
+        padding:11px;
+        display:flex;
+        justify-content:space-between;
+        gap:10px;
+    }
+
+    .driver-title{
+        font-weight:700;
+        color:#17365d;
+        font-size:13px;
+    }
+
+    .driver-body{
+        padding:12px;
+    }
+
+    .logic{
+        background:#102d4a;
+        color:#fff;
+        padding:12px;
+        border-radius:6px;
+        font-size:12px;
+        line-height:1.6;
+        white-space:pre-wrap;
+    }
+
+    .legal{
+        border-left:4px solid #17365d;
+        background:#f5f8fb;
+        padding:12px;
+        margin-bottom:9px;
+        border-radius:5px;
+    }
+
+    .legal-title{
+        color:#17365d;
+        font-weight:700;
+        font-size:12px;
+    }
+
+    .legal-text{
+        color:#52616d;
+        font-size:11px;
+        line-height:1.5;
+        margin-top:5px;
+    }
+
+    .notice{
+        background:#edf4ff;
+        border:1px solid #c7d9ed;
+        padding:13px;
+        border-radius:7px;
+        font-size:12px;
+        line-height:1.6;
+    }
+
+    .warning{
+        background:#fff8e5;
+        border:1px solid #ead89b;
+        padding:13px;
+        border-radius:7px;
+        font-size:12px;
+        line-height:1.6;
+    }
+
+    .status{
+        display:inline-block;
+        padding:5px 9px;
+        border-radius:12px;
+        font-size:10px;
+        font-weight:700;
+        background:#edf4ff;
+        color:#285c8d;
+    }
+
+    .decision-panel{
+        border:2px solid #17365d;
+        background:#f8fafc;
+        border-radius:8px;
+        padding:20px;
+        margin-top:18px;
+    }
+
+    .decision-panel h2{
+        margin-top:0;
+        color:#17365d;
+    }
+
+    textarea{
+        width:100%;
+        box-sizing:border-box;
+        min-height:120px;
+        padding:10px;
+        border:1px solid #cbd5df;
+        border-radius:5px;
+        font-family:inherit;
+        font-size:12px;
+        resize:vertical;
+    }
+
+    label{
+        display:block;
+        font-size:11px;
+        font-weight:700;
+        color:#52616d;
+        margin-bottom:6px;
+    }
+
+    .decision-buttons{
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        margin-top:12px;
+    }
+
+    .decision-buttons button{
+        min-width:190px;
+    }
+
+    .next-stage{
+        background:#eaf5ee;
+        border:1px solid #bddbc8;
+        color:#225d36;
+        padding:13px;
+        border-radius:7px;
+        font-size:12px;
+        line-height:1.5;
+    }
+
+    .empty{
+        color:#687782;
+        font-size:12px;
+    }
+
+    @media(max-width:1000px){
+        .metric-grid{
+            grid-template-columns:repeat(3,1fr);
+        }
+
+        .two-column{
+            grid-template-columns:1fr;
+        }
+    }
+
+    @media(max-width:650px){
+        .metric-grid{
+            grid-template-columns:1fr 1fr;
+        }
+    }
+</style>
+
+
+<div class="execution-page">
+
+    <!-- HEADER -->
+    <div class="execution-header">
+
+        <div>
+
+            <div class="eyebrow">
+                RISK MANAGEMENT · CONTROLLED EXECUTION
+            </div>
+
+            <h1 class="title">
+                Risk Execution Window
+            </h1>
+
+            <div class="subtitle">
+
+                {{ risk.taxpayer_name }}
+                ·
+                TIN {{ risk.tin }}
+                ·
+                Assessment #{{ risk.id }}
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <a
+                href="{{ url_for('risk_detail',assessment_id=risk.id) }}"
+                class="btn">
+
+                ← Risk Details
+
+            </a>
+
+            <a
+                href="{{ url_for('dashboard') }}"
+                class="btn">
+
+                Dashboard
+
+            </a>
+
+        </div>
+
+    </div>
+
+
+    <!-- STATUS -->
+    {% if case %}
+
+    <div class="card">
+
+        <div class="notice">
+
+            <b>Current Case:</b>
+            {{ case.case_ref }}
+
+            <br>
+
+            <b>Workflow Status:</b>
+            {{ case.status }}
+
+        </div>
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- RISK SUMMARY -->
+    <div class="card">
+
+        <div class="metric-grid">
+
+            <div class="metric">
+
+                <div class="metric-label">
+                    Risk Level
+                </div>
+
+                <div class="metric-value">
+                    {{ risk.band }}
+                </div>
+
+            </div>
+
+
+            <div class="metric">
+
+                <div class="metric-label">
+                    Risk Score
+                </div>
+
+                <div class="metric-value">
+                    {{ '{:.2f}'.format((risk.score or 0)|float) }}
+                </div>
+
+            </div>
+
+
+            <div class="metric">
+
+                <div class="metric-label">
+                    Exposure
+                </div>
+
+                <div class="metric-value">
+                    UGX {{ '{:,.0f}'.format((risk.exposure or 0)|float) }}
+                </div>
+
+            </div>
+
+
+            <div class="metric">
+
+                <div class="metric-label">
+                    Station
+                </div>
+
+                <div class="metric-value"
+                     style="font-size:13px">
+
+                    {{ risk.station or 'Not recorded' }}
+
+                </div>
+
+            </div>
+
+
+            <div class="metric">
+
+                <div class="metric-label">
+                    Financial Year
+                </div>
+
+                <div class="metric-value"
+                     style="font-size:13px">
+
+                    {{ risk.financial_year or 'Not recorded' }}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- TAXPAYER + RISK -->
+    <div class="two-column">
+
+        <div class="card">
+
+            <h3 class="section-title">
+                Taxpayer Information
+            </h3>
+
+            <div class="section-subtitle">
+                Information associated with the detected taxpayer.
+            </div>
+
+            <table class="detail-table">
+
+                <tr>
+                    <td>TIN</td>
+                    <td>{{ risk.tin }}</td>
+                </tr>
+
+                <tr>
+                    <td>Name</td>
+                    <td>{{ risk.taxpayer_name }}</td>
+                </tr>
+
+                <tr>
+                    <td>Sector</td>
+                    <td>{{ risk.sector or 'Not recorded' }}</td>
+                </tr>
+
+                <tr>
+                    <td>Station</td>
+                    <td>{{ risk.station or 'Not recorded' }}</td>
+                </tr>
+
+                <tr>
+                    <td>Financial Year</td>
+                    <td>{{ risk.financial_year or 'Not recorded' }}</td>
+                </tr>
+
+                <tr>
+                    <td>Taxpayer Status</td>
+                    <td>{{ risk.taxpayer_status or 'Not recorded' }}</td>
+                </tr>
+
+            </table>
+
+        </div>
+
+
+        <div class="card">
+
+            <h3 class="section-title">
+                Execution Control
+            </h3>
+
+            <div class="section-subtitle">
+                Human review is required before the risk proceeds.
+            </div>
+
+            <div class="notice">
+
+                <b>Control Principle</b>
+
+                <br><br>
+
+                The Detection Logic has identified this taxpayer
+                as presenting a potential risk.
+
+                The officer must review the evidence and make
+                a documented decision.
+
+                <br><br>
+
+                AI analysis does not constitute a final decision.
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- DETECTION LOGIC -->
+    <div class="card">
+
+        <h3 class="section-title">
+            Detection Logic & Evidence
+        </h3>
+
+        <div class="section-subtitle">
+
+            These are the detection drivers that caused the taxpayer
+            to enter the Risk Universe.
+
+        </div>
+
+
+        {% for d in drivers %}
+
+        <div class="driver">
+
+            <div class="driver-header">
+
+                <div>
+
+                    <div class="driver-title">
+                        {{ d.rule_name }}
+                    </div>
+
+                    <div class="subtitle">
+
+                        {{ d.risk_category or d.rule_category or 'Risk' }}
+
+                        ·
+
+                        {{ d.tax_type or 'General' }}
+
+                    </div>
+
+                </div>
+
+
+                <div>
+
+                    {% if d.rule_version %}
+
+                    <span class="status">
+
+                        Approved Rule v{{ d.rule_version }}
+
+                    </span>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+
+            <div class="driver-body">
+
+                <table class="detail-table">
+
+                    <tr>
+                        <td>Detection Description</td>
+                        <td>
+                            {{ d.description or 'Not recorded' }}
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Variance</td>
+                        <td>
+                            UGX {{ '{:,.0f}'.format((d.variance or 0)|float) }}
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Variance Percentage</td>
+                        <td>
+                            {{ '{:.2f}'.format((d.variance_pct or 0)|float) }}%
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Rule Status</td>
+                        <td>
+                            {{ d.rule_version_status or 'Approved' }}
+                        </td>
+                    </tr>
+
+                </table>
+
+
+                <div style="margin-top:12px">
+
+                    <div class="eyebrow">
+                        SYSTEM INTERPRETATION
+                    </div>
+
+                    <div class="logic">
+
+                        {{ d.natural_language or d.description or
+                           'No natural-language interpretation is available.' }}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        {% else %}
+
+        <div class="warning">
+
+            No detection driver has been recorded for this assessment.
+            The risk should not proceed until the detection evidence
+            is available for review.
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <!-- LEGAL BASIS -->
+    <div class="card">
+
+        <h3 class="section-title">
+            Legal Basis
+        </h3>
+
+        <div class="section-subtitle">
+
+            Approved Knowledge Base material associated with the
+            Detection Logic.
+
+        </div>
+
+
+        {% for law in legal_basis %}
+
+        <div class="legal">
+
+            <div class="legal-title">
+
+                {{ law.title or law.document_ref }}
+
+            </div>
+
+            <div class="legal-text">
+
+                <b>Document:</b>
+                {{ law.document_ref }}
+
+                <br>
+
+                {% if law.category %}
+
+                <b>Category:</b>
+                {{ law.category }}
+
+                <br>
+
+                {% endif %}
+
+                {% if law.legal_passage %}
+
+                <b>Relevant Provision:</b>
+                {{ law.legal_passage }}
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+        {% else %}
+
+        <div class="warning">
+
+            No legal basis has been retrieved for this risk.
+
+            The officer should not treat the detection as legally
+            established until the approved legal basis is available.
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <!-- EXISTING AI ANALYSIS -->
+    {% if analysis %}
+
+    <div class="card">
+
+        <h3 class="section-title">
+            AI Audit Analysis
+        </h3>
+
+        <div class="section-subtitle">
+            Existing AI analysis associated with this case.
+        </div>
+
+        <table class="detail-table">
+
+            {% for key in analysis.keys() %}
+
+            <tr>
+
+                <td>
+                    {{ key|replace('_',' ')|title }}
+                </td>
+
+                <td>
+                    {{ analysis[key] }}
+                </td>
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- FINDINGS -->
+    {% if findings %}
+
+    <div class="card">
+
+        <h3 class="section-title">
+            Existing Findings
+        </h3>
+
+        <table class="detail-table">
+
+            {% for finding in findings %}
+
+            <tr>
+
+                <td>
+                    {{ finding.finding_ref }}
+                </td>
+
+                <td>
+
+                    {{ finding.description }}
+
+                    <br>
+
+                    <span class="status">
+                        {{ finding.status }}
+                    </span>
+
+                </td>
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- HUMAN DECISION -->
+    <div class="decision-panel">
+
+        <h2>
+            Human Execution Decision
+        </h2>
+
+        <p class="subtitle">
+
+            Review all information above before making a decision.
+            Your decision and reason will be recorded in the
+            controlled audit trail.
+
+        </p>
+
+
+        {% if case and case.status in ['Rejected','Closed'] %}
+
+        <div class="warning">
+
+            This risk has already been closed or rejected and cannot
+            be executed again from this window.
+
+        </div>
+
+        {% else %}
+
+        <form
+            method="POST"
+            action="{{ url_for('execute_risk',assessment_id=risk.id) }}">
+
+            <label for="reason">
+
+                Officer Review / Decision Reason
+
+            </label>
+
+            <textarea
+                id="reason"
+                name="reason"
+                required
+                placeholder="Record the basis for approving or rejecting this risk..."></textarea>
+
+
+            <div class="decision-buttons">
+
+                <button
+                    type="submit"
+                    name="decision"
+                    value="REJECT"
+                    class="btn btn-danger">
+
+                    REJECT / CLOSE RISK
+
+                </button>
+
+
+                <button
+                    type="submit"
+                    name="decision"
+                    value="APPROVE"
+                    class="btn btn-success">
+
+                    APPROVE & CONTINUE
+
+                </button>
+
+            </div>
+
+        </form>
+
+        {% endif %}
+
+    </div>
+
+
+    <!-- NEXT STAGE -->
+    {% if case and case.status == 'Execution Approved - Pending AI Analysis' %}
+
+    <div class="card">
+
+        <div class="next-stage">
+
+            <b>Execution Approved.</b>
+
+            The risk has passed the first human execution gate.
+
+            The next controlled stage is the AI Audit Analysis /
+            Human Finding Validation workflow before taxpayer
+            communication is approved.
+
+        </div>
+
+    </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
