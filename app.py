@@ -9,6 +9,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
+
 try:
     import pypdf
 except Exception:
@@ -402,68 +403,55 @@ def _execute_approved_rule_for_engine(c, rule, version, plan):
             triggered_tins.add(tin)
     return {'run_id':run_id,'triggered_tins':triggered_tins,'summary':summary}
 
-def _refresh_risk_universe_from_active_rules(c, required_rule_id=None):
-    """Rebuild the rule-engine Risk Universe from approved/active rules.
-
-    Execution is staged before the generated assessment tables are replaced.
-    If the rule currently being approved fails, the transaction is aborted so
-    the new business rule cannot become Active while silently producing no risk
-    universe results.
-    """
-    active=c.execute("""SELECT r.*,v.* FROM risk_rules r JOIN risk_rule_versions v
+def _refresh_risk_universe_from_active_rules(c):
+    active=c.execute('''SELECT r.*,v.* FROM risk_rules r JOIN risk_rule_versions v
                         ON v.rule_id=r.id AND v.version_number=r.version_number
                         WHERE r.status IN ('Active','Approved') AND v.status IN ('Active','Approved')
-                          AND v.execution_plan_json IS NOT NULL AND v.execution_plan_json!='{}'
-                        ORDER BY r.id""").fetchall()
+                          AND v.execution_plan_json IS NOT NULL AND v.execution_plan_json!='{}' ''').fetchall()
     if not active:
         return 0
-
+    # Execute every active rule first.  The existing Risk Universe is not deleted
+    # until all active rules have completed successfully; this prevents a failed
+    # rule from leaving a partial or empty universe.
     taxpayer_rows={str(r['tin']).strip():r for r in c.execute('SELECT * FROM taxpayers WHERE tin IS NOT NULL').fetchall()}
     triggered={}
-    failed_rules=[]
     for rule in active:
         plan=_json_or_default(rule['execution_plan_json'],{})
         if not plan:
-            failed_rules.append(f"{rule['rule_ref']} has an empty execution plan")
-            continue
+            raise ValueError(f"Active rule {rule['rule_ref']} v{rule['version_number']} has no executable plan.")
         try:
             result=_execute_approved_rule_for_engine(c,rule,rule,plan)
         except Exception as exc:
             c.execute("INSERT INTO risk_rule_runs(rule_id,version_number,run_status,records_evaluated,records_triggered,total_exposure,executed_at,executed_by) VALUES(?,?,?,?,?,?,?,?)",
                       (rule['id'],rule['version_number'],'Failed',0,0,0,now(),email()))
-            failed_rules.append(f"{rule['rule_ref']} v{rule['version_number']}: {type(exc).__name__}: {exc}")
             log('RISK_ENGINE_RULE_FAILED',f"{rule['rule_ref']} v{rule['version_number']}: {type(exc).__name__}: {exc}")
-            continue
+            raise RuntimeError(f"Risk Universe refresh stopped because {rule['rule_ref']} v{rule['version_number']} failed: {exc}") from exc
         for tin in result['triggered_tins']:
             triggered.setdefault(tin,[]).append((rule,result))
-
-    # Never replace a previously valid Risk Universe with a partial universe.
-    # If any active rule cannot execute against its locked approved sources,
-    # abort the refresh so the surrounding transaction can roll back.
-    if failed_rules:
-        raise ValueError('Risk Universe refresh aborted; one or more active rules failed: ' + ' | '.join(failed_rules[:10]))
 
     c.execute('DELETE FROM risk_drivers')
     c.execute('DELETE FROM risk_assessments')
     count=0
     for tin,items in triggered.items():
         taxpayer=taxpayer_rows.get(tin)
-        if not taxpayer:
-            continue
+        if not taxpayer: continue
         exposures=[]
         for rule,run_result in items:
-            row=c.execute('SELECT COALESCE(SUM(exposure),0) FROM risk_rule_run_results WHERE run_id=? AND taxpayer_tin=?',(run_result['run_id'],tin)).fetchone()
+            exp=0.0
+            run_id=run_result['run_id']
+            row=c.execute('SELECT COALESCE(SUM(exposure),0) FROM risk_rule_run_results WHERE run_id=? AND taxpayer_tin=?',(run_id,tin)).fetchone()
             exp=float(row[0] or 0)
-            exposures.append((rule,exp,0.0,rule['name']))
+            pct=0.0
+            desc=rule['name']
+            exposures.append((rule,exp,pct,desc))
         score=min(100.0,25.0*len(exposures)+sum(10.0 for x in exposures if x[1]>0))
+        score=min(100.0,score)
         band=_risk_band(score)
         exposure=sum(x[1] for x in exposures)
-        c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',
-                  (taxpayer['id'],score,band,exposure,now(),RULE_ENGINE_VERSION))
+        c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',(taxpayer['id'],score,band,exposure,now(),RULE_ENGINE_VERSION))
         aid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
         for rule,exp,pct,desc in exposures:
-            c.execute('INSERT INTO risk_drivers(assessment_id,rule_id,description,variance,variance_pct) VALUES(?,?,?,?,?)',
-                      (aid,rule['id'],f"{desc}: approved rule triggered for TIN {tin}; estimated exposure UGX {exp:,.0f}.",exp,pct))
+            c.execute('INSERT INTO risk_drivers(assessment_id,rule_id,description,variance,variance_pct) VALUES(?,?,?,?,?)',(aid,rule['id'],f"{desc}: approved rule triggered for TIN {tin}; estimated exposure UGX {exp:,.0f}.",exp,pct))
         count+=1
     return count
 
@@ -483,8 +471,13 @@ def assess(tid):
                           AND v.execution_plan_json IS NOT NULL AND v.execution_plan_json!='{}' """).fetchall()
     if not active:
         c.close(); raise ValueError('No Active/Approved executable risk rules are available. Approve a rule before running taxpayer risk assessment.')
-    _refresh_risk_universe_from_active_rules(c)
-    c.commit()
+    try:
+        _refresh_risk_universe_from_active_rules(c)
+        c.commit()
+    except Exception:
+        c.rollback()
+        c.close()
+        raise
     c.close()
     log('RISK_ASSESSMENT_RUN',f'TIN {t["tin"]}; assessment rebuilt from approved executable rule library.')
     return True
@@ -964,7 +957,7 @@ def run_analysis(cid):
 def ai_draft(f): return f'''Dear Taxpayer,\n\nDuring a review of your records for {f["financial_year"]}, a reconciliation issue requiring clarification was identified.\n\nIssue: {f["description"]}\nExpected/declared value: UGX {f["expected_value"]:,.0f}\nObserved value: UGX {f["observed_value"]:,.0f}\nVariance: UGX {f["variance"]:,.0f} ({f["variance_pct"]:.2f}%)\n\nPlease explain the difference and provide supporting records. This is a request for clarification and is not a final finding of non-compliance.\n\nRegards,\nVirtual Tax Auditor'''
 
 @app.route('/')
-def index(): return redirect(url_for('tasks' if email() else 'login'))
+def index(): return redirect(url_for('dashboard' if email() else 'login'))
 @app.route('/login')
 def login(): return render_template('login.html')
 @app.route('/authorize')
@@ -995,7 +988,7 @@ def callback():
             return redirect(url_for('send_comm', mid=pending_mid))
 
         log('LOGIN', 'Google OAuth login successful', actor=e)
-        return redirect(url_for('tasks'))
+        return redirect(url_for('dashboard'))
     except Exception as ex:
         session.pop('oauth_state', None)
         session.pop('oauth_code_verifier', None)
@@ -1003,48 +996,141 @@ def callback():
 @app.route('/logout')
 @login_required
 def logout(): session.clear(); return redirect(url_for('login'))
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Operational Command Centre for the Virtual Tax Auditor.
+
+    The dashboard is driven entirely from the current database state.  It does not
+    contain hard-coded taxpayer/risk figures and all drill-down links resolve to
+    routes that exist in this application.
+    """
+    fy=request.args.get('financial_year','').strip()
+    tax_type=request.args.get('tax_type','').strip()
+    station=request.args.get('station','').strip()
+    band=request.args.get('band','').strip()
+    q=request.args.get('q','').strip()
+    c=db()
+
+    # Latest risk assessment per taxpayer, with optional dashboard filters.
+    sql="""
+        SELECT ra.id assessment_id, ra.taxpayer_id, ra.score, ra.band, ra.exposure,
+               ra.assessed_at, ra.engine_version,
+               t.tin, t.name taxpayer_name, t.sector, t.station, t.financial_year,
+               COALESCE((SELECT GROUP_CONCAT(DISTINCT COALESCE(rr.risk_category,rr.category))
+                         FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id
+                         WHERE rd.assessment_id=ra.id),'Uncategorised') categories,
+               COALESCE((SELECT GROUP_CONCAT(DISTINCT COALESCE(rr.tax_type,'General'))
+                         FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id
+                         WHERE rd.assessment_id=ra.id),'General') tax_types,
+               (SELECT GROUP_CONCAT(description,' | ') FROM risk_drivers WHERE assessment_id=ra.id) drivers
+        FROM taxpayers t
+        JOIN risk_assessments ra ON ra.taxpayer_id=t.id
+        WHERE ra.id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id)
+    """
+    params=[]
+    if fy:
+        sql += ' AND COALESCE(t.financial_year,\'\')=?'; params.append(fy)
+    if station:
+        sql += ' AND COALESCE(t.station,\'\')=?'; params.append(station)
+    if band in ('Low','Medium','High','Critical'):
+        sql += ' AND ra.band=?'; params.append(band)
+    if tax_type:
+        sql += """ AND EXISTS (
+            SELECT 1 FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id
+            WHERE rd.assessment_id=ra.id AND COALESCE(rr.tax_type,'General')=?
+        )"""; params.append(tax_type)
+    if q:
+        like='%'+q+'%'
+        sql += ' AND (t.tin LIKE ? OR t.name LIKE ? OR t.sector LIKE ? OR t.station LIKE ?)'
+        params += [like]*4
+    sql += " ORDER BY CASE ra.band WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END, ra.score DESC, ra.exposure DESC"
+    rows=[dict(r) for r in c.execute(sql,params).fetchall()]
+
+    # Workflow stage is derived from the actual case state; no synthetic stages are stored.
+    def stage_for(status):
+        status=(status or 'Detected').strip()
+        if status in ('Closed','Rejected') or status.startswith('Closed'): return 'Closed'
+        if status in ('Selected for Virtual Audit','AI Analysis Completed'): return 'Review'
+        if 'Finding' in status or status=='Needs Review': return 'Human Review'
+        if 'Communication' in status or status in ('Communication Approved','Communication Sent'): return 'Communication'
+        if 'Response' in status: return 'Client Response'
+        if 'Further Action' in status or 'More Evidence' in status: return 'Further Action'
+        if 'Outcome' in status or status=='Final Decision': return 'Final Decision'
+        return 'Open'
+
+    for r in rows:
+        case=c.execute("SELECT id,status FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1",(r['taxpayer_id'],)).fetchone()
+        r['case_id']=case['id'] if case else None
+        r['case_status']=case['status'] if case else 'Detected'
+        r['stage']=stage_for(r['case_status'])
+        r['open']=r['stage']!='Closed'
+
+    # Command-centre KPI definitions.
+    taxpayers_analysed=c.execute("SELECT COUNT(DISTINCT taxpayer_id) FROM risk_assessments").fetchone()[0]
+    high_risk=c.execute("SELECT COUNT(*) FROM risk_assessments WHERE id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id) AND band='High'").fetchone()[0]
+    critical_risk=c.execute("SELECT COUNT(*) FROM risk_assessments WHERE id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id) AND band='Critical'").fetchone()[0]
+    in_audit=c.execute("SELECT COUNT(*) FROM audit_cases WHERE status NOT IN ('Closed','Rejected')").fetchone()[0]
+    pending_validation=c.execute("SELECT COUNT(*) FROM findings WHERE status='AI Generated'").fetchone()[0]
+
+    # Apply the same dashboard filters to the KPI risk universe where practical.
+    filtered=rows
+    if fy or tax_type or station or band or q:
+        filtered=rows
+    filtered_taxpayer_ids={r['taxpayer_id'] for r in filtered}
+    if fy or tax_type or station or band or q:
+        taxpayers_analysed=len(filtered_taxpayer_ids)
+        high_risk=sum(1 for r in filtered if r['band']=='High')
+        critical_risk=sum(1 for r in filtered if r['band']=='Critical')
+        in_audit=sum(1 for r in filtered if r['case_id'] and r['open'])
+
+    # Risk distribution.
+    risk_distribution=[('Critical',sum(1 for r in rows if r['band']=='Critical')),('High',sum(1 for r in rows if r['band']=='High')),('Medium',sum(1 for r in rows if r['band']=='Medium')),('Low',sum(1 for r in rows if r['band']=='Low'))]
+
+    # Top risk drivers from the latest assessments.
+    driver_rows=c.execute("""
+        SELECT rr.name, COALESCE(rr.risk_category,rr.category,'Uncategorised') category,
+               COUNT(*) n, COALESCE(SUM(ABS(COALESCE(rd.variance,0))),0) exposure
+        FROM risk_drivers rd JOIN risk_assessments ra ON ra.id=rd.assessment_id
+        JOIN risk_rules rr ON rr.id=rd.rule_id
+        WHERE ra.id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id)
+        GROUP BY rr.id,rr.name,COALESCE(rr.risk_category,rr.category,'Uncategorised')
+        ORDER BY n DESC, exposure DESC LIMIT 10
+    """).fetchall()
+    top_drivers=[dict(r) for r in driver_rows]
+
+    # Taxpayer attention queue.
+    attention=[]
+    for r in sorted(rows,key=lambda x:(0 if x['band']=='Critical' else 1 if x['band']=='High' else 2, -(x['exposure'] or 0)))[:12]:
+        attention.append(r)
+
+    # Human-control queue counts.
+    validation_queue={
+        'findings':c.execute("SELECT COUNT(*) FROM findings WHERE status='AI Generated'").fetchone()[0],
+        'communications':c.execute("SELECT COUNT(*) FROM communications WHERE status='Draft'").fetchone()[0],
+        'evidence':c.execute("""SELECT COUNT(*) FROM taxpayer_responses tr
+                              WHERE NOT EXISTS (SELECT 1 FROM response_analyses ra WHERE ra.response_id=tr.id)""").fetchone()[0]
+    }
+
+    # Filter options come from actual data.
+    financial_years=[x[0] for x in c.execute("SELECT DISTINCT financial_year FROM taxpayers WHERE financial_year IS NOT NULL AND financial_year<>'' ORDER BY financial_year DESC").fetchall()]
+    stations=[x[0] for x in c.execute("SELECT DISTINCT station FROM taxpayers WHERE station IS NOT NULL AND station<>'' ORDER BY station").fetchall()]
+    tax_types=[x[0] for x in c.execute("SELECT DISTINCT COALESCE(tax_type,'General') FROM risk_rules WHERE tax_type IS NOT NULL AND tax_type<>'' ORDER BY 1").fetchall()]
+    c.close()
+
+    return render_template('dashboard.html',
+        taxpayers_analysed=taxpayers_analysed,high_risk=high_risk,critical_risk=critical_risk,
+        in_audit=in_audit,pending_validation=pending_validation,risk_distribution=risk_distribution,
+        top_drivers=top_drivers,attention=attention,validation_queue=validation_queue,
+        financial_years=financial_years,stations=stations,tax_types=tax_types,
+        financial_year=fy,tax_type=tax_type,station=station,band=band,q=q,
+        rows=rows)
+
 @app.route('/tasks')
 @login_required
 def tasks():
-    c=db()
-    counts={k:c.execute(q).fetchone()[0] for k,q in {
-        'taxpayers':'SELECT COUNT(*) FROM taxpayers',
-        'high':"SELECT COUNT(*) FROM risk_assessments WHERE band IN('High','Critical')",
-        'cases':"SELECT COUNT(*) FROM audit_cases WHERE status NOT IN('Closed','Rejected')",
-        'findings':"SELECT COUNT(*) FROM findings WHERE status='AI Generated'",
-        'responses':'SELECT COUNT(*) FROM taxpayer_responses',
-        'knowledge_pending':"SELECT COUNT(*) FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft'"
-    }.items()}
-    case=c.execute("SELECT * FROM audit_cases WHERE status NOT IN ('Closed','Rejected') ORDER BY id DESC LIMIT 1").fetchone()
-    analysis_count_case=0
-    validated_count=0
-    sent_count=0
-    response_count=0
-    analysis_count=0
-    validation_count=0
-    latest_finding_id=None
-    if case:
-        analysis_count_case=c.execute("SELECT COUNT(*) FROM audit_analyses WHERE case_id=? AND analysis_status='Completed'",(case['id'],)).fetchone()[0]
-        validated_count=c.execute("SELECT COUNT(*) FROM findings WHERE case_id=? AND status='Human Validated'",(case['id'],)).fetchone()[0]
-        sent_count=c.execute("SELECT COUNT(*) FROM communications WHERE case_id=? AND status='Sent'",(case['id'],)).fetchone()[0]
-        response_count=c.execute("SELECT COUNT(*) FROM taxpayer_responses WHERE case_id=?",(case['id'],)).fetchone()[0]
-        analysis_count=c.execute("SELECT COUNT(*) FROM response_analyses WHERE case_id=?",(case['id'],)).fetchone()[0]
-        validation_count=c.execute("SELECT COUNT(*) FROM second_validations WHERE case_id=?",(case['id'],)).fetchone()[0]
-    latest_finding=c.execute("SELECT id FROM findings ORDER BY id DESC LIMIT 1").fetchone()
-    latest_finding_id=latest_finding['id'] if latest_finding else None
-    c.close()
-    workflow={
-        'case_id': case['id'] if case else None,
-        'case_ref': case['case_ref'] if case else None,
-        'analyzed': analysis_count_case > 0,
-        'validated': validated_count > 0,
-        'sent': sent_count > 0,
-        'response': response_count > 0,
-        'response_analysis': analysis_count > 0,
-        'second_validation': validation_count > 0,
-        'latest_finding_id': latest_finding_id,
-    }
-    return render_template('tasks.html',counts=counts,workflow=workflow)
+    # Backward-compatible route: existing bookmarks and the navigation bar still work.
+    return redirect(url_for('dashboard'))
 ALLOWED_KB_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'}
 KB_CATEGORIES = ['Tax Laws', 'Regulations', 'Procedures', 'Audit Guidance', 'Sector Knowledge', 'Risk Knowledge']
 KB_DOCUMENT_TYPES = ['Act', 'Regulation', 'Statutory Instrument', 'Procedure', 'Manual', 'Guideline', 'Circular', 'Directive', 'Sector Guide', 'Risk Note', 'Other']
@@ -1757,25 +1843,11 @@ def _clean_value(v):
     except Exception:return v
 
 def _load_approved_source(c, source_id, expected_version=None):
-    """Load the effective approved version of a source.
-
-    A rule is version-locked: if its execution plan was created against an
-    older approved version and a newer version is subsequently approved, the
-    rule must be re-previewed/re-approved instead of silently executing against
-    changed data.
-    """
     if pd is None:raise RuntimeError('pandas is required to execute a data-source risk rule.')
     row=_source_lookup(c,int(source_id))
     if not row:raise ValueError(f'Approved data source {source_id} was not found.')
-    approved_version=int(row['version_number'])
-    if expected_version is not None:
-        try: expected=int(expected_version)
-        except (TypeError,ValueError): raise ValueError(f'Invalid approved version reference for data source {row["source_name"]}.')
-        if approved_version != expected:
-            raise ValueError(
-                f'Data source {row["source_name"]} is now approved at version {approved_version}, '
-                f'but this rule is locked to version {expected}. Re-run the rule preview before execution.'
-            )
+    if expected_version is not None and int(row['version_number']) != int(expected_version):
+        raise ValueError(f"Approved data source {row['source_name']} is now Version {row['version_number']}; this rule is locked to Version {expected_version}. Re-run the rule preview before execution.")
     path=Path(row['transform_output_path'] or row['file_path'])
     if not path.exists():raise ValueError(f'Data source {row["source_name"]} file is not available on the server.')
     ext=data_source_ext(path.name)
@@ -1872,18 +1944,9 @@ def _parse_rule_plan(form,source_catalog):
             if calc.get(side,{}).get('source_id'):ids.add(int(calc[side]['source_id']))
         for x in calc.get('group_by',[]):
             if x.get('source_id'):ids.add(int(x['source_id']))
-    exposure=plan.get('exposure',{}) or {}
-    if exposure.get('source_id'):ids.add(int(exposure['source_id']))
-    for ref in plan.get('preview_fields',[]) or []:
-        if ref.get('source_id'):ids.add(int(ref['source_id']))
-    for j in plan.get('joins',[]):
-        if j.get('left_source_id'):ids.add(int(j['left_source_id']))
-        if j.get('right_source_id'):ids.add(int(j['right_source_id']))
     missing=[str(x) for x in ids if x not in allowed]
     if missing:raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
     if not base.get('source_id'):raise ValueError('Select a primary data source.')
-    base_id=int(base['source_id'])
-    if base_id not in allowed:raise ValueError('The selected primary data source is not currently approved.')
     plan['sources']=[{'id':sid,'name':allowed[sid]['name'],'version':allowed[sid]['version'],'ref':allowed[sid]['ref'],'columns':allowed[sid]['columns']} for sid in sorted(ids)]
     plan['base_source']={'source_id':int(base['source_id']),'name':allowed[int(base['source_id'])]['name']}
     return plan
@@ -1944,14 +2007,9 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         raise RuntimeError('pandas is required for rule execution.')
 
     loaded={}; source_rows={}; source_originals={}
-    planned_sources={int(x['id']):x for x in (plan.get('sources',[]) or []) if x.get('id') is not None}
-    if not planned_sources:
-        raise ValueError('The rule has no configured data sources.')
-    for sid,planned in planned_sources.items():
-        row,df,original=_load_approved_source(c,sid,expected_version=planned.get('version'))
-        expected=planned.get('version')
-        if expected is not None and int(row['version_number'])!=int(expected):
-            raise ValueError(f"Approved source {row['source_name']} is now Version {row['version_number']}; this rule was built against Version {expected}. Rebuild/re-preview the rule.")
+    for src in plan.get('sources',[]):
+        sid=int(src['id'])
+        row,df,original=_load_approved_source(c,sid,src.get('version'))
         loaded[sid]=df
         source_rows[sid]=row
         source_originals[sid]=original
@@ -2110,8 +2168,7 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
             cols.append((col,result[col]))
 
     preview=[]
-    preview_limit = len(result) if sample_only is None else max(int(sample_only), 0)
-    for _,row in result.head(preview_limit).iterrows():
+    for _,row in result.head(sample_only).iterrows():
         obj={name:_clean_value(series.loc[row.name]) for name,series in cols}
         obj['Risk Result']=plan.get('result',{}).get('risk_description','Potential Risk')
         obj['Estimated Exposure']=_clean_value(row.get('__exposure__',0))
@@ -2167,7 +2224,7 @@ def _rule_form_context(c,rule=None):
 @app.route('/business')
 @login_required
 def business_rules():
-    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status,(SELECT v.preview_status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_preview_status,(SELECT v.preview_approved FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_preview_approved,(SELECT COUNT(*) FROM risk_rule_legal_basis b WHERE b.rule_id=r.id AND b.version_number=r.version_number) AS legal_basis_count FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
+    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
 
 @app.route('/business/rules/create')
 @login_required
@@ -2326,7 +2383,7 @@ def risk_rule_approve(rule_id):
         c.execute("UPDATE risk_rule_versions SET status='Active',approved_by=?,approved_at=?,preview_approved=1 WHERE rule_id=? AND version_number=?",(email(),stamp,rule_id,r['version_number']))
         c.execute("UPDATE risk_rules SET status='Active',approved=1,approved_by=?,approved_at=?,updated_at=? WHERE id=?",(email(),stamp,stamp,rule_id))
         # Immediately execute the newly approved rule against approved data so the Risk Universe is populated.
-        affected=_refresh_risk_universe_from_active_rules(c, required_rule_id=rule_id)
+        affected=_refresh_risk_universe_from_active_rules(c)
         c.commit()
         log('RISK_RULE_APPROVED',f'{r["rule_ref"]} v{r["version_number"]}: approved after interpretation and preview by {email()}; risk universe taxpayers refreshed={affected}')
         flash(f'{r["rule_ref"]} Version {r["version_number"]} is now Active. Risk Universe refreshed for {affected:,} taxpayer(s).','success')
@@ -2396,9 +2453,7 @@ def data_source_review(source_id):
     if not src: c.close(); abort(404)
     v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone()
     if not v: c.close(); abort(404)
-    if v['version_status']!='Draft': c.close(); flash(f"Version {v['version_number']} is already {v['version_status']} and cannot be reviewed again.",'error'); return redirect(url_for('data_sources'))
     if decision=='Approved' and v['validation_status']=='Failed': c.close(); flash('This source cannot be approved because validation failed. Correct it and upload a new version.','error'); return redirect(url_for('data_sources'))
-    if decision in ('Rejected','Needs Revision') and not comments: c.close(); flash('Comments are required when a source is rejected or sent for revision.','error'); return redirect(url_for('data_sources'))
     c.execute('INSERT INTO data_source_reviews(source_id,version_number,decision,comments,reviewed_by,reviewed_at) VALUES(?,?,?,?,?,?)',(source_id,v['version_number'],decision,comments,email(),now()))
     c.execute('UPDATE data_source_versions SET version_status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,v['id']))
     c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',('Approved' if decision=='Approved' else ('Rejected' if decision=='Rejected' else 'Draft'),now(),source_id)); c.commit(); c.close()
@@ -2434,12 +2489,15 @@ def data_source_versions(source_id):
 @app.route('/data-sources/<int:source_id>/download')
 @login_required
 def data_source_download(source_id):
-    # Download the controlled approved version, never an unapproved draft.
     c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
     if not src: c.close(); abort(404)
-    v=c.execute("SELECT * FROM data_source_versions WHERE source_id=? AND version_status='Approved' ORDER BY version_number DESC LIMIT 1",(source_id,)).fetchone(); c.close()
+    v=c.execute("""SELECT * FROM data_source_versions
+                   WHERE source_id=? AND version_status='Approved'
+                   ORDER BY version_number DESC LIMIT 1""",(source_id,)).fetchone(); c.close()
     if not v: abort(404)
-    return send_from_directory(str(UPLOAD/'data_sources'),v['stored_filename'],as_attachment=True,download_name=v['original_filename'])
+    path=Path(v['file_path'])
+    if not path.exists(): abort(404)
+    return send_from_directory(str(path.parent),path.name,as_attachment=True,download_name=v['original_filename'])
 
 def transform_read_source(path):
     if pd is None:
@@ -2644,31 +2702,15 @@ def data_source_transform(source_id):
         c.execute('INSERT INTO data_transform_recipes(source_id,version_number,recipe_name,steps_json,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',(source_id,version['version_number'],f"Transform {source['source_name']} v{version['version_number']}",'[]','Draft',email(),now(),now()))
         c.commit()
         recipe=transform_get_recipe(c,source_id,version['version_number'])
-    # Normalize the recipe before it reaches Jinja.
-    # IMPORTANT: never pass a Jinja Undefined value into |tojson.
+    # Normalize the recipe before it reaches Jinja. This prevents an empty,
+    # malformed, or legacy recipe from ever becoming an Undefined value in
+    # data_transform.html.
     steps=recipe.get('steps',[]) if isinstance(recipe,dict) else []
     if not isinstance(steps,list):
         steps=[]
-
-    def _json_safe(value):
-        if value is None or isinstance(value,(str,int,float,bool)):
-            return value
-        if isinstance(value,(list,tuple)):
-            return [_json_safe(v) for v in value]
-        if isinstance(value,dict):
-            return {str(k):_json_safe(v) for k,v in value.items()}
-        return str(value)
-
-    steps=[_json_safe(step) for step in steps if isinstance(step,dict)]
+    steps=[step for step in steps if isinstance(step,dict)]
     recipe['steps']=steps
-    recipe['recipe_name']=str(recipe.get('recipe_name') or '')
-
-    # Serialize in Python, before Jinja renders the page. This completely
-    # removes Flask/Jinja Undefined objects from the JavaScript payload.
-    try:
-        steps_json=json.dumps(steps,ensure_ascii=False,allow_nan=False,default=str)
-    except (TypeError,ValueError):
-        steps_json='[]'
+    recipe['recipe_name']=recipe.get('recipe_name','') or ''
 
     if request.method=='POST':
         action=request.form.get('action','')
@@ -2811,7 +2853,6 @@ def data_source_transform(source_id):
         version=version,
         recipe=recipe or {'recipe_name':'','steps':[],'status':'Draft'},
         steps=steps or [],
-        steps_json=steps_json,
         original_rows=original_rows,
         original_columns=original_columns,
         preview_rows=preview_rows,
