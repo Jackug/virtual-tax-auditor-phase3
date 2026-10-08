@@ -949,7 +949,7 @@ def run_analysis(cid):
 def ai_draft(f): return f'''Dear Taxpayer,\n\nDuring a review of your records for {f["financial_year"]}, a reconciliation issue requiring clarification was identified.\n\nIssue: {f["description"]}\nExpected/declared value: UGX {f["expected_value"]:,.0f}\nObserved value: UGX {f["observed_value"]:,.0f}\nVariance: UGX {f["variance"]:,.0f} ({f["variance_pct"]:.2f}%)\n\nPlease explain the difference and provide supporting records. This is a request for clarification and is not a final finding of non-compliance.\n\nRegards,\nVirtual Tax Auditor'''
 
 @app.route('/')
-def index(): return redirect(url_for('tasks' if email() else 'login'))
+def index(): return redirect(url_for('dashboard' if email() else 'login'))
 @app.route('/login')
 def login(): return render_template('login.html')
 @app.route('/authorize')
@@ -980,7 +980,7 @@ def callback():
             return redirect(url_for('send_comm', mid=pending_mid))
 
         log('LOGIN', 'Google OAuth login successful', actor=e)
-        return redirect(url_for('tasks'))
+        return redirect(url_for('dashboard'))
     except Exception as ex:
         session.pop('oauth_state', None)
         session.pop('oauth_code_verifier', None)
@@ -988,48 +988,72 @@ def callback():
 @app.route('/logout')
 @login_required
 def logout(): session.clear(); return redirect(url_for('login'))
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    band=request.args.get('band','').strip(); category=request.args.get('category','').strip(); station=request.args.get('station','').strip(); stage=request.args.get('stage','').strip(); q=request.args.get('q','').strip()
+    c=db()
+    sql="""
+        SELECT ra.id assessment_id,ra.taxpayer_id,ra.score,ra.band,ra.exposure,ra.assessed_at,ra.engine_version,
+               t.tin,t.name taxpayer_name,t.sector,t.station,t.financial_year,
+               (SELECT ac.id FROM audit_cases ac WHERE ac.taxpayer_id=t.id ORDER BY ac.id DESC LIMIT 1) case_id,
+               COALESCE((SELECT ac.status FROM audit_cases ac WHERE ac.taxpayer_id=t.id ORDER BY ac.id DESC LIMIT 1),'Detected') case_status,
+               COALESCE((SELECT GROUP_CONCAT(DISTINCT COALESCE(rv.risk_category,rr.category)) FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=ra.id),'Uncategorised') categories,
+               COALESCE((SELECT GROUP_CONCAT(DISTINCT COALESCE(rv.tax_type,'General')) FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=ra.id),'General') tax_types,
+               (SELECT GROUP_CONCAT(description,' | ') FROM risk_drivers WHERE assessment_id=ra.id) drivers
+        FROM taxpayers t JOIN risk_assessments ra ON ra.taxpayer_id=t.id
+        WHERE ra.id IN (SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id)
+    """
+    params=[]
+    if band in ('Low','Medium','High','Critical'): sql+=' AND ra.band=?'; params.append(band)
+    if category:
+        sql+=""" AND EXISTS (SELECT 1 FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=ra.id AND LOWER(COALESCE(rv.risk_category,rr.category,''))=LOWER(?))"""; params.append(category)
+    if station: sql+=' AND COALESCE(t.station,\'\')=?'; params.append(station)
+    if q: sql+=' AND (t.tin LIKE ? OR t.name LIKE ? OR t.sector LIKE ? OR t.station LIKE ?)'; like='%'+q+'%'; params += [like]*4
+    sql+=" ORDER BY CASE ra.band WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,ra.score DESC,ra.exposure DESC"
+    rows=[dict(r) for r in c.execute(sql,params).fetchall()]
+    def stage_for(status):
+        status=(status or 'Detected').strip()
+        if status in ('Closed','Rejected') or status.startswith('Closed'): return 'Closed'
+        if status in ('Selected for Virtual Audit','AI Analysis Completed'): return 'Review'
+        if 'Finding' in status or status=='Needs Review': return 'Human Review'
+        if 'Communication' in status or 'Sent' in status: return 'Communication'
+        if 'Response' in status: return 'Client Response'
+        if 'Further Action' in status or 'More Evidence' in status: return 'Further Action'
+        if 'Outcome' in status: return 'Final Decision'
+        return 'Open'
+    for r in rows:
+        r['stage']=stage_for(r['case_status']); r['open']=r['stage']!='Closed'; r['category_list']=[x.strip() for x in (r.get('categories') or 'Uncategorised').split(',') if x.strip()]; r['tax_type_list']=[x.strip() for x in (r.get('tax_types') or 'General').split(',') if x.strip()]
+    if stage in ('Open','Closed','Review','Human Review','Communication','Client Response','Further Action','Final Decision'): rows=[r for r in rows if r['stage']==stage]
+    total=len(rows); open_count=sum(r['open'] for r in rows); closed_count=total-open_count; high=sum(1 for r in rows if r['band']=='High'); critical=sum(1 for r in rows if r['band']=='Critical')
+    def counts_for(key):
+        out={}
+        for r in rows:
+            for v in r.get(key) or []: out[v]=out.get(v,0)+1
+        return sorted(out.items(),key=lambda x:(-x[1],x[0]))
+    categories=counts_for('category_list'); tax_types=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
+    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
+
+@app.route('/risk/<int:assessment_id>')
+@login_required
+def risk_detail(assessment_id):
+    c=db(); risk=c.execute('SELECT ra.*,t.name taxpayer_name,t.tin,t.sector,t.station,t.financial_year,t.status taxpayer_status FROM risk_assessments ra JOIN taxpayers t ON t.id=ra.taxpayer_id WHERE ra.id=?',(assessment_id,)).fetchone()
+    if not risk: c.close(); abort(404)
+    drivers=c.execute("""SELECT rd.*,rr.name rule_name,rr.natural_language,rr.category rule_category,COALESCE(rv.risk_category,rr.category) risk_category,rv.tax_type,rv.version_number rule_version,rv.status rule_version_status FROM risk_drivers rd JOIN risk_rules rr ON rr.id=rd.rule_id LEFT JOIN risk_rule_versions rv ON rv.rule_id=rr.id AND rv.version_number=(SELECT MAX(v2.version_number) FROM risk_rule_versions v2 WHERE v2.rule_id=rr.id) WHERE rd.assessment_id=? ORDER BY rd.id""",(assessment_id,)).fetchall()
+    case=c.execute('SELECT * FROM audit_cases WHERE taxpayer_id=? ORDER BY id DESC LIMIT 1',(risk['taxpayer_id'],)).fetchone(); findings=c.execute('SELECT * FROM findings WHERE case_id=? ORDER BY id',(case['id'],)).fetchall() if case else []
+    c.close(); return render_template('risk_detail.html',risk=risk,drivers=drivers,case=case,findings=findings)
+
+@app.route('/risk/<int:assessment_id>/execute',methods=['POST'])
+@login_required
+def execute_risk(assessment_id):
+    c=db(); risk=c.execute('SELECT * FROM risk_assessments WHERE id=?',(assessment_id,)).fetchone(); c.close()
+    if not risk: abort(404)
+    return redirect(url_for('case_detail',cid=case_for(risk['taxpayer_id'])))
+
 @app.route('/tasks')
 @login_required
-def tasks():
-    c=db()
-    counts={k:c.execute(q).fetchone()[0] for k,q in {
-        'taxpayers':'SELECT COUNT(*) FROM taxpayers',
-        'high':"SELECT COUNT(*) FROM risk_assessments WHERE band IN('High','Critical')",
-        'cases':"SELECT COUNT(*) FROM audit_cases WHERE status NOT IN('Closed','Rejected')",
-        'findings':"SELECT COUNT(*) FROM findings WHERE status='AI Generated'",
-        'responses':'SELECT COUNT(*) FROM taxpayer_responses',
-        'knowledge_pending':"SELECT COUNT(*) FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft'"
-    }.items()}
-    case=c.execute("SELECT * FROM audit_cases WHERE status NOT IN ('Closed','Rejected') ORDER BY id DESC LIMIT 1").fetchone()
-    analysis_count_case=0
-    validated_count=0
-    sent_count=0
-    response_count=0
-    analysis_count=0
-    validation_count=0
-    latest_finding_id=None
-    if case:
-        analysis_count_case=c.execute("SELECT COUNT(*) FROM audit_analyses WHERE case_id=? AND analysis_status='Completed'",(case['id'],)).fetchone()[0]
-        validated_count=c.execute("SELECT COUNT(*) FROM findings WHERE case_id=? AND status='Human Validated'",(case['id'],)).fetchone()[0]
-        sent_count=c.execute("SELECT COUNT(*) FROM communications WHERE case_id=? AND status='Sent'",(case['id'],)).fetchone()[0]
-        response_count=c.execute("SELECT COUNT(*) FROM taxpayer_responses WHERE case_id=?",(case['id'],)).fetchone()[0]
-        analysis_count=c.execute("SELECT COUNT(*) FROM response_analyses WHERE case_id=?",(case['id'],)).fetchone()[0]
-        validation_count=c.execute("SELECT COUNT(*) FROM second_validations WHERE case_id=?",(case['id'],)).fetchone()[0]
-    latest_finding=c.execute("SELECT id FROM findings ORDER BY id DESC LIMIT 1").fetchone()
-    latest_finding_id=latest_finding['id'] if latest_finding else None
-    c.close()
-    workflow={
-        'case_id': case['id'] if case else None,
-        'case_ref': case['case_ref'] if case else None,
-        'analyzed': analysis_count_case > 0,
-        'validated': validated_count > 0,
-        'sent': sent_count > 0,
-        'response': response_count > 0,
-        'response_analysis': analysis_count > 0,
-        'second_validation': validation_count > 0,
-        'latest_finding_id': latest_finding_id,
-    }
-    return render_template('tasks.html',counts=counts,workflow=workflow)
+def tasks(): return redirect(url_for('dashboard'))
+
 ALLOWED_KB_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'}
 KB_CATEGORIES = ['Tax Laws', 'Regulations', 'Procedures', 'Audit Guidance', 'Sector Knowledge', 'Risk Knowledge']
 KB_DOCUMENT_TYPES = ['Act', 'Regulation', 'Statutory Instrument', 'Procedure', 'Manual', 'Guideline', 'Circular', 'Directive', 'Sector Guide', 'Risk Note', 'Other']
