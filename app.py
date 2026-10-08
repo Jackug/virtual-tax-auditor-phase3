@@ -1484,10 +1484,279 @@ def select_taxpayer(tid):
 @app.route('/case/<int:cid>')
 @login_required
 def case_detail(cid):
-    c=db(); case=getcase(c,cid)
+    c = db()
+
+    case = getcase(c, cid)
+
     if not case:
-        c.close(); abort(404)
-    analysis=c.execute('SELECT * FROM audit_analyses WHERE case_id=? ORDER BY id DESC LIMIT 1',(cid,)).fetchone(); findings=c.execute('SELECT * FROM findings WHERE case_id=? ORDER BY id',(cid,)).fetchall(); comm=c.execute('SELECT * FROM communications WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); responses=c.execute('SELECT * FROM taxpayer_responses WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); evidence=c.execute('SELECT * FROM evidence WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); ra=c.execute('SELECT * FROM response_analyses WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); val=c.execute('SELECT * FROM second_validations WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); acts=c.execute('SELECT * FROM further_actions WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); outcome=c.execute('SELECT * FROM outcomes WHERE case_id=?',(cid,)).fetchone(); open_actions=[a for a in acts if a['status']=='Open']; unresolved_findings=[f for f in findings if f['status'] not in ('Human Validated','Rejected')]; latest_validation=val[0] if val else None; c.close(); return render_template('case.html',case=case,analysis=analysis,findings=findings,communications=comm,responses=responses,evidence=evidence,response_analyses=ra,validations=val,actions=acts,outcome=outcome,open_actions=open_actions,unresolved_findings=unresolved_findings,latest_validation=latest_validation)
+        c.close()
+        abort(404)
+
+    # ---------------------------------------------------------
+    # Latest AI Audit Analysis
+    # ---------------------------------------------------------
+    analysis = c.execute(
+        '''
+        SELECT *
+        FROM audit_analyses
+        WHERE case_id=?
+        ORDER BY id DESC
+        LIMIT 1
+        ''',
+        (cid,)
+    ).fetchone()
+
+    # ---------------------------------------------------------
+    # Findings
+    # ---------------------------------------------------------
+    findings = c.execute(
+        '''
+        SELECT *
+        FROM findings
+        WHERE case_id=?
+        ORDER BY id
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # Communications
+    # ---------------------------------------------------------
+    comm = c.execute(
+        '''
+        SELECT *
+        FROM communications
+        WHERE case_id=?
+        ORDER BY id DESC
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # Taxpayer Responses
+    # ---------------------------------------------------------
+    responses = c.execute(
+        '''
+        SELECT *
+        FROM taxpayer_responses
+        WHERE case_id=?
+        ORDER BY id DESC
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # Evidence
+    # ---------------------------------------------------------
+    evidence = c.execute(
+        '''
+        SELECT *
+        FROM evidence
+        WHERE case_id=?
+        ORDER BY id DESC
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # AI Response Analyses
+    # ---------------------------------------------------------
+    ra = c.execute(
+        '''
+        SELECT *
+        FROM response_analyses
+        WHERE case_id=?
+        ORDER BY id DESC
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # Second Human Validation
+    # ---------------------------------------------------------
+    val = c.execute(
+        '''
+        SELECT *
+        FROM second_validations
+        WHERE case_id=?
+        ORDER BY id DESC
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # Further Actions
+    # ---------------------------------------------------------
+    acts = c.execute(
+        '''
+        SELECT *
+        FROM further_actions
+        WHERE case_id=?
+        ORDER BY id DESC
+        ''',
+        (cid,)
+    ).fetchall()
+
+    # ---------------------------------------------------------
+    # Outcome
+    # ---------------------------------------------------------
+    outcome = c.execute(
+        '''
+        SELECT *
+        FROM outcomes
+        WHERE case_id=?
+        ''',
+        (cid,)
+    ).fetchone()
+
+    # ---------------------------------------------------------
+    # Knowledge Base retrievals used by the AI analysis
+    #
+    # IMPORTANT:
+    # We join:
+    # knowledge_retrievals
+    #      -> knowledge_chunks
+    #      -> knowledge_documents
+    #      -> knowledge_document_versions
+    #
+    # and ONLY allow Approved versions.
+    # ---------------------------------------------------------
+    knowledge_retrievals = []
+
+    if analysis:
+        knowledge_retrievals = c.execute(
+            '''
+            SELECT
+                kr.id AS retrieval_id,
+                kr.query_text,
+                kr.rank_order,
+                kr.retrieved_at,
+
+                kc.id AS chunk_id,
+                kc.chunk_number,
+                kc.page_number,
+                kc.source_filename,
+                kc.text_content,
+
+                kd.document_ref,
+                kd.title,
+                kd.category,
+                kd.document_type,
+                kd.tax_type,
+                kd.issuing_authority,
+
+                kv.version_number,
+                kv.version_status
+
+            FROM knowledge_retrievals kr
+
+            JOIN knowledge_chunks kc
+                ON kc.id = kr.chunk_id
+
+            JOIN knowledge_documents kd
+                ON kd.id = kc.document_id
+
+            JOIN knowledge_document_versions kv
+                ON kv.document_id = kc.document_id
+                AND kv.version_number = kc.version_number
+
+            WHERE kr.case_id=?
+              AND kr.analysis_id=?
+              AND kv.version_status='Approved'
+
+            ORDER BY kr.rank_order ASC, kr.id ASC
+            ''',
+            (cid, analysis['id'])
+        ).fetchall()
+
+    # ---------------------------------------------------------
+    # Clean methodology for display
+    #
+    # The current analysis record contains the retrieved KB
+    # text inside methodology. We do NOT want to display that
+    # huge block there anymore.
+    # ---------------------------------------------------------
+    methodology_display = ''
+
+    if analysis:
+        methodology_display = analysis['methodology'] or ''
+
+        marker = (
+            'Approved Knowledge Base context retrieved for this analysis:'
+        )
+
+        if marker in methodology_display:
+            methodology_display = methodology_display.split(
+                marker,
+                1
+            )[0].strip()
+
+        # Handle the older wording as well.
+        marker2 = (
+            'Approved Knowledge Base context retrieved for this analysis'
+        )
+
+        if marker2 in methodology_display:
+            methodology_display = methodology_display.split(
+                marker2,
+                1
+            )[0].strip()
+
+    # ---------------------------------------------------------
+    # Workflow state
+    # ---------------------------------------------------------
+    open_actions = [
+        a for a in acts
+        if a['status'] == 'Open'
+    ]
+
+    unresolved_findings = [
+        f for f in findings
+        if f['status'] not in (
+            'Human Validated',
+            'Rejected'
+        )
+    ]
+
+    latest_validation = val[0] if val else None
+
+    c.close()
+
+    return render_template(
+        'case.html',
+
+        case=case,
+
+        analysis=analysis,
+
+        # Clean methodology shown to auditor
+        methodology_display=methodology_display,
+
+        # Approved legal material retrieved by AI
+        knowledge_retrievals=knowledge_retrievals,
+
+        findings=findings,
+
+        communications=comm,
+
+        responses=responses,
+
+        evidence=evidence,
+
+        response_analyses=ra,
+
+        validations=val,
+
+        actions=acts,
+
+        outcome=outcome,
+
+        open_actions=open_actions,
+
+        unresolved_findings=unresolved_findings,
+
+        latest_validation=latest_validation
+    )
 @app.route('/case/<int:cid>/analyze',methods=['POST'])
 @login_required
 def analyze(cid): run_analysis(cid); flash('AI Audit Analysis completed.','success'); return redirect(url_for('case_detail',cid=cid))
