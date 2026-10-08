@@ -421,23 +421,28 @@ def _refresh_risk_universe_from_active_rules(c, required_rule_id=None):
 
     taxpayer_rows={str(r['tin']).strip():r for r in c.execute('SELECT * FROM taxpayers WHERE tin IS NOT NULL').fetchall()}
     triggered={}
+    failed_rules=[]
     for rule in active:
         plan=_json_or_default(rule['execution_plan_json'],{})
         if not plan:
-            if required_rule_id is not None and int(rule['id'])==int(required_rule_id):
-                raise ValueError(f"Rule {rule['rule_ref']} has an empty execution plan.")
+            failed_rules.append(f"{rule['rule_ref']} has an empty execution plan")
             continue
         try:
             result=_execute_approved_rule_for_engine(c,rule,rule,plan)
         except Exception as exc:
             c.execute("INSERT INTO risk_rule_runs(rule_id,version_number,run_status,records_evaluated,records_triggered,total_exposure,executed_at,executed_by) VALUES(?,?,?,?,?,?,?,?)",
                       (rule['id'],rule['version_number'],'Failed',0,0,0,now(),email()))
+            failed_rules.append(f"{rule['rule_ref']} v{rule['version_number']}: {type(exc).__name__}: {exc}")
             log('RISK_ENGINE_RULE_FAILED',f"{rule['rule_ref']} v{rule['version_number']}: {type(exc).__name__}: {exc}")
-            if required_rule_id is not None and int(rule['id'])==int(required_rule_id):
-                raise ValueError(f"Rule {rule['rule_ref']} could not be executed against the approved data: {exc}")
             continue
         for tin in result['triggered_tins']:
             triggered.setdefault(tin,[]).append((rule,result))
+
+    # Never replace a previously valid Risk Universe with a partial universe.
+    # If any active rule cannot execute against its locked approved sources,
+    # abort the refresh so the surrounding transaction can roll back.
+    if failed_rules:
+        raise ValueError('Risk Universe refresh aborted; one or more active rules failed: ' + ' | '.join(failed_rules[:10]))
 
     c.execute('DELETE FROM risk_drivers')
     c.execute('DELETE FROM risk_assessments')
@@ -1752,10 +1757,26 @@ def _clean_value(v):
     try:return v.item()
     except Exception:return v
 
-def _load_approved_source(c, source_id):
+def _load_approved_source(c, source_id, expected_version=None):
+    """Load the effective approved version of a source.
+
+    A rule is version-locked: if its execution plan was created against an
+    older approved version and a newer version is subsequently approved, the
+    rule must be re-previewed/re-approved instead of silently executing against
+    changed data.
+    """
     if pd is None:raise RuntimeError('pandas is required to execute a data-source risk rule.')
     row=_source_lookup(c,int(source_id))
     if not row:raise ValueError(f'Approved data source {source_id} was not found.')
+    approved_version=int(row['version_number'])
+    if expected_version is not None:
+        try: expected=int(expected_version)
+        except (TypeError,ValueError): raise ValueError(f'Invalid approved version reference for data source {row["source_name"]}.')
+        if approved_version != expected:
+            raise ValueError(
+                f'Data source {row["source_name"]} is now approved at version {approved_version}, '
+                f'but this rule is locked to version {expected}. Re-run the rule preview before execution.'
+            )
     path=Path(row['transform_output_path'] or row['file_path'])
     if not path.exists():raise ValueError(f'Data source {row["source_name"]} file is not available on the server.')
     ext=data_source_ext(path.name)
@@ -1928,7 +1949,7 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
     if not planned_sources:
         raise ValueError('The rule has no configured data sources.')
     for sid,planned in planned_sources.items():
-        row,df,original=_load_approved_source(c,sid)
+        row,df,original=_load_approved_source(c,sid,expected_version=planned.get('version'))
         expected=planned.get('version')
         if expected is not None and int(row['version_number'])!=int(expected):
             raise ValueError(f"Approved source {row['source_name']} is now Version {row['version_number']}; this rule was built against Version {expected}. Rebuild/re-preview the rule.")
@@ -2414,9 +2435,10 @@ def data_source_versions(source_id):
 @app.route('/data-sources/<int:source_id>/download')
 @login_required
 def data_source_download(source_id):
+    # Download the controlled approved version, never an unapproved draft.
     c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
     if not src: c.close(); abort(404)
-    v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone(); c.close()
+    v=c.execute("SELECT * FROM data_source_versions WHERE source_id=? AND version_status='Approved' ORDER BY version_number DESC LIMIT 1",(source_id,)).fetchone(); c.close()
     if not v: abort(404)
     return send_from_directory(str(UPLOAD/'data_sources'),v['stored_filename'],as_attachment=True,download_name=v['original_filename'])
 
