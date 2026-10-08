@@ -1,1 +1,878 @@
-{% extends 'base.html' %}{% block content %}<div class="card"><div class="label">DATA & EVIDENCE</div><h2>Data Sources / Taxpayer Evidence Base</h2><p class="muted">Current synthetic taxpayer and metrics available to the Phase 3 engine.</p></div><div class="two" style="margin-top:15px"><div class="card"><h3>Taxpayer</h3><table class="table">{% for k,v in [('TIN',taxpayer.tin),('Name',taxpayer.name),('Sector',taxpayer.sector),('Station',taxpayer.station),('Financial Year',taxpayer.financial_year),('Status',taxpayer.status)] %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</table></div><div class="card"><h3>Available Metrics</h3><table class="table"><tr><th>Metric</th><th>Declared</th><th>Observed</th><th>Source</th></tr>{% for m in metrics %}<tr><td>{{ m.metric_name }}</td><td>UGX {{ '{:,.0f}'.format(m.declared_value) }}</td><td>UGX {{ '{:,.0f}'.format(m.observed_value) }}</td><td>{{ m.source }}</td></tr>{% endfor %}</table></div></div><div class="card" style="margin-top:15px"><h3>Approved Risk Rules</h3><table class="table"><tr><th>Rule</th><th>Natural-language rule</th><th>Structured logic</th></tr>{% for r in rules %}<tr><td>{{ r.name }}</td><td>{{ r.natural_language }}</td><td>{{ r.structured_logic }}</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+  .page-header {
+    margin-bottom: 18px;
+  }
+
+  .page-header h2 {
+    margin-bottom: 6px;
+  }
+
+  .section {
+    margin-top: 18px;
+  }
+
+  .section-title {
+    margin-bottom: 10px;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .form-grid .full {
+    grid-column: 1 / -1;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 5px;
+    background: #17365d;
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+  }
+
+  .btn:hover {
+    opacity: .9;
+  }
+
+  .btn-secondary {
+    background: #66727d;
+  }
+
+  .btn-success {
+    background: #287a46;
+  }
+
+  .btn-danger {
+    background: #a52a2a;
+  }
+
+  .btn-warning {
+    background: #9a6a00;
+  }
+
+  .status {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .status-approved {
+    background: #dff1e4;
+    color: #216438;
+  }
+
+  .status-draft,
+  .status-pending {
+    background: #fff0d2;
+    color: #765300;
+  }
+
+  .status-rejected {
+    background: #f8dada;
+    color: #8b2222;
+  }
+
+  .status-revision {
+    background: #e8e8f8;
+    color: #4d4d88;
+  }
+
+  .status-superseded {
+    background: #e5e8eb;
+    color: #59636c;
+  }
+
+  .notice {
+    margin-bottom: 15px;
+  }
+
+  .small {
+    font-size: 11px;
+  }
+
+  .muted {
+    line-height: 1.5;
+  }
+
+  .empty {
+    padding: 20px;
+    text-align: center;
+    color: #687682;
+    border: 1px dashed #cbd5df;
+    background: #fafbfc;
+    border-radius: 6px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .table td {
+    max-width: 260px;
+    word-break: break-word;
+  }
+
+  .required {
+    color: #a52a2a;
+  }
+
+  @media(max-width: 800px) {
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .form-grid .full {
+      grid-column: auto;
+    }
+  }
+</style>
+
+
+<!-- ============================================================
+     PAGE HEADER
+============================================================ -->
+
+<div class="card page-header">
+
+  <div class="label">DATA & EVIDENCE</div>
+
+  <h2>Data Sources / Taxpayer Evidence Base</h2>
+
+  <p class="muted">
+    Register, validate, review and approve the data sources that may be used
+    by the Virtual Tax Auditor.
+  </p>
+
+  <div class="notice" style="margin-top:12px;">
+    <b>Control principle:</b>
+    Uploading a data source does not make it available to the VTA engine.
+    A source must pass validation and receive human approval before it can
+    be used for Taxpayer 360, Risk Assessment or AI Audit Analysis.
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     REGISTER NEW DATA SOURCE
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">Register New Data Source</h3>
+
+  <form
+    method="POST"
+    action="{{ url_for('data_source_register') }}"
+    enctype="multipart/form-data"
+  >
+
+    <div class="form-grid">
+
+      <div>
+        <label for="source_name">
+          Source Name <span class="required">*</span>
+        </label>
+
+        <input
+          type="text"
+          id="source_name"
+          name="source_name"
+          placeholder="e.g. DT Payments"
+          required
+        >
+      </div>
+
+
+      <div>
+        <label for="source_type">
+          Source Type <span class="required">*</span>
+        </label>
+
+        <select
+          id="source_type"
+          name="source_type"
+          required
+        >
+
+          <option value="">
+            -- Select Source Type --
+          </option>
+
+          {% for source_type in source_types %}
+          <option value="{{ source_type }}">
+            {{ source_type }}
+          </option>
+          {% endfor %}
+
+        </select>
+      </div>
+
+
+      <div>
+        <label for="tax_type">
+          Tax Type
+        </label>
+
+        <select
+          id="tax_type"
+          name="tax_type"
+        >
+
+          <option value="">
+            -- Select Tax Type --
+          </option>
+
+          {% for tax_type in tax_types %}
+          <option value="{{ tax_type }}">
+            {{ tax_type }}
+          </option>
+          {% endfor %}
+
+        </select>
+      </div>
+
+
+      <div>
+        <label for="reporting_period">
+          Reporting Period
+        </label>
+
+        <input
+          type="text"
+          id="reporting_period"
+          name="reporting_period"
+          placeholder="e.g. FY 2025/26"
+        >
+      </div>
+
+
+      <div>
+        <label for="owner_department">
+          Source Owner / Department
+        </label>
+
+        <input
+          type="text"
+          id="owner_department"
+          name="owner_department"
+          placeholder="e.g. Domestic Taxes"
+        >
+      </div>
+
+
+      <div>
+        <label for="source_description">
+          Description
+        </label>
+
+        <input
+          type="text"
+          id="source_description"
+          name="description"
+          placeholder="Brief description of the source"
+        >
+      </div>
+
+
+      <div class="full">
+
+        <label for="data_file">
+          Data File <span class="required">*</span>
+        </label>
+
+        <input
+          type="file"
+          id="data_file"
+          name="data_file"
+          accept=".csv,.xls,.xlsx"
+          required
+        >
+
+        <div class="muted small" style="margin-top:6px;">
+          Supported formats: CSV, XLS and XLSX.
+          The system will inspect the file before it becomes eligible
+          for approval.
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="actions">
+
+      <button
+        type="submit"
+        class="btn"
+      >
+        Upload & Validate
+      </button>
+
+    </div>
+
+  </form>
+
+</div>
+
+
+<!-- ============================================================
+     APPROVAL QUEUE
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Data Source Approval Queue
+  </h3>
+
+  <p class="muted">
+    These sources have been uploaded but are not yet approved for use
+    by the Virtual Tax Auditor.
+  </p>
+
+
+  {% if pending %}
+
+  <div class="table-wrap">
+
+    <table class="table">
+
+      <thead>
+
+        <tr>
+
+          <th>Source</th>
+          <th>Reference</th>
+          <th>Version</th>
+          <th>File</th>
+          <th>Records</th>
+          <th>Validation</th>
+          <th>Status</th>
+          <th>Uploaded By</th>
+          <th>Uploaded</th>
+          <th>Action</th>
+
+        </tr>
+
+      </thead>
+
+
+      <tbody>
+
+        {% for source in pending %}
+
+        <tr>
+
+          <td>
+            <b>{{ source.source_name }}</b>
+
+            {% if source.source_type %}
+            <div class="muted small">
+              {{ source.source_type }}
+            </div>
+            {% endif %}
+          </td>
+
+
+          <td>
+            {{ source.source_ref }}
+          </td>
+
+
+          <td>
+            v{{ source.version_number }}
+          </td>
+
+
+          <td>
+            {{ source.original_filename }}
+          </td>
+
+
+          <td>
+            {% if source.record_count is defined and source.record_count is not none %}
+              {{ "{:,}".format(source.record_count) }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+
+
+          <td>
+
+            {% if source.validation_status == 'Passed' %}
+
+              <span class="status status-approved">
+                Passed
+              </span>
+
+            {% elif source.validation_status == 'Warning' %}
+
+              <span class="status status-pending">
+                Warning
+              </span>
+
+            {% elif source.validation_status == 'Failed' %}
+
+              <span class="status status-rejected">
+                Failed
+              </span>
+
+            {% else %}
+
+              <span class="status status-pending">
+                {{ source.validation_status or 'Pending' }}
+              </span>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {% set s = source.version_status or source.status or 'Draft' %}
+
+            {% if s == 'Approved' %}
+
+              <span class="status status-approved">
+                Approved
+              </span>
+
+            {% elif s == 'Rejected' %}
+
+              <span class="status status-rejected">
+                Rejected
+              </span>
+
+            {% elif s == 'Needs Revision' %}
+
+              <span class="status status-revision">
+                Needs Revision
+              </span>
+
+            {% elif s == 'Superseded' %}
+
+              <span class="status status-superseded">
+                Superseded
+              </span>
+
+            {% else %}
+
+              <span class="status status-draft">
+                {{ s }}
+              </span>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+            {{ source.uploaded_by or '—' }}
+          </td>
+
+
+          <td>
+            {{ source.uploaded_at or '—' }}
+          </td>
+
+
+          <td>
+
+            <div class="actions">
+
+              {% if source.id is defined %}
+
+              <a
+                class="btn btn-secondary"
+                href="{{ url_for('data_source_versions', source_id=source.id) }}"
+              >
+                Review
+              </a>
+
+              {% endif %}
+
+            </div>
+
+          </td>
+
+        </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+  {% else %}
+
+  <div class="empty">
+
+    <b>No data sources are currently awaiting approval.</b>
+
+    <div class="muted" style="margin-top:6px;">
+      Newly uploaded sources will appear here after validation.
+    </div>
+
+  </div>
+
+  {% endif %}
+
+</div>
+
+
+<!-- ============================================================
+     REGISTERED DATA SOURCES
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Registered Data Sources
+  </h3>
+
+  <p class="muted">
+    All registered data sources and their current approval status.
+    Previous versions remain retained for auditability.
+  </p>
+
+
+  {% if rows %}
+
+  <div class="table-wrap">
+
+    <table class="table">
+
+      <thead>
+
+        <tr>
+
+          <th>Source</th>
+          <th>Reference</th>
+          <th>Type</th>
+          <th>Tax Type</th>
+          <th>Period</th>
+          <th>Version</th>
+          <th>Records</th>
+          <th>Status</th>
+          <th>Current Use</th>
+          <th>Action</th>
+
+        </tr>
+
+      </thead>
+
+
+      <tbody>
+
+        {% for source in rows %}
+
+        <tr>
+
+          <td>
+
+            <b>
+              {{ source.source_name }}
+            </b>
+
+            {% if source.description %}
+            <div class="muted small">
+              {{ source.description }}
+            </div>
+            {% endif %}
+
+          </td>
+
+
+          <td>
+            {{ source.source_ref }}
+          </td>
+
+
+          <td>
+            {{ source.source_type or '—' }}
+          </td>
+
+
+          <td>
+            {{ source.tax_type or 'General' }}
+          </td>
+
+
+          <td>
+            {{ source.reporting_period or '—' }}
+          </td>
+
+
+          <td>
+            v{{ source.version_number or 1 }}
+          </td>
+
+
+          <td>
+
+            {% if source.record_count is defined and source.record_count is not none %}
+              {{ "{:,}".format(source.record_count) }}
+            {% else %}
+              —
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {% set s = source.version_status or source.status or 'Draft' %}
+
+            {% if s == 'Approved' %}
+
+              <span class="status status-approved">
+                Approved
+              </span>
+
+            {% elif s == 'Rejected' %}
+
+              <span class="status status-rejected">
+                Rejected
+              </span>
+
+            {% elif s == 'Needs Revision' %}
+
+              <span class="status status-revision">
+                Needs Revision
+              </span>
+
+            {% elif s == 'Superseded' %}
+
+              <span class="status status-superseded">
+                Superseded
+              </span>
+
+            {% else %}
+
+              <span class="status status-draft">
+                {{ s }}
+              </span>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {% if s == 'Approved' %}
+
+              <span class="status status-approved">
+                Available to VTA
+              </span>
+
+            {% else %}
+
+              <span class="status status-draft">
+                Not Available
+              </span>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {% if source.id is defined %}
+
+            <div class="actions">
+
+              <a
+                class="btn btn-secondary"
+                href="{{ url_for('data_source_versions', source_id=source.id) }}"
+              >
+                Versions
+              </a>
+
+            </div>
+
+            {% endif %}
+
+          </td>
+
+        </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+  {% else %}
+
+  <div class="empty">
+
+    <b>No registered data sources yet.</b>
+
+    <div class="muted" style="margin-top:6px;">
+      Use the registration form above to upload the first data source.
+    </div>
+
+  </div>
+
+  {% endif %}
+
+</div>
+
+
+<!-- ============================================================
+     CONTROL INFORMATION
+============================================================ -->
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Data Source Control
+  </h3>
+
+  <div class="grid">
+
+    <div class="card">
+
+      <div class="label">
+        1. Upload
+      </div>
+
+      <div class="muted">
+        The source is registered and stored as a controlled version.
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        2. Validate
+      </div>
+
+      <div class="muted">
+        The system checks the structure, records and basic data quality.
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        3. Human Review
+      </div>
+
+      <div class="muted">
+        An authorised user reviews the source and validation results.
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        4. Approve
+      </div>
+
+      <div class="muted">
+        Only approved versions become eligible for VTA analysis.
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        5. Version Control
+      </div>
+
+      <div class="muted">
+        New versions do not overwrite historical versions.
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <div class="label">
+        6. Audit Trail
+      </div>
+
+      <div class="muted">
+        Upload, validation, review and approval actions are retained.
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     BACK TO DASHBOARD
+============================================================ -->
+
+<div style="margin-top:20px">
+
+  <a
+    class="task"
+    href="{{ url_for('tasks') }}"
+  >
+
+    <div>
+
+      <b>
+        ← Back to VTA Dashboard
+      </b>
+
+      <div class="muted">
+        Return to the main Virtual Tax Auditor workflow.
+      </div>
+
+    </div>
+
+    <div class="arrow">
+      →
+    </div>
+
+  </a>
+
+</div>
+
+
+{% endblock %}
