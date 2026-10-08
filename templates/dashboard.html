@@ -1,465 +1,1051 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-.vta-dash{max-width:1500px;margin:0 auto}.vta-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.vta-head h1{margin:2px 0 4px;color:#17365d}.muted{color:#687782;font-size:12px}.grid{display:grid;gap:12px}.kpis{grid-template-columns:repeat(6,1fr);margin:16px 0}.card{background:#fff;border:1px solid #dce2e8;border-radius:8px;padding:15px}.kpi{min-height:82px}.kpi a{text-decoration:none;color:inherit;display:block}.kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#687782;font-weight:700}.kpi .value{font-size:27px;font-weight:800;color:#17365d;margin-top:6px}.kpi.open .value{color:#9b4b00}.kpi.closed .value{color:#216438}.kpi.critical .value{color:#8b2222}.panels{grid-template-columns:repeat(2,1fr)}.barrow{display:flex;align-items:center;gap:8px;margin:9px 0}.barrow a{display:flex;align-items:center;gap:8px;width:100%;text-decoration:none;color:#17365d}.barlabel{width:145px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar{height:9px;background:#e9eef3;border-radius:8px;flex:1;overflow:hidden}.fill{height:100%;background:#53799e}.num{font-weight:700;font-size:12px;width:42px;text-align:right}.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.filters input,.filters select{padding:9px;border:1px solid #cbd5df;border-radius:5px;background:#fff;font-size:12px}.btn{display:inline-block;padding:9px 13px;border-radius:5px;border:1px solid #cbd5df;background:#fff;color:#17365d;text-decoration:none;font-size:12px;cursor:pointer}.btn.primary{background:#17365d;color:#fff;border-color:#17365d}.tablewrap{overflow:auto}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{padding:9px;border-bottom:1px solid #e5e9ed;text-align:left;font-size:12px;vertical-align:top}.tbl th{background:#f1f4f7;color:#314452;position:sticky;top:0}.pill{display:inline-block;padding:4px 8px;border-radius:12px;background:#eef2f5;font-size:10px;font-weight:700}.pill.critical{background:#f8dada;color:#8b2222}.pill.high{background:#fff0d2;color:#765300}.pill.closed{background:#e0f1e6;color:#216438}.pill.open{background:#edf4ff;color:#23557f}.actions{display:flex;gap:5px;flex-wrap:wrap}.empty{padding:35px;text-align:center;color:#687782}.filter-active{font-size:11px;color:#765300;margin-left:8px}@media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.kpis,.panels{grid-template-columns:1fr}.barlabel{width:100px}}
+:root{
+  --navy:#17365d;
+  --ink:#243746;
+  --muted:#687782;
+  --line:#dce3e9;
+  --bg:#f4f6f8;
+  --white:#fff;
+  --danger:#8b2222;
+  --warn:#8a5a00;
+  --ok:#216438
+}
+
+.command{
+  max-width:1500px;
+  margin:0 auto
+}
+
+.head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:18px;
+  flex-wrap:wrap;
+  margin-bottom:14px
+}
+
+.head h1{
+  margin:2px 0 4px;
+  color:var(--navy);
+  font-size:24px
+}
+
+.muted{
+  color:var(--muted);
+  font-size:12px
+}
+
+.actions{
+  display:flex;
+  gap:7px;
+  flex-wrap:wrap
+}
+
+.btn{
+  display:inline-block;
+  padding:8px 12px;
+  border:1px solid #cbd5df;
+  border-radius:5px;
+  background:#fff;
+  color:var(--navy);
+  text-decoration:none;
+  font-size:12px
+}
+
+.btn.primary{
+  background:var(--navy);
+  border-color:var(--navy);
+  color:#fff
+}
+
+.filters{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:12px;
+  margin-bottom:13px;
+  display:flex;
+  gap:8px;
+  align-items:end;
+  flex-wrap:wrap
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:4px
+}
+
+.field label{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+  font-weight:700;
+  color:var(--muted)
+}
+
+.field select,
+.field input{
+  min-width:145px;
+  padding:8px;
+  border:1px solid #cbd5df;
+  border-radius:5px;
+  background:#fff;
+  font-size:12px
+}
+
+.grid{
+  display:grid;
+  gap:12px
+}
+
+.kpis{
+  grid-template-columns:repeat(5,1fr);
+  margin-bottom:13px
+}
+
+.card{
+  background:var(--white);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:14px
+}
+
+.kpi{
+  min-height:90px
+}
+
+.kpi .label{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  font-weight:700;
+  color:var(--muted)
+}
+
+.kpi .value{
+  font-size:28px;
+  font-weight:800;
+  color:var(--navy);
+  margin-top:7px
+}
+
+.kpi.high .value{
+  color:var(--warn)
+}
+
+.kpi.critical .value{
+  color:var(--danger)
+}
+
+.kpi.audit .value{
+  color:#23557f
+}
+
+.kpi.validation .value{
+  color:#765300
+}
+
+.section-title{
+  font-size:14px;
+  font-weight:800;
+  color:var(--navy);
+  margin:0 0 4px
+}
+
+.section-sub{
+  font-size:11px;
+  color:var(--muted);
+  margin-bottom:10px
+}
+
+.two{
+  grid-template-columns:1fr 1fr
+}
+
+.three{
+  grid-template-columns:1.15fr 1fr 1fr
+}
+
+.barrow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:10px 0
+}
+
+.barlabel{
+  width:75px;
+  font-size:12px;
+  font-weight:700
+}
+
+.bar{
+  height:11px;
+  background:#edf1f4;
+  border-radius:8px;
+  overflow:hidden;
+  flex:1
+}
+
+.fill{
+  height:100%;
+  background:#53799e
+}
+
+.num{
+  width:52px;
+  text-align:right;
+  font-weight:700;
+  font-size:12px
+}
+
+.driver{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:4px 10px;
+  padding:8px 0;
+  border-bottom:1px solid #edf0f2
+}
+
+.driver:last-child{
+  border-bottom:0
+}
+
+.driver-name{
+  font-size:12px;
+  font-weight:700;
+  color:var(--ink)
+}
+
+.driver-meta{
+  font-size:10px;
+  color:var(--muted)
+}
+
+.driver-value{
+  font-size:12px;
+  font-weight:800;
+  color:var(--navy);
+  text-align:right
+}
+
+.tablewrap{
+  overflow:auto
+}
+
+.tbl{
+  width:100%;
+  border-collapse:collapse
+}
+
+.tbl th,
+.tbl td{
+  padding:9px;
+  border-bottom:1px solid #e7ebee;
+  text-align:left;
+  font-size:11px;
+  vertical-align:middle;
+  white-space:nowrap
+}
+
+.tbl th{
+  background:#f1f4f7;
+  color:#314452;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.3px
+}
+
+.pill{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:12px;
+  font-size:10px;
+  font-weight:700;
+  background:#edf1f4
+}
+
+.critical{
+  background:#f8dada;
+  color:var(--danger)
+}
+
+.high{
+  background:#fff0d2;
+  color:#765300
+}
+
+.medium{
+  background:#eaf1f8;
+  color:#23557f
+}
+
+.low{
+  background:#e0f1e6;
+  color:var(--ok)
+}
+
+.queue{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px
+}
+
+.queue a{
+  text-decoration:none;
+  color:inherit
+}
+
+.qbox{
+  border:1px solid var(--line);
+  border-radius:7px;
+  padding:12px;
+  background:#fbfcfd
+}
+
+.qbox .n{
+  font-size:24px;
+  font-weight:800;
+  color:var(--navy)
+}
+
+.qbox .l{
+  font-size:10px;
+  text-transform:uppercase;
+  font-weight:700;
+  color:var(--muted);
+  margin-top:4px
+}
+
+.empty{
+  padding:28px;
+  text-align:center;
+  color:var(--muted)
+}
+
+.workflow{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap
+}
+
+.step{
+  border:1px solid var(--line);
+  background:#f8fafb;
+  border-radius:5px;
+  padding:7px 9px;
+  font-size:10px;
+  font-weight:700;
+  color:#40515e
+}
+
+.arrow{
+  color:#8a98a3
+}
+
+@media(max-width:1050px){
+  .kpis{
+    grid-template-columns:repeat(3,1fr)
+  }
+
+  .three{
+    grid-template-columns:1fr 1fr
+  }
+}
+
+@media(max-width:700px){
+  .kpis,
+  .two,
+  .three,
+  .queue{
+    grid-template-columns:1fr
+  }
+
+  .barlabel{
+    width:65px
+  }
+}
 </style>
 
-<div class="vta-dash">
+<div class="command">
 
-  <div class="vta-head">
+  <!-- HEADER -->
+  <div class="head">
+
     <div>
-      <div class="muted">VIRTUAL TAX AUDITOR · OPERATIONAL RISK MANAGEMENT</div>
-      <h1>Risk Dashboard</h1>
       <div class="muted">
-        Detected risks generated from the approved Detection Logic and approved data sources.
+        DOMESTIC TAXES · VIRTUAL TAX AUDITOR
+      </div>
+
+      <h1>
+        Risk Command Centre
+      </h1>
+
+      <div class="muted">
+        Executive view of the current risk universe,
+        principal risk drivers and the human-control queue.
       </div>
     </div>
 
     <div class="actions">
-      <a class="btn" href="{{ url_for('risk_universe') }}">Risk Universe</a>
-      <a class="btn" href="{{ url_for('cases') }}">Cases</a>
-    </div>
-  </div>
 
-  <div class="grid kpis">
-
-    <div class="card kpi">
-      <a href="{{ url_for('dashboard') }}">
-        <div class="label">Total Risks</div>
-        <div class="value">{{ '{:,}'.format(total) }}</div>
+      <a class="btn"
+         href="{{ url_for('risk_universe') }}">
+        Risk Universe
       </a>
-    </div>
 
-    <div class="card kpi open">
-      <a href="{{ url_for('dashboard',stage='Open') }}">
-        <div class="label">Open</div>
-        <div class="value">{{ '{:,}'.format(open_count) }}</div>
+      <a class="btn"
+         href="{{ url_for('risk_rules') }}">
+        Business Rules
       </a>
-    </div>
 
-    <div class="card kpi closed">
-      <a href="{{ url_for('dashboard',stage='Closed') }}">
-        <div class="label">Closed</div>
-        <div class="value">{{ '{:,}'.format(closed_count) }}</div>
+      <a class="btn"
+         href="{{ url_for('data_sources') }}">
+        Data &amp; Sources
       </a>
-    </div>
 
-    <div class="card kpi critical">
-      <a href="{{ url_for('dashboard',band='Critical') }}">
-        <div class="label">Critical</div>
-        <div class="value">{{ '{:,}'.format(critical) }}</div>
+      <a class="btn primary"
+         href="{{ url_for('findings_queue') }}">
+        Validation Queue
       </a>
-    </div>
 
-    <div class="card kpi">
-      <a href="{{ url_for('dashboard',band='High') }}">
-        <div class="label">High</div>
-        <div class="value">{{ '{:,}'.format(high) }}</div>
-      </a>
-    </div>
-
-    <div class="card kpi">
-      <a href="{{ url_for('risk_universe') }}">
-        <div class="label">Detected Taxpayers</div>
-        <div class="value">{{ '{:,}'.format(rows|length) }}</div>
-      </a>
     </div>
 
   </div>
 
-  <div class="card" style="margin-bottom:12px">
 
-    <form class="filters" method="get" action="{{ url_for('dashboard') }}">
+  <!-- FILTERS -->
+  <form class="filters"
+        method="get"
+        action="{{ url_for('dashboard') }}">
+
+    <div class="field">
+
+      <label>
+        Financial Year
+      </label>
+
+      <select name="financial_year">
+
+        <option value="">
+          All Financial Years
+        </option>
+
+        {% for x in financial_years %}
+
+        <option value="{{ x }}"
+          {% if financial_year==x %}
+          selected
+          {% endif %}>
+
+          {{ x }}
+
+        </option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+
+    <div class="field">
+
+      <label>
+        Tax Type
+      </label>
+
+      <select name="tax_type">
+
+        <option value="">
+          All Tax Types
+        </option>
+
+        {% for x in tax_types %}
+
+        <option value="{{ x }}"
+          {% if tax_type==x %}
+          selected
+          {% endif %}>
+
+          {{ x }}
+
+        </option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+
+    <div class="field">
+
+      <label>
+        Station
+      </label>
+
+      <select name="station">
+
+        <option value="">
+          All Stations
+        </option>
+
+        {% for x in stations %}
+
+        <option value="{{ x }}"
+          {% if station==x %}
+          selected
+          {% endif %}>
+
+          {{ x }}
+
+        </option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+
+    <div class="field">
+
+      <label>
+        Risk Level
+      </label>
+
+      <select name="band">
+
+        <option value="">
+          All Levels
+        </option>
+
+        {% for x in ['Critical','High','Medium','Low'] %}
+
+        <option value="{{ x }}"
+          {% if band==x %}
+          selected
+          {% endif %}>
+
+          {{ x }}
+
+        </option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+
+    <div class="field" style="flex:1">
+
+      <label>
+        Search
+      </label>
 
       <input
         name="q"
-        value="{{ q|default('',true) }}"
-        placeholder="Search TIN, taxpayer, sector or station"
-        style="min-width:260px"
-      >
-
-      <select name="band">
-        <option value="">All risk levels</option>
-
-        {% for x in ['Critical','High','Medium','Low'] %}
-        <option value="{{ x }}" {% if band==x %}selected{% endif %}>
-          {{ x }}
-        </option>
-        {% endfor %}
-
-      </select>
-
-      <select name="stage">
-        <option value="">All stages</option>
-
-        {% for x in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] %}
-        <option value="{{ x }}" {% if stage==x %}selected{% endif %}>
-          {{ x }}
-        </option>
-        {% endfor %}
-
-      </select>
-
-      <button class="btn primary" type="submit">Filter</button>
-
-      <a class="btn" href="{{ url_for('dashboard') }}">Clear</a>
-
-      {% if q or band or stage or category or station %}
-      <span class="filter-active">Filtered view</span>
-      {% endif %}
-
-    </form>
-
-  </div>
-
-  <div class="grid panels">
-
-    <div class="card">
-
-      <h3 style="margin:0 0 10px;color:#17365d">
-        Risk Stage
-      </h3>
-
-      {% set mx=stage_counts|map(attribute=1)|max if stage_counts else 1 %}
-
-      {% for label,n in stage_counts %}
-
-      <div class="barrow">
-
-        <a href="{{ url_for('dashboard',stage=label) }}">
-
-          <span class="barlabel">
-            {{ label }}
-          </span>
-
-          <span class="bar">
-            <span
-              class="fill"
-              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
-            ></span>
-          </span>
-
-          <span class="num">
-            {{ n }}
-          </span>
-
-        </a>
-
-      </div>
-
-      {% else %}
-
-      <div class="empty">
-        No risk stages yet.
-      </div>
-
-      {% endfor %}
+        value="{{ q or '' }}"
+        placeholder="TIN, taxpayer, sector or station">
 
     </div>
 
 
-    <div class="card">
+    <button class="btn primary"
+            type="submit">
 
-      <h3 style="margin:0 0 10px;color:#17365d">
-        Risk Category
-      </h3>
+      Apply Filters
 
-      {% set mx=categories[0][1] if categories else 1 %}
+    </button>
 
-      {% for label,n in categories[:10] %}
 
-      <div class="barrow">
+    <a class="btn"
+       href="{{ url_for('dashboard') }}">
 
-        <a href="{{ url_for('dashboard',category=label) }}">
+      Clear
 
-          <span class="barlabel" title="{{ label }}">
-            {{ label }}
-          </span>
+    </a>
 
-          <span class="bar">
-            <span
-              class="fill"
-              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
-            ></span>
-          </span>
+  </form>
 
-          <span class="num">
-            {{ n }}
-          </span>
 
-        </a>
+  <!-- KPI CARDS -->
+  <div class="grid kpis">
 
+    <div class="card kpi">
+
+      <div class="label">
+        Taxpayers Analysed
       </div>
 
-      {% else %}
-
-      <div class="empty">
-        No categories yet.
+      <div class="value">
+        {{ '{:,}'.format(taxpayers_analysed) }}
       </div>
-
-      {% endfor %}
 
     </div>
 
 
-    <div class="card">
+    <div class="card kpi high">
 
-      <h3 style="margin:0 0 10px;color:#17365d">
-        Station Distribution
-      </h3>
-
-      {% set mx=station_counts[0][1] if station_counts else 1 %}
-
-      {% for label,n in station_counts[:10] %}
-
-      <div class="barrow">
-
-        <a href="{{ url_for('dashboard',station=label) }}">
-
-          <span class="barlabel" title="{{ label }}">
-            {{ label }}
-          </span>
-
-          <span class="bar">
-            <span
-              class="fill"
-              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
-            ></span>
-          </span>
-
-          <span class="num">
-            {{ n }}
-          </span>
-
-        </a>
-
+      <div class="label">
+        High Risk
       </div>
 
-      {% else %}
-
-      <div class="empty">
-        No station distribution yet.
+      <div class="value">
+        {{ '{:,}'.format(high_risk) }}
       </div>
-
-      {% endfor %}
 
     </div>
 
 
-    <div class="card">
+    <div class="card kpi critical">
 
-      <h3 style="margin:0 0 10px;color:#17365d">
-        Tax Type
-      </h3>
-
-      {% set mx=tax_types[0][1] if tax_types else 1 %}
-
-      {% for label,n in tax_types[:10] %}
-
-      <div class="barrow">
-
-        <a href="{{ url_for('dashboard') }}">
-
-          <span class="barlabel">
-            {{ label }}
-          </span>
-
-          <span class="bar">
-            <span
-              class="fill"
-              style="width:{{ (n / (mx or 1) * 100)|round(0) }}%"
-            ></span>
-          </span>
-
-          <span class="num">
-            {{ n }}
-          </span>
-
-        </a>
-
+      <div class="label">
+        Critical Risk
       </div>
 
-      {% else %}
-
-      <div class="empty">
-        No tax-type distribution yet.
+      <div class="value">
+        {{ '{:,}'.format(critical_risk) }}
       </div>
 
-      {% endfor %}
+    </div>
+
+
+    <div class="card kpi audit">
+
+      <div class="label">
+        In Audit
+      </div>
+
+      <div class="value">
+        {{ '{:,}'.format(in_audit) }}
+      </div>
+
+    </div>
+
+
+    <div class="card kpi validation">
+
+      <div class="label">
+        Pending Validation
+      </div>
+
+      <div class="value">
+        {{ '{:,}'.format(pending_validation) }}
+      </div>
 
     </div>
 
   </div>
 
 
-  <div class="card" style="margin-top:12px">
+  <!-- RISK / DRIVERS / VALIDATION -->
+  <div class="grid three"
+       style="margin-bottom:13px">
 
-    <div
-      style="
-        display:flex;
-        justify-content:space-between;
-        gap:10px;
-        align-items:center;
-        flex-wrap:wrap
-      "
-    >
 
-      <div>
+    <!-- RISK DISTRIBUTION -->
+    <div class="card">
 
-        <h3 style="margin:0;color:#17365d">
-          Detected Risks
-        </h3>
+      <h2 class="section-title">
+        Risk Distribution
+      </h2>
 
-        <div class="muted">
-          Click a risk to inspect the evidence, detection logic and available action.
+      <div class="section-sub">
+        Latest assessment for each taxpayer.
+      </div>
+
+
+      {% set mx =
+        (risk_distribution|map(attribute=1)|max)
+        if risk_distribution else 1
+      %}
+
+
+      {% for label,n in risk_distribution %}
+
+      <div class="barrow">
+
+        <span class="barlabel">
+          {{ label }}
+        </span>
+
+        <span class="bar">
+
+          <span
+            class="fill"
+            style="width:{{ ((n / (mx or 1))*100)|round(0) }}%">
+          </span>
+
+        </span>
+
+        <span class="num">
+          {{ '{:,}'.format(n) }}
+        </span>
+
+      </div>
+
+      {% endfor %}
+
+    </div>
+
+
+    <!-- TOP RISK DRIVERS -->
+    <div class="card">
+
+      <h2 class="section-title">
+        Top Risk Drivers
+      </h2>
+
+      <div class="section-sub">
+        Rules most frequently driving current risk.
+      </div>
+
+
+      {% for d in top_drivers %}
+
+      <div class="driver">
+
+        <div>
+
+          <div class="driver-name">
+            {{ d.name }}
+          </div>
+
+          <div class="driver-meta">
+
+            {{ d.category }}
+
+            ·
+
+            {{ '{:,}'.format(d.n) }}
+
+            taxpayer trigger{{ '' if d.n==1 else 's' }}
+
+          </div>
+
+        </div>
+
+
+        <div class="driver-value">
+
+          UGX
+          {{ '{:,.0f}'.format((d.exposure or 0)|float) }}
+
         </div>
 
       </div>
 
-      <div class="muted">
-        {{ '{:,}'.format(rows|length) }} shown
+      {% else %}
+
+      <div class="empty">
+        No risk drivers available.
       </div>
+
+      {% endfor %}
 
     </div>
 
 
-    <div class="tablewrap" style="margin-top:10px">
+    <!-- HUMAN VALIDATION QUEUE -->
+    <div class="card">
+
+      <h2 class="section-title">
+        Human Validation Queue
+      </h2>
+
+      <div class="section-sub">
+        AI output cannot become consequential action
+        without human control.
+      </div>
+
+
+      <div class="queue">
+
+
+        <a href="{{ url_for('findings_queue') }}">
+
+          <div class="qbox">
+
+            <div class="n">
+              {{ '{:,}'.format(validation_queue.findings) }}
+            </div>
+
+            <div class="l">
+              Findings
+            </div>
+
+          </div>
+
+        </a>
+
+
+        <a href="{{ url_for('cases') }}">
+
+          <div class="qbox">
+
+            <div class="n">
+              {{ '{:,}'.format(validation_queue.communications) }}
+            </div>
+
+            <div class="l">
+              Communications
+            </div>
+
+          </div>
+
+        </a>
+
+
+        <a href="{{ url_for('cases') }}">
+
+          <div class="qbox">
+
+            <div class="n">
+              {{ '{:,}'.format(validation_queue.evidence) }}
+            </div>
+
+            <div class="l">
+              Evidence Reviews
+            </div>
+
+          </div>
+
+        </a>
+
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- TAXPAYERS REQUIRING ATTENTION -->
+  <div class="card"
+       style="margin-bottom:13px">
+
+    <h2 class="section-title">
+      Taxpayers Requiring Attention
+    </h2>
+
+    <div class="section-sub">
+
+      Prioritised by risk level, score and estimated
+      exposure. Human auditors retain the decision.
+
+    </div>
+
+
+    <div class="tablewrap">
 
       <table class="tbl">
 
         <thead>
 
           <tr>
-            <th>Risk</th>
-            <th>Taxpayer</th>
-            <th>Category</th>
-            <th>Station</th>
-            <th>Level</th>
-            <th>Exposure</th>
-            <th>Stage</th>
-            <th>Action</th>
+
+            <th>TIN</th>
+
+            <th>
+              Taxpayer Name
+            </th>
+
+            <th>
+              Sector
+            </th>
+
+            <th>
+              Risk
+            </th>
+
+            <th>
+              Tax Gap / Exposure
+            </th>
+
+            <th>
+              Status
+            </th>
+
+            <th>
+              Action
+            </th>
+
           </tr>
 
         </thead>
 
+
         <tbody>
 
-          {% for r in rows %}
+        {% for r in attention %}
 
           <tr>
 
             <td>
+              {{ r.tin }}
+            </td>
 
-              <a href="{{ url_for('risk_detail',assessment_id=r.assessment_id) }}">
-                <b>#{{ r.assessment_id }}</b>
+            <td>
+              <b>
+                {{ r.taxpayer_name }}
+              </b>
+            </td>
+
+            <td>
+              {{ r.sector or '—' }}
+            </td>
+
+            <td>
+
+              <span class="pill {{ r.band|lower }}">
+
+                {{ r.band }}
+
+              </span>
+
+            </td>
+
+            <td>
+
+              UGX
+              {{ '{:,.0f}'.format((r.exposure or 0)|float) }}
+
+            </td>
+
+            <td>
+              {{ r.stage }}
+            </td>
+
+            <td>
+
+              <a
+                class="btn"
+                href="{{ url_for('taxpayer360',tid=r.taxpayer_id) }}">
+
+                Taxpayer 360
+
               </a>
 
-              <br>
-
-              <span class="muted">
-                {{ r.assessed_at }}
-              </span>
-
-            </td>
-
-            <td>
-
-              <b>{{ r.taxpayer_name }}</b>
-
-              <br>
-
-              <span class="muted">
-                {{ r.tin }} · {{ r.sector or '—' }}
-              </span>
-
-            </td>
-
-            <td>
-              {{ r.categories or 'Uncategorised' }}
-            </td>
-
-            <td>
-              {{ r.station or '—' }}
-            </td>
-
-            <td>
-
-              <span
-                class="pill
-                {{ 'critical' if r.band=='Critical'
-                   else 'high' if r.band=='High'
-                   else '' }}"
-              >
-                {{ r.band }}
-              </span>
-
-            </td>
-
-            <td>
-              UGX {{ '{:,.0f}'.format((r.exposure or 0)|float) }}
-            </td>
-
-            <td>
-
-              <span
-                class="pill
-                {{ 'closed' if r.stage=='Closed'
-                   else 'open' }}"
-              >
-                {{ r.stage }}
-              </span>
-
-            </td>
-
-            <td>
-
-              <div class="actions">
-
-                <a
-                  class="btn"
-                  href="{{ url_for('risk_detail',assessment_id=r.assessment_id) }}"
-                >
-                  View
-                </a>
-
-                {% if r.stage!='Closed' %}
-
-                <form
-                  method="post"
-                  action="{{ url_for('execute_risk',assessment_id=r.assessment_id) }}"
-                  style="margin:0"
-                >
-
-                  <button
-                    class="btn primary"
-                    type="submit"
-                  >
-                    Execute
-                  </button>
-
-                </form>
-
-                {% endif %}
-
-              </div>
-
             </td>
 
           </tr>
 
-          {% else %}
+        {% else %}
 
           <tr>
-            <td colspan="8" class="empty">
-              No detected risks match the current view.
+
+            <td colspan="7"
+                class="empty">
+
+              No taxpayers match the selected view.
+
             </td>
+
           </tr>
 
-          {% endfor %}
+        {% endfor %}
 
         </tbody>
 
       </table>
+
+    </div>
+
+  </div>
+
+
+  <!-- CONTROLLED AUDIT WORKFLOW -->
+  <div class="card">
+
+    <h2 class="section-title">
+      Controlled Audit Workflow
+    </h2>
+
+    <div class="section-sub">
+
+      The system separates AI analysis from human validation
+      and consequential decisions.
+
+    </div>
+
+
+    <div class="workflow">
+
+      <span class="step">
+        Command Centre
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Risk Universe
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Taxpayer 360
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        AI Findings &amp; Evidence
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Human Validation
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Client Interaction
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Response &amp; Evidence
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Second Validation
+      </span>
+
+      <span class="arrow">
+        →
+      </span>
+
+      <span class="step">
+        Further Action / Closure
+      </span>
 
     </div>
 
