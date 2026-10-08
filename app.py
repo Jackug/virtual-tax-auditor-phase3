@@ -212,6 +212,16 @@ CREATE INDEX IF NOT EXISTS idx_data_source_issues_source_version ON data_source_
     for col,definition in additions.items():
         if col not in existing_cols: c.execute(f'ALTER TABLE risk_rules ADD COLUMN {col} {definition}')
     c.execute("UPDATE risk_rules SET risk_category=COALESCE(NULLIF(risk_category,''),category), status=CASE WHEN approved=1 THEN 'Active' ELSE COALESCE(status,'Draft') END, version_number=COALESCE(version_number,1), updated_at=COALESCE(updated_at,created_at)")
+    # Step 3B migration: execution-plan governance and preview results.
+    rule_version_cols={row['name'] for row in c.execute('PRAGMA table_info(risk_rule_versions)').fetchall()}
+    rule_version_additions={'execution_plan_json':"TEXT DEFAULT '{}'",'generated_natural_language':'TEXT','preview_summary_json':"TEXT DEFAULT '{}'",'preview_status':"TEXT DEFAULT 'Not Run'",'preview_run_at':'TEXT','preview_approved':'INTEGER DEFAULT 0'}
+    for col,definition in rule_version_additions.items():
+        if col not in rule_version_cols:c.execute(f'ALTER TABLE risk_rule_versions ADD COLUMN {col} {definition}')
+    c.executescript("""CREATE TABLE IF NOT EXISTS risk_rule_preview_results(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,rule_id INTEGER NOT NULL,version_number INTEGER NOT NULL,
+        sample_rank INTEGER NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL,
+        FOREIGN KEY(rule_id) REFERENCES risk_rules(id) ON DELETE CASCADE,UNIQUE(rule_id,version_number,sample_rank));
+        CREATE INDEX IF NOT EXISTS idx_rule_preview_rule ON risk_rule_preview_results(rule_id,version_number);""")
     seed(c); c.commit(); c.close()
 
 def seed(c):
@@ -1420,92 +1430,306 @@ def inspect_data_source(path):
 RISK_RULE_STATUSES=['Draft','Under Review','Approved','Active','Suspended','Retired','Rejected']
 RISK_RULE_CATEGORIES=['Sales Reconciliation','Purchases / Imports Reconciliation','VAT Risk','CIT Risk','PAYE Risk','WHT Risk','Registration Risk','Payment Behaviour','Assessment Behaviour','Third-Party Mismatch','Sector / Peer Risk','Other']
 RISK_RULE_TAX_TYPES=['General','VAT','CIT','PAYE','WHT','Excise Duty','Customs','Other']
-RISK_OPERATORS=['Greater Than','Greater Than or Equal To','Less Than','Less Than or Equal To','Equal To','Not Equal To','Percentage Greater Than','Percentage Less Than','Exists','Does Not Exist']
+RISK_LOGIC_OPERATORS=['=','!=','>','>=','<','<=','CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS']
+RISK_CALC_OPERATIONS=['ADD','SUBTRACT','MULTIPLY','DIVIDE','PERCENTAGE DIFFERENCE','PERCENTAGE OF','SUM','COUNT','AVERAGE','MIN','MAX']
 RISK_EXPOSURE_TYPES=['Estimated Revenue Exposure','Potential VAT Exposure','Potential Income Tax Exposure','Potential PAYE Exposure','Potential WHT Exposure','Potential Excise Exposure','No Exposure Calculation']
+RISK_CLAUSES=['WHERE','WHEN','IF','EXCEPT','WHILE']
 
 def _json_or_default(value, default):
     try:return json.loads(value) if value else default
     except Exception:return default
 
-def _rule_ref(c):return 'RR-'+datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
+def _rule_ref(c): return 'RR-'+datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
 
 def _approved_legal_basis(c):
-    return c.execute("""SELECT d.id document_id,d.document_ref,d.title,d.category,d.document_type,d.tax_type,d.issuing_authority,v.version_number,v.version_status FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Approved' AND d.status IN ('Approved','Active') ORDER BY d.title""").fetchall()
+    return c.execute("""SELECT d.id document_id,d.document_ref,d.title,d.category,d.document_type,d.tax_type,d.issuing_authority,v.version_number,v.version_status
+        FROM knowledge_documents d JOIN knowledge_document_versions v
+        ON v.document_id=d.id AND v.version_number=d.current_version
+        WHERE v.version_status='Approved' AND d.status IN ('Approved','Active') ORDER BY d.title""").fetchall()
 
-def _rule_form_payload(c):
-    f=request.form; name=f.get('rule_name','').strip(); category=f.get('risk_category','').strip(); tax_type=f.get('tax_type','').strip() or 'General'; scope=f.get('taxpayer_scope','').strip(); period=f.get('applicable_period','').strip(); field1=f.get('field_1','').strip(); operator=f.get('operator','').strip(); field2=f.get('field_2','').strip(); threshold=f.get('threshold','').strip(); minimum=f.get('minimum_exposure','').strip(); natural=f.get('natural_language','').strip()
-    detection={'field_1':field1,'operator':operator,'field_2':field2,'threshold':threshold,'minimum_exposure':minimum}
-    legal=[]
-    for raw in f.getlist('legal_basis'):
-        try:legal.append(int(raw))
-        except Exception:pass
-    requests=[]; titles=f.getlist('request_title'); purposes=f.getlist('request_purpose'); periods=f.getlist('request_period'); mandatory=f.getlist('request_mandatory'); evidence=f.getlist('request_evidence')
-    for idx,title in enumerate(titles):
-        title=title.strip()
-        if title: requests.append({'title':title,'purpose':purposes[idx].strip() if idx<len(purposes) else '','period':periods[idx].strip() if idx<len(periods) else '','mandatory':1 if idx<len(mandatory) and mandatory[idx] in ('1','on','true') else 0,'evidence_type':evidence[idx].strip() if idx<len(evidence) else '','sort_order':idx+1})
-    exposure={'type':f.get('exposure_type','Estimated Revenue Exposure').strip(),'formula':f.get('exposure_formula','').strip(),'minimum_exposure':minimum,'rate':f.get('exposure_rate','').strip()}
-    ranking={'base_score':f.get('base_score','').strip() or '0','exposure_weight':f.get('exposure_weight','').strip() or '0','frequency_weight':f.get('frequency_weight','').strip() or '0','low_max':f.get('low_max','').strip() or '39','medium_max':f.get('medium_max','').strip() or '69','high_max':f.get('high_max','').strip() or '89','critical_min':f.get('critical_min','').strip() or '90'}
-    return name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking
+def _approved_data_source_catalog(c):
+    rows=c.execute("""SELECT d.id,d.source_ref,d.source_name,d.source_type,d.reporting_period,d.tax_type,d.current_version,
+        d.status,v.version_number,v.original_filename,v.file_path,v.columns_json,v.record_count,v.validation_status,v.version_status
+        FROM data_sources d JOIN data_source_versions v
+        ON v.source_id=d.id AND v.version_number=d.current_version
+        WHERE d.status='Approved' AND v.version_status='Approved' ORDER BY d.source_name""").fetchall()
+    catalog=[]
+    for r in rows:
+        cols=_json_or_default(r['columns_json'],[])
+        if isinstance(cols,dict): cols=list(cols.keys())
+        catalog.append({'id':r['id'],'ref':r['source_ref'],'name':r['source_name'],'type':r['source_type'],'period':r['reporting_period'] or 'Not specified','tax_type':r['tax_type'] or 'General','version':r['version_number'],'file_path':r['file_path'],'columns':cols,'record_count':r['record_count'] or 0})
+    return catalog
+
+def _source_lookup(c, source_id):
+    return c.execute("""SELECT d.*,v.version_number,v.file_path,v.columns_json,v.version_status
+        FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version
+        WHERE d.id=? AND d.status='Approved' AND v.version_status='Approved'""",(source_id,)).fetchone()
+
+def _safe_name(value): return re.sub(r'[^A-Za-z0-9]+','_',str(value)).strip('_').lower()
+def _field_key(source_id,column): return f's{int(source_id)}__{_safe_name(column)}'
+
+def _parse_number(value):
+    if value is None:return None
+    if isinstance(value,(int,float)) and not isinstance(value,bool):return float(value)
+    text=str(value).strip().replace(',',''); pct=text.endswith('%')
+    if pct:text=text[:-1]
+    if not text:return None
+    try:
+        n=float(text); return n/100 if pct else n
+    except Exception:return None
+
+def _clean_value(v):
+    try:
+        if pd is not None and pd.isna(v):return None
+    except Exception:pass
+    try:return v.item()
+    except Exception:return v
+
+def _load_approved_source(c, source_id):
+    if pd is None:raise RuntimeError('pandas is required to execute a data-source risk rule.')
+    row=_source_lookup(c,int(source_id))
+    if not row:raise ValueError(f'Approved data source {source_id} was not found.')
+    path=Path(row['file_path'])
+    if not path.exists():raise ValueError(f'Data source {row["source_name"]} file is not available on the server.')
+    ext=data_source_ext(path.name)
+    if ext=='csv':df=pd.read_csv(path,low_memory=False)
+    elif ext in ('xlsx','xls'):df=pd.read_excel(path)
+    else:raise ValueError(f'Unsupported source format for {row["source_name"]}.')
+    df.columns=[str(x).strip() for x in df.columns]
+    original=list(df.columns); df=df.rename(columns={x:_field_key(row['id'],x) for x in original})
+    return row,df,original
+
+def _condition_text(cond,source_map):
+    left=cond.get('left',{})
+    if left.get('type')=='calculation':left_text=left.get('name','calculated value')
+    else:
+        src=source_map.get(str(left.get('source_id')),{});left_text=f"{src.get('name','Source')}.{left.get('field','field')}"
+    op=cond.get('operator','')
+    if op in ('EXISTS','NOT EXISTS'):return f"{left_text} {'exists' if op=='EXISTS' else 'does not exist'}"
+    if cond.get('right_type')=='field':
+        right=cond.get('right',{})
+        if right.get('type')=='calculation':right_text=right.get('name','calculated value')
+        else:
+            src=source_map.get(str(right.get('source_id')),{});right_text=f"{src.get('name','Source')}.{right.get('field','field')}"
+    else:right_text=str(cond.get('value',''))
+    return f"{left_text} {op} {right_text}"
+
+def _generate_rule_natural_language(plan):
+    source_map={str(x['id']):x for x in plan.get('sources',[])};parts=[]
+    base=plan.get('base_source')
+    if base:parts.append(f"The system will start with records from {source_map.get(str(base.get('source_id')),{}).get('name','the primary data source')}.")
+    joins=plan.get('joins',[])
+    if joins:
+        js=[]
+        for j in joins:
+            l=source_map.get(str(j.get('left_source_id')),{}).get('name','source');r=source_map.get(str(j.get('right_source_id')),{}).get('name','source');js.append(f"{l}.{j.get('left_field','')} {j.get('join_type','INNER').lower()}-joined to {r}.{j.get('right_field','')}")
+        parts.append('The sources will be connected as follows: '+ '; '.join(js)+'.')
+    per=plan.get('period',{})
+    if per.get('description'):parts.append(per['description'].strip().rstrip('.')+'.')
+    if per.get('from') or per.get('to'):
+        parts.append(f"The applicable range is FROM {per.get('from') or 'the beginning of the configured period'} TO {per.get('to') or 'the end of the configured period'}.")
+    if per.get('field'):parts.append(f"The time restriction will be evaluated using {per['field']}.")
+    for f in plan.get('filters',[]):
+        text=_condition_text(f,source_map);clause=f.get('clause','WHERE')
+        if clause=='EXCEPT':parts.append(f'The system will exclude records where {text}.')
+        elif clause=='WHEN':parts.append(f'The system will evaluate the rule when {text}.')
+        elif clause=='WHILE':parts.append(f'The condition will be required to remain true while {text}.')
+        else:parts.append(f'The analysis will be restricted to records where {text}.')
+    for calc in plan.get('calculations',[]):parts.append(f"It will calculate {calc.get('name','the derived value')} using {calc.get('expression_text') or calc.get('operation','the configured calculation')}.")
+    conditions=plan.get('conditions',[])
+    if conditions:
+        ct=[]
+        for i,cond in enumerate(conditions):ct.append(('' if i==0 else f" {cond.get('connector','AND')} ")+_condition_text(cond,source_map))
+        parts.append('A taxpayer will be flagged when '+''.join(ct)+'.')
+    if plan.get('except_description'):parts.append('The following exclusions also apply: '+plan['except_description'].strip().rstrip('.')+'.')
+    if plan.get('stop',{}).get('description'):parts.append('Evaluation will stop according to this data-quality control: '+plan['stop']['description'].strip().rstrip('.')+'.')
+    if plan.get('result',{}).get('risk_description'):parts.append(f"The resulting risk will be recorded as {plan['result']['risk_description']}.")
+    exposure=plan.get('exposure',{})
+    if exposure.get('formula'):parts.append(f"Estimated revenue exposure will be calculated using {exposure['formula']}.")
+    if exposure.get('minimum'):parts.append(f"The configured minimum estimated exposure is UGX {exposure['minimum']}.")
+    if plan.get('ranking',{}).get('description'):parts.append(plan['ranking']['description'].strip().rstrip('.')+'.')
+    return ' '.join(parts) or 'The system will execute the configured risk rule against the selected approved data sources.'
+
+def _parse_rule_plan(form,source_catalog):
+    raw=form.get('rule_plan','').strip()
+    if not raw:raise ValueError('Build the rule logic before generating the system interpretation.')
+    try:plan=json.loads(raw)
+    except Exception as exc:raise ValueError(f'Invalid rule definition: {exc}')
+    if not isinstance(plan,dict):raise ValueError('The rule definition must be a structured object.')
+    allowed={int(x['id']):x for x in source_catalog};ids=set()
+    base=plan.get('base_source') or {}
+    if base.get('source_id'):ids.add(int(base['source_id']))
+    for x in plan.get('sources',[]):
+        if x.get('id'):ids.add(int(x['id']))
+    for j in plan.get('joins',[]):
+        for k in ('left_source_id','right_source_id'):
+            if j.get(k):ids.add(int(j[k]))
+    for obj in plan.get('filters',[])+plan.get('conditions',[]):
+        for side in ('left','right'):
+            if obj.get(side,{}).get('source_id'):ids.add(int(obj[side]['source_id']))
+    for calc in plan.get('calculations',[]):
+        for side in ('left','right'):
+            if calc.get(side,{}).get('source_id'):ids.add(int(calc[side]['source_id']))
+        for x in calc.get('group_by',[]):
+            if x.get('source_id'):ids.add(int(x['source_id']))
+    missing=[str(x) for x in ids if x not in allowed]
+    if missing:raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
+    if not base.get('source_id'):raise ValueError('Select a primary data source.')
+    plan['sources']=[{'id':sid,'name':allowed[sid]['name'],'version':allowed[sid]['version'],'ref':allowed[sid]['ref'],'columns':allowed[sid]['columns']} for sid in sorted(ids)]
+    plan['base_source']={'source_id':int(base['source_id']),'name':allowed[int(base['source_id'])]['name']}
+    return plan
+
+def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,requests,exposure,ranking,existing_rule_id=None):
+    stamp=now();plan_json=json.dumps(plan,ensure_ascii=False);exposure_json=json.dumps(exposure,ensure_ascii=False);ranking_json=json.dumps(ranking,ensure_ascii=False);legal_json=json.dumps(legal,ensure_ascii=False);req_json=json.dumps(requests,ensure_ascii=False)
+    if existing_rule_id:
+        r=c.execute('SELECT * FROM risk_rules WHERE id=?',(existing_rule_id,)).fetchone()
+        if not r:raise ValueError('Risk rule not found.')
+        version=int(r['version_number'] or 0)+1;rid=r['id'];ref=r['rule_ref']
+    else:ref=_rule_ref(c);version=1;rid=None
+    if rid is None:
+        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+    else:
+        c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural,json.dumps(plan),category,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,stamp,rid))
+    c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at,execution_plan_json,generated_natural_language,preview_summary_json,preview_status,preview_approved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,version,name,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp,plan_json,natural,'{}','Not Run',0))
+    for docid in legal:
+        doc=c.execute("SELECT d.*,v.version_number FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE d.id=? AND v.version_status='Approved' AND d.status IN ('Approved','Active')",(int(docid),)).fetchone()
+        if doc:c.execute('INSERT INTO risk_rule_legal_basis(rule_id,version_number,document_id,document_version,legal_passage,created_at) VALUES(?,?,?,?,?,?)',(rid,version,docid,doc['version_number'],'',stamp))
+    for idx,req in enumerate(requests,1):c.execute('INSERT INTO risk_rule_information_requests(rule_id,version_number,request_title,purpose,period,mandatory,evidence_type,sort_order,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(rid,version,req.get('title',''),req.get('purpose',''),req.get('period',''),1 if req.get('mandatory') else 0,req.get('evidence_type',''),idx,stamp))
+    return rid,version,ref
+
+def _evaluate_operator(left,op,right=None):
+    if op in ('EXISTS','NOT EXISTS'):
+        mask=left.notna() if hasattr(left,'notna') else left is not None
+        return mask if op=='EXISTS' else ~mask
+    if op in ('IN','NOT IN'):
+        vals=right if isinstance(right,list) else [right];mask=left.isin(vals) if hasattr(left,'isin') else left in vals;return mask if op=='IN' else ~mask
+    if op in ('CONTAINS','NOT CONTAINS'):
+        mask=left.astype(str).str.contains(str(right),case=False,na=False) if hasattr(left,'astype') else str(right).lower() in str(left).lower();return mask if op=='CONTAINS' else ~mask
+    if op=='=':return left==right
+    if op=='!=':return left!=right
+    if op=='>':return left>right
+    if op=='>=':return left>=right
+    if op=='<':return left<right
+    if op=='<=':return left<=right
+    raise ValueError(f'Unsupported operator: {op}')
+
+def _coerce_series(series,value):
+    n=_parse_number(value)
+    if n is not None:
+        numeric=pd.to_numeric(series,errors='coerce')
+        if numeric.notna().sum()>0:return numeric,n
+    return series.astype(str),str(value)
+
+def _execute_rule_plan(c,plan,sample_only=5):
+    if pd is None:raise RuntimeError('pandas is required for rule execution.')
+    loaded={};source_rows={}
+    for src in plan.get('sources',[]):
+        row,df,_=_load_approved_source(c,src['id']);loaded[int(src['id'])]=df;source_rows[int(src['id'])]=row
+    base_id=int(plan['base_source']['source_id']);df=loaded[base_id].copy();calc_series={}
+    def series_for(ref):
+        if not ref:return None
+        if ref.get('type')=='calculation':
+            if ref.get('name') not in calc_series:raise ValueError(f"Calculated field '{ref.get('name')}' is not available.")
+            return calc_series[ref['name']]
+        key=_field_key(int(ref['source_id']),ref['field'])
+        if key not in df.columns:raise ValueError(f"Field not available after source combination: {ref['field']}.")
+        return df[key]
+    for j in plan.get('joins',[]):
+        rid=int(j['right_source_id']);right=loaded[rid].copy();lk=_field_key(int(j['left_source_id']),j['left_field']);rk=_field_key(rid,j['right_field'])
+        if lk not in df.columns or rk not in right.columns:raise ValueError(f"Join field not found: {j.get('left_field')} or {j.get('right_field')}.")
+        df=df.merge(right,left_on=lk,right_on=rk,how=j.get('join_type','inner').lower(),suffixes=('','__dup'))
+    for f in plan.get('filters',[]):
+        left=series_for(f.get('left'));op=f.get('operator','');right=series_for(f.get('right')) if f.get('right_type')=='field' else ([x.strip() for x in str(f.get('value','')).split(',')] if op in ('IN','NOT IN') else f.get('value',''))
+        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):left,right=_coerce_series(left,right)
+        mask=_evaluate_operator(left,op,right);df=df.loc[~mask].copy() if f.get('clause')=='EXCEPT' else df.loc[mask].copy()
+    for calc in plan.get('calculations',[]):
+        op=calc.get('operation');a=pd.to_numeric(series_for(calc.get('left')),errors='coerce');b=pd.to_numeric(series_for(calc.get('right')),errors='coerce') if calc.get('right') else None
+        if op=='ADD':v=a+b
+        elif op=='SUBTRACT':v=a-b
+        elif op=='MULTIPLY':v=a*b
+        elif op=='DIVIDE':v=a/b.replace(0,float('nan'))
+        elif op=='PERCENTAGE DIFFERENCE':v=(a-b)/a.replace(0,float('nan'))*100
+        elif op=='PERCENTAGE OF':v=a/b.replace(0,float('nan'))*100
+        elif op in ('SUM','COUNT','AVERAGE','MIN','MAX'):
+            if calc.get('group_by'):
+                keys=[_field_key(int(x['source_id']),x['field']) for x in calc['group_by']];basecol=_field_key(int(calc['left']['source_id']),calc['left']['field']);g=df.groupby(keys)[basecol]
+                v={'SUM':g.transform('sum'),'COUNT':g.transform('count'),'AVERAGE':g.transform('mean'),'MIN':g.transform('min'),'MAX':g.transform('max')}[op]
+            else:v=a
+        else:raise ValueError(f'Unsupported calculation: {op}')
+        calc_series[calc['name']]=v
+    combined_mask=None
+    for cond in plan.get('conditions',[]):
+        left=series_for(cond.get('left'));op=cond.get('operator');right=series_for(cond.get('right')) if cond.get('right_type')=='field' else ([x.strip() for x in str(cond.get('value','')).split(',')] if op in ('IN','NOT IN') else cond.get('value',''))
+        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):left,right=_coerce_series(left,right)
+        mask=_evaluate_operator(left,op,right);combined_mask=mask if combined_mask is None else (combined_mask|mask if cond.get('connector','AND')=='OR' else combined_mask&mask)
+    if combined_mask is None:combined_mask=pd.Series(True,index=df.index)
+    result=df.loc[combined_mask].copy();exposure=plan.get('exposure',{});exposure_field=exposure.get('field')
+    result['__exposure__']=calc_series[exposure_field].loc[result.index] if exposure_field in calc_series else 0
+    summary={'records_evaluated':len(df),'records_triggered':len(result),'total_exposure':float(pd.to_numeric(result['__exposure__'],errors='coerce').fillna(0).sum()) if len(result) else 0.0}
+    cols=[]
+    for ref in plan.get('preview_fields',[]):
+        if ref.get('type')=='calculation' and ref.get('name') in calc_series:cols.append((ref['name'],calc_series[ref['name']]))
+        else:
+            key=_field_key(int(ref['source_id']),ref['field'])
+            if key in result.columns:cols.append((f"{source_rows[int(ref['source_id'])]['source_name']}.{ref['field']}",result[key]))
+    if not cols:
+        for col in list(result.columns)[:8]:cols.append((col,result[col]))
+    preview=[]
+    for _,row in result.head(sample_only).iterrows():
+        obj={name:_clean_value(series.loc[row.name]) for name,series in cols};obj['Risk Result']=plan.get('result',{}).get('risk_description','Potential Risk');obj['Estimated Exposure']=_clean_value(row.get('__exposure__',0));preview.append(obj)
+    summary['preview']=preview;return summary
+
+def _save_preview(c,rule_id,version,summary):
+    stamp=now();c.execute('DELETE FROM risk_rule_preview_results WHERE rule_id=? AND version_number=?',(rule_id,version))
+    for i,row in enumerate(summary.get('preview',[]),1):c.execute('INSERT INTO risk_rule_preview_results(rule_id,version_number,sample_rank,result_json,created_at) VALUES(?,?,?,?,?)',(rule_id,version,i,json.dumps(row,default=str,ensure_ascii=False),stamp))
+    compact={k:v for k,v in summary.items() if k!='preview'};c.execute("UPDATE risk_rule_versions SET preview_summary_json=?,preview_status='Completed',preview_run_at=?,preview_approved=0 WHERE rule_id=? AND version_number=?",(json.dumps(compact,default=str),stamp,rule_id,version));c.execute("UPDATE risk_rules SET status='Under Review',approved=0,updated_at=? WHERE id=?",(stamp,rule_id))
+
+def _rule_form_context(c,rule=None):
+    requests=[];selected=[]
+    if rule:
+        requests=c.execute('SELECT * FROM risk_rule_information_requests WHERE rule_id=? AND version_number=? ORDER BY sort_order',(rule['id'],rule['version_number'])).fetchall();selected=[x['document_id'] for x in c.execute('SELECT * FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule['id'],rule['version_number'])).fetchall()]
+    return dict(rule=rule,legal_basis=_approved_legal_basis(c),selected_basis=selected,requests=requests,data_sources=_approved_data_source_catalog(c),categories=RISK_RULE_CATEGORIES,tax_types=RISK_RULE_TAX_TYPES,logic_operators=RISK_LOGIC_OPERATORS,calc_operations=RISK_CALC_OPERATIONS,clauses=RISK_CLAUSES,exposure_types=RISK_EXPOSURE_TYPES)
 
 @app.route('/business')
 @login_required
 def business_rules():
-    """Analyst-facing Business Rules / Risk Rule Library."""
-    c=db()
-    rows=c.execute('''
-        SELECT r.*,
-               (SELECT MAX(v.version_number)
-                  FROM risk_rule_versions v
-                 WHERE v.rule_id=r.id) AS latest_version,
-               (SELECT v.status
-                  FROM risk_rule_versions v
-                 WHERE v.rule_id=r.id
-                 ORDER BY v.version_number DESC LIMIT 1) AS latest_status
-          FROM risk_rules r
-         ORDER BY r.id DESC
-    ''').fetchall()
-    c.close()
-    return render_template('business_rules.html', rules=rows)
+    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
 
-
-# Compatibility endpoints used by the Business Rules Library template.
-# The underlying implementation remains the existing Phase-3 risk-rule workflow.
 @app.route('/business/rules/create')
 @login_required
-def business_rule_create():
-    return redirect(url_for('risk_rule_new'))
-
+def business_rule_create():return redirect(url_for('risk_rule_new'))
 
 @app.route('/business/rules/<int:rule_id>')
 @login_required
-def business_rule_view(rule_id):
-    return redirect(url_for('risk_rule_detail', rule_id=rule_id))
-
+def business_rule_view(rule_id):return redirect(url_for('risk_rule_detail',rule_id=rule_id))
 
 @app.route('/business/rules/<int:rule_id>/edit')
 @login_required
-def business_rule_edit(rule_id):
-    return redirect(url_for('risk_rule_edit', rule_id=rule_id))
-
+def business_rule_edit(rule_id):return redirect(url_for('risk_rule_edit',rule_id=rule_id))
 
 @app.route('/business/rules/<int:rule_id>/versions')
 @login_required
-def business_rule_versions(rule_id):
-    # Version history is currently exposed through the existing rule-detail workflow.
-    # This endpoint is intentionally kept as a compatibility route so the Business
-    # Rules Library does not fail URL generation while the dedicated versions view
-    # is added.
-    return redirect(url_for('risk_rule_detail', rule_id=rule_id))
-
+def business_rule_versions(rule_id):return redirect(url_for('risk_rule_detail',rule_id=rule_id))
 
 @app.route('/risk-rules')
 @login_required
 def risk_rules():
-    q=request.args.get('q','').strip(); status=request.args.get('status','').strip(); category=request.args.get('category','').strip(); c=db(); sql='SELECT * FROM risk_rules WHERE 1=1'; params=[]
-    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)'; like='%'+q+'%'; params += [like,like,like]
-    if status:sql+=' AND status=?'; params.append(status)
-    if category:sql+=' AND COALESCE(risk_category,category)=?'; params.append(category)
-    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC"; rows=c.execute(sql,params).fetchall(); c.close(); return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
+    q=request.args.get('q','').strip();status=request.args.get('status','').strip();category=request.args.get('category','').strip();c=db();sql='SELECT * FROM risk_rules WHERE 1=1';params=[]
+    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)';like='%'+q+'%';params += [like,like,like]
+    if status:sql+=' AND status=?';params.append(status)
+    if category:sql+=' AND COALESCE(risk_category,category)=?';params.append(category)
+    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC";rows=c.execute(sql,params).fetchall();c.close();return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
+
+def _extract_common_rule_form(c):
+    name=request.form.get('rule_name','').strip();category=request.form.get('risk_category','').strip();tax_type=request.form.get('tax_type','General').strip() or 'General';scope=request.form.get('taxpayer_scope','').strip();period=request.form.get('applicable_period','').strip()
+    if not name or category not in RISK_RULE_CATEGORIES:raise ValueError('Rule name and Risk Category are required.')
+    plan=_parse_rule_plan(request.form,_approved_data_source_catalog(c));plan['period']={'description':request.form.get('period_description','').strip()};plan['result']={'risk_description':request.form.get('risk_description','').strip() or name};plan['except_description']=request.form.get('except_description','').strip()
+    exposure={'type':request.form.get('exposure_type','Estimated Revenue Exposure'),'formula':request.form.get('exposure_formula','').strip(),'minimum':request.form.get('minimum_exposure','').strip(),'field':request.form.get('exposure_field','').strip()};ranking={'base_score':request.form.get('base_score','0'),'exposure_weight':request.form.get('exposure_weight','0'),'frequency_weight':request.form.get('frequency_weight','0'),'description':request.form.get('ranking_description','').strip()}
+    legal=[int(x) for x in request.form.getlist('legal_basis') if str(x).isdigit()];requests=[];titles=request.form.getlist('request_title');purposes=request.form.getlist('request_purpose');periods=request.form.getlist('request_period');mandatory=request.form.getlist('request_mandatory');evidence=request.form.getlist('request_evidence')
+    for i,title in enumerate(titles):
+        title=title.strip()
+        if title:requests.append({'title':title,'purpose':purposes[i].strip() if i<len(purposes) else '','period':periods[i].strip() if i<len(periods) else '','mandatory':bool(i<len(mandatory) and mandatory[i] in ('1','on','true')),'evidence_type':evidence[i].strip() if i<len(evidence) else ''})
+    return name,category,tax_type,scope,period,plan,legal,requests,exposure,ranking
 
 @app.route('/risk-rules/new',methods=['GET','POST'])
 @login_required
@@ -1513,61 +1737,70 @@ def risk_rule_new():
     c=db()
     if request.method=='POST':
         try:
-            name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking=_rule_form_payload(c)
-            if not name or category not in RISK_RULE_CATEGORIES:raise ValueError('Rule name and Risk Category are required.')
-            if not detection['field_1'] or detection['operator'] not in RISK_OPERATORS:raise ValueError('Detection Logic requires Field 1 and a valid Operator.')
-            if detection['operator'] not in ('Exists','Does Not Exist') and not detection['field_2'] and not detection['threshold']:raise ValueError('Provide Field 2 or Threshold.')
-            if not legal:raise ValueError('Select at least one approved Knowledge Base legal basis.')
-            ref=_rule_ref(c); stamp=now();
-            c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural or name,json.dumps(detection),category,stamp,ref,1,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),'Draft',email(),stamp))
-            rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
-            c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,1,name,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),'Draft',email(),stamp))
-            for docid in legal:
-                doc=c.execute("SELECT d.*,v.version_number FROM knowledge_documents d JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=d.current_version WHERE d.id=? AND v.version_status='Approved'",(docid,)).fetchone()
-                if doc:c.execute('INSERT INTO risk_rule_legal_basis(rule_id,version_number,document_id,document_version,legal_passage,created_at) VALUES(?,?,?,?,?,?)',(rid,1,docid,doc['version_number'],'',stamp))
-            for req in requests:c.execute('INSERT INTO risk_rule_information_requests(rule_id,version_number,request_title,purpose,period,mandatory,evidence_type,sort_order,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(rid,1,req['title'],req['purpose'],req['period'],req['mandatory'],req['evidence_type'],req['sort_order'],stamp))
-            c.commit(); log('RISK_RULE_CREATED',f'{ref}: {name}; Draft; version 1'); flash(f'{ref} created as Draft. It is not active until approved.','success'); return redirect(url_for('risk_rules'))
-        except Exception as exc:c.rollback(); flash(str(exc),'error')
-    legal=_approved_legal_basis(c); c.close(); return render_template('risk_rule_form.html',rule=None,legal_basis=legal,categories=RISK_RULE_CATEGORIES,tax_types=RISK_RULE_TAX_TYPES,operators=RISK_OPERATORS,exposure_types=RISK_EXPOSURE_TYPES)
+            name,category,tax_type,scope,period,plan,legal,requests,exposure,ranking=_extract_common_rule_form(c);natural=_generate_rule_natural_language(plan);rid,version,ref=_save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,requests,exposure,ranking);c.commit();c.close();log('RISK_RULE_INTERPRETED',f'{ref} v{version}: system interpretation generated; awaiting preview and approval');return redirect(url_for('risk_rule_review',rule_id=rid))
+        except Exception as exc:c.rollback();flash(str(exc),'error')
+    ctx=_rule_form_context(c);c.close();return render_template('risk_rule_form.html',**ctx)
 
 @app.route('/risk-rules/<int:rule_id>/edit',methods=['GET','POST'])
 @login_required
 def risk_rule_edit(rule_id):
-    c=db(); rule=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    c=db();rule=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
     if not rule:c.close();abort(404)
     if request.method=='POST':
         try:
-            name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking=_rule_form_payload(c)
-            if not name or category not in RISK_RULE_CATEGORIES:raise ValueError('Rule name and Risk Category are required.')
-            if not legal:raise ValueError('Select at least one approved Knowledge Base legal basis.')
-            newv=int(rule['version_number'] or 1)+1; stamp=now()
-            c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural or name,json.dumps(detection),category,newv,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),stamp,rule_id))
-            c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rule_id,newv,name,category,tax_type,scope,period,json.dumps(detection),json.dumps(legal),json.dumps(requests),json.dumps(exposure),json.dumps(ranking),'Draft',email(),stamp))
-            c.execute('DELETE FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,newv)); c.execute('DELETE FROM risk_rule_information_requests WHERE rule_id=? AND version_number=?',(rule_id,newv))
-            for docid in legal:
-                doc=c.execute('SELECT * FROM knowledge_documents WHERE id=?',(docid,)).fetchone(); v=c.execute("SELECT version_number FROM knowledge_document_versions WHERE document_id=? AND version_status='Approved' ORDER BY version_number DESC LIMIT 1",(docid,)).fetchone()
-                if doc and v:c.execute('INSERT INTO risk_rule_legal_basis(rule_id,version_number,document_id,document_version,legal_passage,created_at) VALUES(?,?,?,?,?,?)',(rule_id,newv,docid,v['version_number'],'',stamp))
-            for req in requests:c.execute('INSERT INTO risk_rule_information_requests(rule_id,version_number,request_title,purpose,period,mandatory,evidence_type,sort_order,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(rule_id,newv,req['title'],req['purpose'],req['period'],req['mandatory'],req['evidence_type'],req['sort_order'],stamp))
-            c.commit(); log('RISK_RULE_VERSION_CREATED',f'{rule["rule_ref"]}: version {newv}; Draft'); flash(f'{rule["rule_ref"]} updated as Version {newv} Draft.','success'); return redirect(url_for('risk_rule_edit',rule_id=rule_id))
-        except Exception as exc:c.rollback(); flash(str(exc),'error')
-    legal=_approved_legal_basis(c); requests=c.execute('SELECT * FROM risk_rule_information_requests WHERE rule_id=? AND version_number=? ORDER BY sort_order',(rule_id,rule['version_number'])).fetchall(); basis=c.execute('SELECT * FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,rule['version_number'])).fetchall(); c.close(); return render_template('risk_rule_form.html',rule=rule,legal_basis=legal,selected_basis=[x['document_id'] for x in basis],requests=requests,categories=RISK_RULE_CATEGORIES,tax_types=RISK_RULE_TAX_TYPES,operators=RISK_OPERATORS,exposure_types=RISK_EXPOSURE_TYPES)
+            name,category,tax_type,scope,period,plan,legal,requests,exposure,ranking=_extract_common_rule_form(c);natural=_generate_rule_natural_language(plan);rid,version,ref=_save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,requests,exposure,ranking,existing_rule_id=rule_id);c.commit();c.close();log('RISK_RULE_VERSION_CREATED',f'{ref} v{version}: system interpretation generated; awaiting preview and approval');return redirect(url_for('risk_rule_review',rule_id=rid))
+        except Exception as exc:c.rollback();flash(str(exc),'error')
+    ctx=_rule_form_context(c,rule);c.close();return render_template('risk_rule_form.html',**ctx)
+
+@app.route('/risk-rules/<int:rule_id>/review')
+@login_required
+def risk_rule_review(rule_id):
+    c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    if not r:c.close();abort(404)
+    v=c.execute('SELECT * FROM risk_rule_versions WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone();previews=c.execute('SELECT * FROM risk_rule_preview_results WHERE rule_id=? AND version_number=? ORDER BY sample_rank',(rule_id,r['version_number'])).fetchall();c.close()
+    return render_template('risk_rule_review.html',rule=r,version=v,plan=_json_or_default(v['execution_plan_json'] or v['detection_logic_json'],{}),natural_language=v['generated_natural_language'] or r['natural_language'],summary=_json_or_default(v['preview_summary_json'],{}),preview_rows=[_json_or_default(x['result_json'],{}) for x in previews])
+
+@app.route('/risk-rules/<int:rule_id>/preview',methods=['POST'])
+@login_required
+def risk_rule_preview(rule_id):
+    c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    if not r:c.close();abort(404)
+    v=c.execute('SELECT * FROM risk_rule_versions WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()
+    try:
+        summary=_execute_rule_plan(c,_json_or_default(v['execution_plan_json'],{}),5);_save_preview(c,rule_id,r['version_number'],summary);c.commit();log('RISK_RULE_PREVIEW_EXECUTED',f'{r["rule_ref"]} v{r["version_number"]}: evaluated={summary["records_evaluated"]}; triggered={summary["records_triggered"]}; exposure={summary["total_exposure"]:,.2f}');flash(f'Preview completed: {summary["records_triggered"]:,} potential risks identified from {summary["records_evaluated"]:,} evaluated records.','success')
+    except Exception as exc:
+        c.rollback();c.execute("UPDATE risk_rule_versions SET preview_status='Failed',preview_summary_json=? WHERE rule_id=? AND version_number=?",(json.dumps({'error':str(exc)}),rule_id,r['version_number']));c.commit();flash(f'Rule preview failed: {exc}','error')
+    c.close();return redirect(url_for('risk_rule_review',rule_id=rule_id))
+
+@app.route('/risk-rules/<int:rule_id>/approve',methods=['POST'])
+@login_required
+def risk_rule_approve(rule_id):
+    c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    if not r:c.close();abort(404)
+    v=c.execute('SELECT * FROM risk_rule_versions WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()
+    try:
+        if not v or v['preview_status']!='Completed':raise ValueError('Run the rule preview before approval.')
+        if not c.execute('SELECT COUNT(*) FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()[0]:raise ValueError('A rule cannot be approved without approved Knowledge Base legal backing.')
+        stamp=now();c.execute("UPDATE risk_rule_versions SET status='Active',approved_by=?,approved_at=?,preview_approved=1 WHERE rule_id=? AND version_number=?",(email(),stamp,rule_id,r['version_number']));c.execute("UPDATE risk_rules SET status='Active',approved=1,approved_by=?,approved_at=?,updated_at=? WHERE id=?",(email(),stamp,stamp,rule_id));c.commit();log('RISK_RULE_APPROVED',f'{r["rule_ref"]} v{r["version_number"]}: approved after interpretation and preview by {email()}');flash(f'{r["rule_ref"]} Version {r["version_number"]} is now Active.','success')
+    except Exception as exc:c.rollback();flash(str(exc),'error')
+    c.close();return redirect(url_for('risk_rule_review',rule_id=rule_id))
 
 @app.route('/risk-rules/<int:rule_id>/decision',methods=['POST'])
 @login_required
 def risk_rule_decision(rule_id):
-    decision=request.form.get('decision','').strip(); comments=request.form.get('comments','').strip()
-    if decision not in ('Under Review','Approved','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rules'))
-    c=db(); r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    decision=request.form.get('decision','').strip();comments=request.form.get('comments','').strip()
+    if decision=='Approved':return risk_rule_approve(rule_id)
+    if decision not in ('Under Review','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rules'))
+    c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
     if not r:c.close();abort(404)
-    if decision=='Approved' and not c.execute('SELECT COUNT(*) FROM risk_rule_legal_basis WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone()[0]:c.close();flash('A rule cannot be approved without approved Knowledge Base legal backing.','error');return redirect(url_for('risk_rule_edit',rule_id=rule_id))
-    active='Active' if decision=='Approved' else decision; c.execute('UPDATE risk_rules SET status=?,approved=?,approved_by=?,approved_at=?,updated_at=? WHERE id=?',(active,1 if decision=='Approved' else 0,email(),now() if decision=='Approved' else None,now(),rule_id)); c.execute('UPDATE risk_rule_versions SET status=?,approved_by=?,approved_at=? WHERE rule_id=? AND version_number=?',(active,email(),now() if decision=='Approved' else None,rule_id,r['version_number'])); c.commit(); c.close(); log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}'); flash(f'{r["rule_ref"]} Version {r["version_number"]}: {active}.','success'); return redirect(url_for('risk_rules'))
+    c.execute('UPDATE risk_rules SET status=?,approved=0,updated_at=? WHERE id=?',(decision,now(),rule_id));c.execute('UPDATE risk_rule_versions SET status=?,approved_by=NULL,approved_at=NULL WHERE rule_id=? AND version_number=?',(decision,rule_id,r['version_number']));c.commit();c.close();log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}');flash(f'{r["rule_ref"]} Version {r["version_number"]}: {decision}.','success');return redirect(url_for('risk_rules'))
 
 @app.route('/risk-rules/<int:rule_id>')
 @login_required
 def risk_rule_detail(rule_id):
-    c=db(); r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
+    c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
     if not r:c.close();abort(404)
-    basis=c.execute("SELECT b.*,d.document_ref,d.title,d.category,d.document_type,d.tax_type,d.issuing_authority,v.version_status FROM risk_rule_legal_basis b JOIN knowledge_documents d ON d.id=b.document_id JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=b.document_version WHERE b.rule_id=? AND b.version_number=?",(rule_id,r['version_number'])).fetchall(); req=c.execute('SELECT * FROM risk_rule_information_requests WHERE rule_id=? AND version_number=? ORDER BY sort_order',(rule_id,r['version_number'])).fetchall(); c.close(); return render_template('risk_rule_detail.html',rule=r,basis=basis,requests=req,detection=_json_or_default(r['detection_logic_json'],{}),exposure=_json_or_default(r['exposure_config_json'],{}),ranking=_json_or_default(r['ranking_config_json'],{}))
+    basis=c.execute("SELECT b.*,d.document_ref,d.title,d.category,d.document_type,d.tax_type,d.issuing_authority,v.version_status FROM risk_rule_legal_basis b JOIN knowledge_documents d ON d.id=b.document_id JOIN knowledge_document_versions v ON v.document_id=d.id AND v.version_number=b.document_version WHERE b.rule_id=? AND b.version_number=?",(rule_id,r['version_number'])).fetchall();req=c.execute('SELECT * FROM risk_rule_information_requests WHERE rule_id=? AND version_number=? ORDER BY sort_order',(rule_id,r['version_number'])).fetchall();v=c.execute('SELECT * FROM risk_rule_versions WHERE rule_id=? AND version_number=?',(rule_id,r['version_number'])).fetchone();previews=c.execute('SELECT * FROM risk_rule_preview_results WHERE rule_id=? AND version_number=? ORDER BY sample_rank',(rule_id,r['version_number'])).fetchall();c.close();return render_template('risk_rule_detail.html',rule=r,basis=basis,requests=req,detection=_json_or_default(r['detection_logic_json'],{}),exposure=_json_or_default(r['exposure_config_json'],{}),ranking=_json_or_default(r['ranking_config_json'],{}),version=v,preview_rows=[_json_or_default(x['result_json'],{}) for x in previews])
 
 @app.route('/data-sources')
 @login_required
