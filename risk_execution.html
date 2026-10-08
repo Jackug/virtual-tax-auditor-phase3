@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.exec{max-width:1450px;margin:0 auto}.top{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;flex-wrap:wrap}.top h1{margin:2px 0;color:#17365d}.muted{font-size:12px;color:#687782}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.card{background:#fff;border:1px solid #dce2e8;border-radius:8px;padding:16px;margin-top:12px}.kpi{background:#f7f9fb;border:1px solid #e0e5ea;border-radius:6px;padding:12px}.kpi .l{font-size:10px;text-transform:uppercase;font-weight:700;color:#687782}.kpi .v{font-size:19px;font-weight:800;color:#17365d;margin-top:5px}.status{display:inline-block;padding:5px 9px;border-radius:12px;background:#eef2f5;font-size:10px;font-weight:700}.status.high{background:#fff0d2;color:#765300}.status.critical{background:#f8dada;color:#8b2222}.status.closed{background:#e0f1e6;color:#216438}.status.review{background:#edf4ff;color:#23557f}.btn{display:inline-block;padding:10px 14px;border:1px solid #cbd5df;border-radius:5px;background:#fff;color:#17365d;text-decoration:none;font-size:12px;cursor:pointer}.primary{background:#17365d;color:#fff;border-color:#17365d}.danger{background:#8b2222;color:#fff;border-color:#8b2222}.actions{display:flex;gap:8px;flex-wrap:wrap}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{padding:9px;border-bottom:1px solid #e3e8ec;text-align:left;font-size:12px;vertical-align:top}.tbl th{background:#f1f4f7}.logic{background:#102d4a;color:#fff;border-radius:6px;padding:13px;white-space:pre-wrap;line-height:1.55;font-size:12px}.notice{padding:13px;border:1px solid #cbd9e7;background:#f3f7fb;border-radius:6px;font-size:12px;line-height:1.55}.decision{border:1px solid #d6dfe7;border-radius:7px;padding:15px;background:#fafbfc}.decision textarea{width:100%;min-height:90px;padding:10px;border:1px solid #cbd5df;border-radius:5px;box-sizing:border-box;font-family:inherit}.legal{border-left:4px solid #53799e;padding:10px 13px;background:#f7f9fb;margin:8px 0;font-size:12px}.step{display:flex;gap:12px;align-items:flex-start;margin:9px 0}.num{width:26px;height:26px;border-radius:50%;background:#17365d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex:none}.step b{color:#17365d}.disabled{opacity:.5;pointer-events:none}@media(max-width:1000px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.grid{grid-template-columns:1fr}}
+</style>
+
+<div class="exec">
+  <div class="top">
+    <div>
+      <div class="muted">VIRTUAL TAX AUDITOR · CONTROLLED EXECUTION</div>
+      <h1>Risk Execution &amp; Decision Workspace</h1>
+      <div class="muted">Review the detected risk, supporting evidence, detection logic and legal basis before deciding whether to proceed.</div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('risk_detail',assessment_id=risk.id) }}">← Risk Details</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="kpi"><div class="l">Taxpayer</div><div class="v">{{ risk.taxpayer_name }}</div></div>
+      <div class="kpi"><div class="l">TIN</div><div class="v">{{ risk.tin }}</div></div>
+      <div class="kpi"><div class="l">Risk Level</div><div class="v"><span class="status {{ 'critical' if risk.band=='Critical' else 'high' if risk.band=='High' else '' }}">{{ risk.band }}</span></div></div>
+      <div class="kpi"><div class="l">Risk Score</div><div class="v">{{ '{:.1f}'.format((risk.score or 0)|float) }}</div></div>
+      <div class="kpi"><div class="l">Potential Exposure</div><div class="v">UGX {{ '{:,.0f}'.format((risk.exposure or 0)|float) }}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;color:#17365d">1. Risk Identification</h3>
+    <table class="tbl">
+      <tr><th style="width:180px">Taxpayer</th><td>{{ risk.taxpayer_name }}</td><th style="width:150px">TIN</th><td>{{ risk.tin }}</td></tr>
+      <tr><th>Station</th><td>{{ risk.station or '—' }}</td><th>Sector</th><td>{{ risk.sector or '—' }}</td></tr>
+      <tr><th>Financial Year</th><td>{{ risk.financial_year or '—' }}</td><th>Assessment Date</th><td>{{ risk.assessed_at }}</td></tr>
+      <tr><th>Engine Version</th><td>{{ risk.engine_version or '—' }}</td><th>Taxpayer Status</th><td>{{ risk.taxpayer_status or '—' }}</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;color:#17365d">2. Detection Basis</h3>
+    {% for d in drivers %}
+      <div style="margin-bottom:15px">
+        <table class="tbl">
+          <tr><th style="width:170px">Detection Rule</th><td><b>{{ d.rule_name }}</b></td><th style="width:120px">Version</th><td>{{ d.rule_version or '—' }}</td></tr>
+          <tr><th>Category</th><td>{{ d.risk_category or d.rule_category or '—' }}</td><th>Tax Type</th><td>{{ d.tax_type or 'General' }}</td></tr>
+          <tr><th>Variance</th><td>UGX {{ '{:,.0f}'.format((d.variance or 0)|float) }}</td><th>Variance %</th><td>{{ '{:.2f}'.format((d.variance_pct or 0)|float) }}%</td></tr>
+        </table>
+        <div class="logic" style="margin-top:8px">{{ d.natural_language or d.description }}</div>
+        <div class="muted" style="margin-top:6px">Observed trigger: {{ d.description }}</div>
+      </div>
+    {% else %}
+      <div class="notice">No stored detection driver is available for this risk. The risk cannot be responsibly approved without a traceable detection basis.</div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;color:#17365d">3. Legal / Knowledge Basis</h3>
+    {% if legal_basis %}
+      {% for item in legal_basis %}
+        <div class="legal">
+          <b>{{ item.document_ref }} — {{ item.title }}</b><br>
+          <span class="muted">{{ item.category }} · Version {{ item.document_version }}</span>
+          {% if item.legal_passage %}<div style="margin-top:6px">{{ item.legal_passage }}</div>{% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="notice">No specific approved legal passage is linked to this risk driver. Review the approved Knowledge Base before making a consequential decision.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;color:#17365d">4. Execution Control</h3>
+    <div class="step"><div class="num">1</div><div><b>Risk detected</b><br><span class="muted">The approved Detection Logic identified this taxpayer as a risk candidate.</span></div></div>
+    <div class="step"><div class="num">2</div><div><b>Human execution review</b><br><span class="muted">An auditor reviews the risk basis, exposure, evidence and legal/knowledge support.</span></div></div>
+    <div class="step"><div class="num">3</div><div><b>AI audit analysis</b><br><span class="muted">If approved, the controlled AI analysis creates preliminary findings for human validation.</span></div></div>
+    <div class="step"><div class="num">4</div><div><b>Human finding validation</b><br><span class="muted">AI findings remain preliminary until a human validates them.</span></div></div>
+    <div class="step"><div class="num">5</div><div><b>Communication</b><br><span class="muted">Only a human-validated finding can proceed to taxpayer communication.</span></div></div>
+  </div>
+
+  {% if not case or case.status in ['Detected','Selected for Virtual Audit','Execution Approved - Pending AI Analysis'] %}
+  <div class="card">
+    <h3 style="margin:0 0 10px;color:#17365d">5. Human Execution Decision</h3>
+    {% if case and case.status=='Execution Approved - Pending AI Analysis' %}
+      <div class="notice"><b>Approved for execution.</b> The risk is now ready for the controlled AI Audit Analysis.</div>
+      <div class="actions" style="margin-top:12px">
+        <form method="post" action="{{ url_for('analyze',cid=case.id) }}">
+          <button class="btn primary" type="submit">RUN AI AUDIT ANALYSIS</button>
+        </form>
+        <a class="btn" href="{{ url_for('case_detail',cid=case.id) }}">Open Case Workspace</a>
+      </div>
+    {% else %}
+      <div class="decision">
+        <form method="post" action="{{ url_for('execute_risk',assessment_id=risk.id) }}">
+          <label style="font-size:12px;font-weight:700;color:#314452">Auditor review / decision reason</label>
+          <textarea name="reason" required placeholder="Record why the risk should proceed or why it should be rejected. Include the key evidence, concern, limitation or decision basis."></textarea>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn primary" name="decision" value="APPROVE" type="submit">APPROVE &amp; PROCEED</button>
+            <button class="btn danger" name="decision" value="REJECT" type="submit">REJECT RISK</button>
+          </div>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if case %}
+  <div class="card">
+    <h3 style="margin:0 0 10px;color:#17365d">6. Current Case Status</h3>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi"><div class="l">Case Reference</div><div class="v" style="font-size:14px">{{ case.case_ref }}</div></div>
+      <div class="kpi"><div class="l">Stage</div><div class="v" style="font-size:14px">{{ case.status }}</div></div>
+      <div class="kpi"><div class="l">Assigned To</div><div class="v" style="font-size:14px">{{ case.assigned_to or '—' }}</div></div>
+    </div>
+
+    {% if analysis %}
+      <div class="notice" style="margin-top:12px">
+        <b>AI Audit Analysis completed.</b><br>
+        {{ analysis.summary }}
+        <div class="muted" style="margin-top:5px">AI analysis remains preliminary and requires human validation.</div>
+      </div>
+    {% endif %}
+
+    {% if findings %}
+      <h4 style="color:#17365d;margin-bottom:6px">Preliminary Findings</h4>
+      <table class="tbl">
+        <thead><tr><th>Finding</th><th>Category</th><th>Issue</th><th>Variance</th><th>AI Confidence</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+        {% for f in findings %}
+          <tr>
+            <td><a href="{{ url_for('finding',fid=f.id) }}">{{ f.finding_ref }}</a></td>
+            <td>{{ f.risk_category }}</td>
+            <td>{{ f.description }}</td>
+            <td>UGX {{ '{:,.0f}'.format((f.variance or 0)|float) }} ({{ '{:.2f}'.format((f.variance_pct or 0)|float) }}%)</td>
+            <td>{{ f.ai_confidence or '—' }}</td>
+            <td>{{ f.status }}</td>
+            <td><a class="btn" href="{{ url_for('finding',fid=f.id) }}">VALIDATE</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <div class="actions" style="margin-top:12px">
+      {% if findings %}<a class="btn primary" href="{{ url_for('case_detail',cid=case.id) }}">CONTINUE TO HUMAN VALIDATION</a>{% endif %}
+      <a class="btn" href="{{ url_for('case_detail',cid=case.id) }}">OPEN FULL CASE</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="notice"><b>Control principle:</b> AI-generated analysis remains preliminary. Human auditors validate findings, approve taxpayer communications, validate responses and make consequential decisions.</div>
+  </div>
+</div>
+{% endblock %}
