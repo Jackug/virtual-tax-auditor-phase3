@@ -1,3237 +1,2753 @@
-{% extends 'base.html' %}
-
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Risk Rule' if rule else 'Create Risk Rule' }}{% endblock %}
 {% block content %}
-
 <style>
+.rr-wrap{max-width:1400px;margin:0 auto;padding:24px}
+.rr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:18px}
+.rr-head h1{margin:0;color:#102f55;font-size:28px}
+.rr-muted{color:#64748b;font-size:13px}
+.rr-grid{display:grid;grid-template-columns:250px minmax(520px,1fr) 330px;gap:16px;align-items:start}
+.rr-card{background:#fff;border:1px solid #d8e0ea;border-radius:10px;box-shadow:0 2px 8px rgba(15,35,60,.05);padding:16px}
+.rr-card h3{margin:0 0 12px;color:#12345b;font-size:15px}
+.rr-label{display:block;font-weight:700;font-size:12px;color:#334155;margin:0 0 5px}
+.rr-input,.rr-select,.rr-text{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:6px;padding:9px 10px;font-size:13px;background:#fff}
+.rr-text{min-height:76px;resize:vertical}
+.rr-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rr-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.rr-field{margin-bottom:12px}
 
-  .transform-header {
-    margin-bottom: 15px;
-  }
+.logic-search-wrap{position:relative;width:100%}
+.logic-search-box{display:flex;width:100%;border:1px solid #cbd5e1;border-radius:6px;background:#fff;overflow:hidden}
+.logic-search-input{flex:1;min-width:0;border:0;outline:0;padding:9px 10px;font-size:13px;background:#fff}
+.logic-search-input:focus{box-shadow:inset 0 0 0 1px #2563eb}
+.logic-search-toggle{width:38px;border:0;border-left:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;color:#475569}
+.logic-search-toggle:hover{background:#e2e8f0}
+.logic-vocabulary-dropdown{display:none;position:absolute;z-index:1000;left:0;right:0;top:42px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 8px 20px rgba(15,35,60,.14)}
+.logic-vocabulary-dropdown.open{display:block}
+.logic-option{padding:9px 10px;font-size:12px;font-weight:700;color:#173b65;cursor:pointer;border-bottom:1px solid #f1f5f9}
+.logic-option:last-child{border-bottom:0}
+.logic-option:hover{background:#eef5fb}
+.logic-option.selected{background:#dbeafe}
+.logic-option-empty{padding:10px;color:#64748b;font-size:12px}
+.selected-logic-display{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding:8px 9px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px}
+.selected-logic-label{font-size:11px;color:#64748b}
+.selected-logic-label.has-selection{color:#173b65;font-weight:700}
+.logic-add-btn{white-space:nowrap}
+.logic-add-btn:disabled{opacity:.5;cursor:not-allowed}
 
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 10px;
-    border: 1px solid #d9e0e7;
-    background: #f7f9fb;
-    border-radius: 7px;
-  }
+.canvas{min-height:650px}
+.step{position:relative;border:1px solid #d5dee9;border-left:4px solid #245985;border-radius:8px;background:#fff;margin-bottom:10px;padding:12px 42px 12px 14px}
+.step .tag{display:inline-block;background:#e9f1f8;color:#17466f;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:800;margin-bottom:7px}
+.step .summary{font-size:13px;color:#1f2937;white-space:pre-wrap}
+.step .tools{position:absolute;right:8px;top:8px;display:flex;gap:4px}
+.iconbtn{border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:4px 6px;cursor:pointer;color:#475569}
+.add-step{width:100%;border:1px dashed #8aa8c4;background:#f8fbfe;color:#1c527e;padding:10px;border-radius:7px;font-weight:700;cursor:pointer}
 
-  .toolbar button {
-    border: 1px solid #cbd5df;
-    background: white;
-    padding: 8px 11px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 11px;
-  }
+.empty{padding:45px 15px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc}
+.preview-box{background:#0f2945;color:#e8f1f8;border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:11px;white-space:pre-wrap;max-height:340px;overflow:auto}
+.source-chip{display:flex;justify-content:space-between;gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;font-size:11px}
+.badge{border-radius:999px;padding:3px 8px;font-size:10px;font-weight:800}
+.b-approved{background:#dcfce7;color:#166534}
+.b-draft{background:#fef3c7;color:#92400e}
+.legal-list{max-height:180px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:8px}
+.legal-item{display:flex;gap:8px;padding:5px 0;font-size:11px}
+.cond{border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafcff}
+.cond-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.rr-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}
+.btn-primary{background:#1f537f;color:#fff}
+.btn-secondary{background:#fff;color:#27496b;border:1px solid #b9c7d6}
+.btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+.btn:disabled{opacity:.55;cursor:not-allowed}
 
-  .toolbar button:hover {
-    background: #eef4f9;
-  }
-
-  .workspace {
-    display: grid;
-    grid-template-columns: 310px minmax(0, 1fr);
-    gap: 12px;
-    margin-top: 12px;
-  }
-
-  .sidebar {
-    border: 1px solid #d9e0e7;
-    border-radius: 7px;
-    background: white;
-    padding: 12px;
-  }
-
-  .sidebar h4 {
-    margin-top: 0;
-  }
-
-  .step {
-    padding: 9px 0;
-    border-bottom: 1px solid #edf0f2;
-    font-size: 11px;
-  }
-
-  .step-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .step-number {
-    font-weight: 700;
-    color: #17365d;
-  }
-
-  .step-title {
-    font-weight: 700;
-  }
-
-  .step-actions {
-    display: flex;
-    gap: 4px;
-  }
-
-  .step-actions button {
-    font-size: 10px;
-    padding: 4px 7px;
-    border: 1px solid #cbd5df;
-    border-radius: 4px;
-    background: white;
-    cursor: pointer;
-  }
-
-  .edit-step {
-    color: #17365d;
-  }
-
-  .delete-step {
-    color: #a52a2a;
-  }
-
-  .preview {
-    border: 1px solid #d9e0e7;
-    border-radius: 7px;
-    background: white;
-    overflow: hidden;
-  }
-
-  .preview-header {
-    padding: 11px 13px;
-    background: #f7f9fb;
-    border-bottom: 1px solid #d9e0e7;
-  }
-
-  .table-wrap {
-    overflow: auto;
-    max-height: 580px;
-  }
-
-  .data-table {
-    border-collapse: collapse;
-    min-width: 100%;
-    font-size: 11px;
-    user-select: text;
-  }
-
-  .data-table th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: #e9eef3;
-    padding: 7px;
-    border: 1px solid #d4dbe1;
-    text-align: left;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .data-table td {
-    padding: 6px 7px;
-    border: 1px solid #e1e5e8;
-    white-space: nowrap;
-    max-width: 320px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: pointer;
-  }
-
-  .data-table td:hover {
-    background: #f2f7fb;
-  }
-
-  .data-table tr.selected-row td {
-    background: #fff2c9 !important;
-    outline: 1px solid #d5a600;
-  }
-
-  .row-number {
-    background: #f5f6f7;
-    color: #59636c;
-    text-align: center;
-    font-weight: 700;
-    cursor: pointer !important;
-  }
-
-  .operation-panel {
-    display: none;
-    margin-top: 12px;
-    border: 1px solid #d9e0e7;
-    border-radius: 7px;
-    background: white;
-    padding: 14px;
-  }
-
-  .operation-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .operation-grid .full {
-    grid-column: 1 / -1;
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 12px;
-    align-items: center;
-  }
-
-  .btn {
-    border: 0;
-    border-radius: 5px;
-    padding: 8px 13px;
-    cursor: pointer;
-    font-size: 11px;
-    background: #17365d;
-    color: white;
-    text-decoration: none;
-  }
-
-  .btn-success {
-    background: #287a46;
-  }
-
-  .btn-warning {
-    background: #9a6a00;
-  }
-
-  .btn-secondary {
-    background: #66727d;
-  }
-
-  .btn-danger {
-    background: #a52a2a;
-  }
-
-  .btn-info {
-    background: #286090;
-  }
-
-  .info {
-    padding: 10px;
-    background: #f3f7fb;
-    border: 1px solid #d9e3ec;
-    border-radius: 6px;
-    font-size: 11px;
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 10px;
-    background: #e9eef3;
-    font-size: 10px;
-  }
-
-  .muted {
-    line-height: 1.5;
-  }
-
-  .copy-hint {
-    font-size: 10px;
-    color: #59636c;
-    margin-top: 5px;
-  }
-
-  .selected-row-info {
-    padding: 8px 10px;
-    background: #fff9e6;
-    border: 1px solid #ecd99a;
-    border-radius: 5px;
-    margin-top: 8px;
-    font-size: 11px;
-  }
-
-  .editing-banner {
-    padding: 10px 12px;
-    background: #eef4f9;
-    border: 1px solid #cbdde9;
-    border-radius: 6px;
-    margin-top: 12px;
-    display: none;
-  }
-
-  .column-list {
-    max-height: 220px;
-    overflow: auto;
-    border: 1px solid #d9e0e7;
-    padding: 8px;
-    border-radius: 5px;
-  }
-
-  .column-option {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 11px;
-  }
-
-  .save-card {
-    margin-top: 15px;
-  }
-
-  @media(max-width:1000px) {
-
-    .workspace {
-      grid-template-columns: 1fr;
-    }
-
-    .operation-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .operation-grid .full {
-      grid-column: auto;
-    }
-
-  }
-
+@media(max-width:1050px){
+  .rr-grid{grid-template-columns:1fr}
+  .rr-row3,.rr-row{grid-template-columns:1fr}
+}
 </style>
 
+<div class="rr-wrap">
 
-<!-- ============================================================
-     HEADER
-============================================================ -->
+  <div class="rr-head">
+    <div>
+      <div class="rr-muted">Business Rules / Risk Rule Library</div>
+      <h1>{{ 'Edit Risk Rule' if rule else 'Create Risk Rule' }}</h1>
+      <div class="rr-muted">
+        Construct the business definition, executable logic, data relationships and controls used by the Virtual Tax Auditor Risk Engine.
+      </div>
+    </div>
 
-<div class="card transform-header">
-
-  <div class="label">
-    DATA & EVIDENCE · STEP 2C-3
+    <a class="btn btn-secondary" href="{{ url_for('business_rules') }}">
+      ← Back to Library
+    </a>
   </div>
 
-  <h2>
-    Transform Data
-  </h2>
+  <form
+    method="post"
+    action="{{ url_for('risk_rule_new') if not rule else url_for('risk_rule_edit', rule_id=rule['id']) }}"
+    id="riskRuleForm"
+  >
 
-  <p class="muted">
-    Power Query-style data preparation workspace.
-    Every transformation becomes an applied step.
-    The original uploaded source is never overwritten.
-  </p>
+    <input type="hidden" name="rule_plan" id="rule_plan">
 
-  <div class="info">
+    <!-- ========================================================= -->
+    <!-- BUSINESS DEFINITION -->
+    <!-- ========================================================= -->
 
-    <b>{{ source.source_name }}</b>
+    <div class="rr-card" style="margin-bottom:16px">
 
-    · {{ source.source_ref }}
+      <h3>1. Business Risk Definition</h3>
 
-    · Version {{ version.version_number }}
+      <div class="rr-row">
 
-    · {{ version.original_filename }}
+        <div class="rr-field">
+          <label class="rr-label">Rule Name *</label>
 
-    · {{ "{:,}".format(original_rows) }} rows
+          <input
+            class="rr-input"
+            name="rule_name"
+            required
+            value="{{ rule['name'] if rule else '' }}"
+            placeholder="e.g. Sales Understatement Risk"
+          >
+        </div>
 
-    · {{ original_columns|length }} columns
+        <div class="rr-field">
 
-  </div>
+          <label class="rr-label">Risk Category *</label>
 
-</div>
+          <select
+            class="rr-select"
+            name="risk_category"
+            required
+          >
 
+            <option value="">Select Risk Category</option>
 
-<!-- ============================================================
-     TRANSFORMATION TOOLBAR
-============================================================ -->
+            {% for x in categories %}
+              <option
+                value="{{ x }}"
+                {% if rule and rule['risk_category']==x %}selected{% endif %}
+              >
+                {{ x }}
+              </option>
+            {% endfor %}
 
-<div class="card">
-
-  <h3>
-    Transformations
-  </h3>
-
-  <div class="toolbar">
-
-    <button type="button"
-            onclick="showPanel('headers')">
-      Replace Headers with Row
-    </button>
-
-    <button type="button"
-            onclick="showPanel('columns')">
-      Select Columns
-    </button>
-
-    <button type="button"
-            onclick="showPanel('remove-columns')">
-      Remove Columns
-    </button>
-
-    <button type="button"
-            onclick="showPanel('rename')">
-      Rename
-    </button>
-
-    <button type="button"
-            onclick="showPanel('filter')">
-      Filter
-    </button>
-
-    <button type="button"
-            onclick="showPanel('sort')">
-      Sort
-    </button>
-
-    <button type="button"
-            onclick="showPanel('rows')">
-      Remove / Keep Rows
-    </button>
-
-    <button type="button"
-            onclick="showPanel('replace')">
-      Replace Values
-    </button>
-
-    <button type="button"
-            onclick="showPanel('type')">
-      Change Type
-    </button>
-
-    <button type="button"
-            onclick="showPanel('fill')">
-      Fill
-    </button>
-
-    <button type="button"
-            onclick="showPanel('text')">
-      Trim / Clean
-    </button>
-
-    <button type="button"
-            onclick="showPanel('alignment')">
-      Alignment
-    </button>
-
-  </div>
-
-</div>
-
-
-<!-- ============================================================
-     WORKSPACE
-============================================================ -->
-
-<div class="workspace">
-
-
-  <!-- ==========================================================
-       APPLIED STEPS
-  =========================================================== -->
-
-  <div class="sidebar">
-
-    <h4>
-      Applied Steps
-    </h4>
-
-
-    <!-- SOURCE -->
-
-    <div class="step">
-
-      <div class="step-head">
-
-        <div>
-
-          <span class="step-number">
-            1.
-          </span>
-
-          <span class="step-title">
-            Source
-          </span>
+          </select>
 
         </div>
 
       </div>
 
-      <div class="muted">
-        Original uploaded data
+      <div class="rr-row3">
+
+        <div class="rr-field">
+
+          <label class="rr-label">Tax Type</label>
+
+          <select class="rr-select" name="tax_type">
+
+            {% for x in tax_types %}
+
+              <option
+                value="{{ x }}"
+                {% if rule and rule['tax_type']==x %}selected{% endif %}
+              >
+                {{ x }}
+              </option>
+
+            {% endfor %}
+
+          </select>
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">Taxpayer Scope</label>
+
+          <input
+            class="rr-input"
+            name="taxpayer_scope"
+            value="{{ rule['taxpayer_scope'] if rule else '' }}"
+            placeholder="e.g. Companies and Partnerships"
+          >
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">Applicable Period</label>
+
+          <input
+            class="rr-input"
+            name="applicable_period"
+            value="{{ rule['applicable_period'] if rule else '' }}"
+            placeholder="e.g. FY 2025/26"
+          >
+
+        </div>
+
+      </div>
+
+      <div class="rr-field">
+
+        <label class="rr-label">Business Risk Description</label>
+
+        <textarea
+          class="rr-text"
+          name="risk_description"
+          placeholder="Describe the risk the analyst wants the system to identify."
+        ></textarea>
+
       </div>
 
     </div>
 
+    <!-- ========================================================= -->
+    <!-- LOGIC BUILDER -->
+    <!-- ========================================================= -->
 
-    <!-- USER STEPS -->
+    <div class="rr-grid">
 
-    {% for step in steps %}
+      <!-- LOGIC VOCABULARY -->
 
-    <div class="step">
+      <div class="rr-card">
 
-      <div class="step-head">
+        <h3>2. Logic Vocabulary</h3>
 
-        <div>
-
-          <span class="step-number">
-            {{ loop.index + 1 }}.
-          </span>
-
-          <span class="step-title">
-            {{ step.operation|replace('_',' ')|title }}
-          </span>
-
+        <div
+          class="rr-muted"
+          style="margin-bottom:10px"
+        >
+          Search for a logic component, select it, then add it to the executable sequence.
         </div>
 
+        <div class="logic-search-wrap">
 
-        <div class="step-actions">
-
-          <button
-            type="button"
-            class="edit-step"
-            onclick="editStep({{ loop.index0 }})"
-          >
-            Edit
-          </button>
-
-
-          <form
-            method="POST"
-            style="display:inline"
-            onsubmit="
-              return confirm(
-                'Delete this transformation step?'
-              );
-            "
-          >
+          <div class="logic-search-box">
 
             <input
-              type="hidden"
-              name="action"
-              value="delete_step"
-            >
-
-            <input
-              type="hidden"
-              name="step_index"
-              value="{{ loop.index0 }}"
+              type="text"
+              id="logicSearch"
+              class="logic-search-input"
+              placeholder="Search logic vocabulary..."
+              autocomplete="off"
+              oninput="filterLogicVocabulary()"
+              onclick="openLogicVocabulary()"
             >
 
             <button
-              type="submit"
-              class="delete-step"
+              type="button"
+              class="logic-search-toggle"
+              onclick="toggleLogicVocabulary()"
+              aria-label="Show logic vocabulary"
             >
-              Delete
+              ▼
             </button>
 
-          </form>
+          </div>
+
+          <div
+            id="logicVocabularyDropdown"
+            class="logic-vocabulary-dropdown"
+          ></div>
+
+          <div class="selected-logic-display">
+
+            <span
+              id="selectedLogicLabel"
+              class="selected-logic-label"
+            >
+              No logic operator selected
+            </span>
+
+            <button
+              type="button"
+              id="addLogicButton"
+              class="btn btn-primary logic-add-btn"
+              onclick="addSelectedLogicStep()"
+              disabled
+            >
+              + Add Logic Step
+            </button>
+
+          </div>
 
         </div>
 
       </div>
 
+      <!-- EXECUTION SEQUENCE -->
 
-      {% if step.row_number is defined %}
+      <div class="rr-card canvas">
 
-      <div class="muted">
-        Header Row: {{ step.row_number }}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.column %}
-
-      <div class="muted">
-        Column: {{ step.column }}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.columns %}
-
-      <div class="muted">
-        Columns:
-        {{ step.columns|join(', ') }}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.old_name is defined %}
-
-      <div class="muted">
-        {{ step.old_name }}
-        →
-        {{ step.new_name }}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.operator is defined %}
-
-      <div class="muted">
-        {{ step.operator }}
-        {% if step.value %}
-        "{{ step.value }}"
-        {% endif %}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.direction is defined %}
-
-      <div class="muted">
-        {{ step.direction|title }}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.count is defined %}
-
-      <div class="muted">
-        Rows: {{ step.count }}
-      </div>
-
-      {% endif %}
-
-
-      {% if step.alignment is defined %}
-
-      <div class="muted">
-        Alignment:
-        {{ step.alignment|title }}
-      </div>
-
-      {% endif %}
-
-    </div>
-
-    {% endfor %}
-
-
-    <div class="actions">
-
-      <form method="POST">
-
-        <input
-          type="hidden"
-          name="action"
-          value="undo"
-        >
-
-        <button
-          class="btn btn-secondary"
-          type="submit"
-        >
-          Undo Last
-        </button>
-
-      </form>
-
-
-      <form
-        method="POST"
-        onsubmit="
-          return confirm(
-            'Clear all transformation steps?'
-          );
-        "
-      >
-
-        <input
-          type="hidden"
-          name="action"
-          value="clear"
-        >
-
-        <button
-          class="btn btn-danger"
-          type="submit"
-        >
-          Clear All
-        </button>
-
-      </form>
-
-    </div>
-
-  </div>
-
-
-  <!-- ==========================================================
-       DATA PREVIEW
-  =========================================================== -->
-
-  <div class="preview">
-
-    <div class="preview-header">
-
-      <b>
-        Data Preview
-      </b>
-
-      <span class="badge">
-        Showing up to 100 rows
-      </span>
-
-      <div
-        class="muted"
-        style="margin-top:5px"
-      >
-        {{ preview_rows }}
-        preview rows
-        ·
-        {{ preview_columns|length }}
-        columns
-      </div>
-
-
-      <div class="actions">
-
-        <button
-          type="button"
-          class="btn btn-info"
-          onclick="copyVisibleData()"
-        >
-          Copy All Data
-        </button>
-
-
-        <button
-          type="button"
-          class="btn btn-secondary"
-          onclick="copySelectedRow()"
-        >
-          Copy Selected Row
-        </button>
-
-
-        <button
-          type="button"
-          class="btn btn-secondary"
-          onclick="copySelectedCell()"
-        >
-          Copy Selected Cell
-        </button>
-
-
-        <button
-          type="button"
-          class="btn btn-secondary"
-          onclick="clearRowSelection()"
-        >
-          Clear Selection
-        </button>
-
-      </div>
-
-
-      <div class="copy-hint">
-
-        Click any cell to copy its value.
-        Click a row number or cell to select the entire row.
-        Click a column header to copy the header.
-
-        You can also use normal mouse selection and Ctrl+C.
-
-      </div>
-
-
-      <div
-        id="selectedRowInfo"
-        class="selected-row-info"
-      >
-        No row selected.
-      </div>
-
-    </div>
-
-
-    <div class="table-wrap">
-
-      <table
-        class="data-table"
-        id="previewTable"
-      >
-
-        <thead>
-
-          <tr>
-
-            <th
-              onclick="copyText(this.innerText)"
-              title="Click to copy"
-            >
-              #
-            </th>
-
-            {% for column in preview_columns %}
-
-            <th
-              onclick="copyText(this.innerText)"
-              title="Click to copy"
-            >
-              {{ column }}
-            </th>
-
-            {% endfor %}
-
-          </tr>
-
-        </thead>
-
-
-        <tbody>
-
-          {% for row in preview_records %}
-
-          <tr
-            data-row-index="{{ loop.index }}"
-          >
-
-            <td
-              class="row-number"
-              onclick="selectRow(this.parentElement)"
-            >
-              {{ loop.index }}
-            </td>
-
-
-            {% for column in preview_columns %}
-
-            <td
-              title="Click to copy"
-              onclick="cellClicked(this)"
-            >
-              {{ row[column] }}
-            </td>
-
-            {% endfor %}
-
-          </tr>
-
-          {% endfor %}
-
-        </tbody>
-
-      </table>
-
-    </div>
-
-  </div>
-
-</div>
-
-
-<!-- ============================================================
-     EDITING MESSAGE
-============================================================ -->
-
-<div
-  id="editingBanner"
-  class="editing-banner"
->
-
-  <b>
-    Editing transformation step.
-  </b>
-
-  Change the settings and click
-  <b>
-    Save Edited Step
-  </b>.
-
-  <button
-    type="button"
-    class="btn btn-secondary"
-    style="float:right;padding:4px 8px"
-    onclick="cancelEdit()"
-  >
-    Cancel Edit
-  </button>
-
-</div>
-
-
-<!-- ============================================================
-     REPLACE HEADERS
-============================================================ -->
-
-<div
-  id="panel-headers"
-  class="operation-panel"
->
-
-  <h3>
-    Replace Headers with Row
-  </h3>
-
-  <p class="muted">
-
-    Select the row that contains the actual column headings.
-
-    The selected row becomes the column headers and all rows above
-    it are removed.
-
-  </p>
-
-
-  <form
-    method="POST"
-    id="headersForm"
-  >
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-      id="headersAction"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      id="headersStepIndex"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="replace_headers_with_row"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Selected Row Number
-        </label>
-
-        <input
-          type="number"
-          name="row_number"
-          id="headerRowNumber"
-          value="1"
-          min="1"
-          required
-        >
-
-      </div>
-
-
-      <div>
-
-        <label>
-          How to select the row
-        </label>
-
-        <div class="muted">
-
-          Click the row number in the preview.
-
-          The selected row number will automatically appear
-          in the field.
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Use Selected Row as Headers
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     SELECT COLUMNS
-============================================================ -->
-
-<div
-  id="panel-columns"
-  class="operation-panel"
->
-
-  <h3>
-    Select Columns
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="select_columns"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="column-list">
-
-      {% for column in preview_columns %}
-
-      <label class="column-option">
-
-        <input
-          type="checkbox"
-          name="columns"
-          value="{{ column }}"
-        >
-
-        {{ column }}
-
-      </label>
-
-      {% endfor %}
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        type="button"
-        class="btn btn-secondary"
-        onclick="checkAll('panel-columns',true)"
-      >
-        Select All
-      </button>
-
-      <button
-        type="button"
-        class="btn btn-secondary"
-        onclick="checkAll('panel-columns',false)"
-      >
-        Clear
-      </button>
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Keep Selected Columns
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     REMOVE COLUMNS
-============================================================ -->
-
-<div
-  id="panel-remove-columns"
-  class="operation-panel"
->
-
-  <h3>
-    Remove Columns
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="remove_columns"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="column-list">
-
-      {% for column in preview_columns %}
-
-      <label class="column-option">
-
-        <input
-          type="checkbox"
-          name="columns"
-          value="{{ column }}"
-        >
-
-        {{ column }}
-
-      </label>
-
-      {% endfor %}
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-danger"
-        type="submit"
-      >
-        Remove Selected Columns
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     RENAME
-============================================================ -->
-
-<div
-  id="panel-rename"
-  class="operation-panel"
->
-
-  <h3>
-    Rename Column
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="rename_column"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Existing Column
-        </label>
-
-        <select name="old_name">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          New Column Name
-        </label>
-
-        <input
-          name="new_name"
-          required
-        >
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Rename Column
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     FILTER
-============================================================ -->
-
-<div
-  id="panel-filter"
-  class="operation-panel"
->
-
-  <h3>
-    Filter Rows
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="filter"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Column
-        </label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Condition
-        </label>
-
-        <select name="operator">
-
-          <option value="contains">
-            Contains
-          </option>
-
-          <option value="equals">
-            Equals
-          </option>
-
-          <option value="not_equals">
-            Does not equal
-          </option>
-
-          <option value="starts_with">
-            Starts with
-          </option>
-
-          <option value="ends_with">
-            Ends with
-          </option>
-
-          <option value="blank">
-            Is blank
-          </option>
-
-          <option value="not_blank">
-            Is not blank
-          </option>
-
-        </select>
-
-      </div>
-
-
-      <div class="full">
-
-        <label>
-          Value
-        </label>
-
-        <input
-          name="value"
-          placeholder="Enter value"
-        >
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply Filter
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     SORT
-============================================================ -->
-
-<div
-  id="panel-sort"
-  class="operation-panel"
->
-
-  <h3>
-    Sort
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="sort"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Column
-        </label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Direction
-        </label>
-
-        <select name="direction">
-
-          <option value="ascending">
-            Ascending
-          </option>
-
-          <option value="descending">
-            Descending
-          </option>
-
-        </select>
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply Sort
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     REMOVE / KEEP ROWS
-============================================================ -->
-
-<div
-  id="panel-rows"
-  class="operation-panel"
->
-
-  <h3>
-    Remove / Keep Rows
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Operation
-        </label>
-
-        <select name="operation">
-
-          <option value="remove_blank_rows">
-            Remove Blank Rows
-          </option>
-
-          <option value="remove_duplicates">
-            Remove Duplicates
-          </option>
-
-          <option value="remove_top_rows">
-            Remove Top Rows
-          </option>
-
-          <option value="remove_bottom_rows">
-            Remove Bottom Rows
-          </option>
-
-          <option value="keep_top_rows">
-            Keep Top Rows
-          </option>
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Number of Rows
-        </label>
-
-        <input
-          type="number"
-          name="count"
-          value="1"
-          min="0"
-        >
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     REPLACE VALUES
-============================================================ -->
-
-<div
-  id="panel-replace"
-  class="operation-panel"
->
-
-  <h3>
-    Replace Values
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="replace_value"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Column
-        </label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Existing Value
-        </label>
-
-        <input name="old_value">
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Replace With
-        </label>
-
-        <input name="new_value">
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Replace
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     DATA TYPE
-============================================================ -->
-
-<div
-  id="panel-type"
-  class="operation-panel"
->
-
-  <h3>
-    Change Data Type
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="change_type"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Column
-        </label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Data Type
-        </label>
-
-        <select name="target_type">
-
-          <option value="text">
-            Text
-          </option>
-
-          <option value="whole">
-            Whole Number
-          </option>
-
-          <option value="decimal">
-            Decimal Number
-          </option>
-
-          <option value="date">
-            Date
-          </option>
-
-          <option value="datetime">
-            Date / Time
-          </option>
-
-          <option value="boolean">
-            True / False
-          </option>
-
-        </select>
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Change Type
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     FILL
-============================================================ -->
-
-<div
-  id="panel-fill"
-  class="operation-panel"
->
-
-  <h3>
-    Fill Values
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Operation
-        </label>
-
-        <select name="operation">
-
-          <option value="fill_down">
-            Fill Down
-          </option>
-
-          <option value="fill_up">
-            Fill Up
-          </option>
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Column
-        </label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply Fill
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     TRIM / CLEAN
-============================================================ -->
-
-<div
-  id="panel-text"
-  class="operation-panel"
->
-
-  <h3>
-    Trim / Clean Text
-  </h3>
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-          Operation
-        </label>
-
-        <select name="operation">
-
-          <option value="trim">
-            Trim Whitespace
-          </option>
-
-          <option value="clean_text">
-            Clean Text
-          </option>
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Column
-        </label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     ALIGNMENT
-============================================================ -->
-
-<div
-  id="panel-alignment"
-  class="operation-panel"
->
-
-  <h3>
-    Alignment
-  </h3>
-
-  <p class="muted">
-
-    Alignment affects the presentation of the generated Excel
-    clean version. It does not change the underlying data values.
-
-  </p>
-
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="add_step"
-    >
-
-    <input
-      type="hidden"
-      name="operation"
-      value="alignment"
-    >
-
-    <input
-      type="hidden"
-      name="step_index"
-      value=""
-      class="edit-index"
-    >
-
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-
-          <input
-            type="checkbox"
-            id="alignmentSelectAll"
-            onclick="toggleAllAlignment(this)"
-          >
-
-          <b>
-            All Columns
-          </b>
-
-        </label>
-
-
-        <div class="column-list">
-
-          {% for column in preview_columns %}
-
-          <label class="column-option">
-
-            <input
-              type="checkbox"
-              name="columns"
-              value="{{ column }}"
-              class="alignment-column"
-            >
-
-            {{ column }}
-
-          </label>
-
-          {% endfor %}
-
-        </div>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Alignment
-        </label>
-
-        <select name="alignment">
-
-          <option value="left">
-            Left
-          </option>
-
-          <option value="center">
-            Center
-          </option>
-
-          <option value="right">
-            Right
-          </option>
-
-        </select>
-
+        <h3>3. Executable Logic Sequence</h3>
 
         <div
-          class="muted"
-          style="margin-top:8px"
+          class="rr-muted"
+          style="margin-bottom:12px"
         >
+          The sequence below is the structured rule the system will execute.
+          It is the authoritative logic—not the natural-language description.
+        </div>
 
-          Select
-          <b>All Columns</b>
-          to apply the alignment to every column.
+        <div id="canvas"></div>
 
+        <button
+          type="button"
+          class="add-step"
+          onclick="addStep('WHERE')"
+        >
+          + Add Logic Step
+        </button>
+
+      </div>
+
+      <!-- SELECTED STEP -->
+
+      <div class="rr-card">
+
+        <h3>4. Selected Step</h3>
+
+        <div
+          id="editor"
+          class="rr-muted"
+        >
+          Select a logic block or add one to configure it.
         </div>
 
       </div>
 
     </div>
 
+    <!-- ========================================================= -->
+    <!-- SYSTEM INTERPRETATION -->
+    <!-- ========================================================= -->
 
-    <div class="actions">
+    <div
+      class="rr-card"
+      style="margin-top:16px"
+    >
+
+      <h3>5. Rule Interpretation Preview</h3>
+
+      <div class="rr-muted">
+
+        Before the rule is submitted, the system will generate the
+        natural-language interpretation from the structured plan.
+        The interpretation must explain what the engine will actually execute.
+
+      </div>
+
+      <div
+        id="planPreview"
+        class="preview-box"
+        style="margin-top:10px"
+      >
+        No logic has been configured.
+      </div>
+
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- LEGAL BASIS -->
+    <!-- ========================================================= -->
+
+    <div
+      class="rr-card"
+      style="margin-top:16px"
+    >
+
+      <h3>6. Legal Backing — Knowledge Base</h3>
+
+      <div
+        class="rr-muted"
+        style="margin-bottom:10px"
+      >
+        Only approved Knowledge Base documents may be attached as legal backing.
+      </div>
+
+      <div class="legal-list">
+
+        {% if legal_basis %}
+
+          {% for x in legal_basis %}
+
+            <label class="legal-item">
+
+              <input
+                type="checkbox"
+                name="legal_basis"
+                value="{{ x['document_id'] }}"
+                {% if x['document_id'] in selected_basis %}checked{% endif %}
+              >
+
+              <span>
+
+                <b>{{ x['document_ref'] }}</b>
+                —
+                {{ x['title'] }}
+
+                <span class="rr-muted">
+                  (v{{ x['version_number'] }})
+                </span>
+
+              </span>
+
+            </label>
+
+          {% endfor %}
+
+        {% else %}
+
+          <div class="rr-muted">
+            No approved Knowledge Base documents are currently available.
+          </div>
+
+        {% endif %}
+
+      </div>
+
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- INFORMATION REQUESTS -->
+    <!-- ========================================================= -->
+
+    <div
+      class="rr-card"
+      style="margin-top:16px"
+    >
+
+      <h3>7. Information Requests</h3>
+
+      <div id="requests"></div>
 
       <button
-        class="btn btn-success"
-        type="submit"
+        type="button"
+        class="btn btn-secondary"
+        onclick="addRequest()"
       >
-        Apply Alignment
+        + Add Information Request
       </button>
 
     </div>
 
-  </form>
+    <!-- ========================================================= -->
+    <!-- EXPOSURE -->
+    <!-- ========================================================= -->
 
-</div>
-
-
-<!-- ============================================================
-     SAVE
-============================================================ -->
-
-<div class="card save-card">
-
-  <h3>
-    Save Transformation
-  </h3>
-
-  <p class="muted">
-
-    Saving stores the transformation recipe, creates a separate
-    clean version and returns you to the Data Sources page.
-
-    The original uploaded source remains unchanged.
-
-  </p>
-
-
-  <form method="POST">
-
-    <input
-      type="hidden"
-      name="action"
-      value="save_recipe"
+    <div
+      class="rr-card"
+      style="margin-top:16px"
     >
 
+      <h3>8. Revenue Exposure</h3>
 
-    <label>
-      Recipe Name
-    </label>
+      <div class="rr-row3">
 
-    <input
-      type="text"
-      name="recipe_name"
-      value="{{ recipe.recipe_name }}"
-      required
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Exposure Type
+          </label>
+
+          <select
+            class="rr-select"
+            name="exposure_type"
+          >
+
+            {% for x in exposure_types %}
+
+              <option value="{{ x }}">
+                {{ x }}
+              </option>
+
+            {% endfor %}
+
+          </select>
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Exposure Field
+          </label>
+
+          <input
+            class="rr-input"
+            name="exposure_field"
+            placeholder="Exact calculated/source field if applicable"
+          >
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Minimum Exposure (UGX)
+          </label>
+
+          <input
+            class="rr-input"
+            name="minimum_exposure"
+            placeholder="e.g. 10000000"
+          >
+
+        </div>
+
+      </div>
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          Exposure Formula
+        </label>
+
+        <textarea
+          class="rr-text"
+          name="exposure_formula"
+          placeholder="e.g. Sales Variance × VAT Rate"
+        ></textarea>
+
+      </div>
+
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- RANKING -->
+    <!-- ========================================================= -->
+
+    <div
+      class="rr-card"
+      style="margin-top:16px"
     >
 
+      <h3>9. Risk Ranking</h3>
 
-    <div class="actions">
+      <div class="rr-row3">
 
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Save & Return to Data Sources
-      </button>
+        <div class="rr-field">
 
+          <label class="rr-label">
+            Base Score
+          </label>
+
+          <input
+            class="rr-input"
+            name="base_score"
+            value="0"
+          >
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Exposure Weight
+          </label>
+
+          <input
+            class="rr-input"
+            name="exposure_weight"
+            value="0"
+          >
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Frequency Weight
+          </label>
+
+          <input
+            class="rr-input"
+            name="frequency_weight"
+            value="0"
+          >
+
+        </div>
+
+      </div>
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          Ranking Description
+        </label>
+
+        <textarea
+          class="rr-text"
+          name="ranking_description"
+          placeholder="Explain how the resulting risk should be ranked."
+        ></textarea>
+
+      </div>
+
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- ACTIONS -->
+    <!-- ========================================================= -->
+
+    <div class="rr-actions">
 
       <a
-        href="{{ url_for('data_sources') }}"
         class="btn btn-secondary"
+        href="{{ url_for('business_rules') }}"
       >
-        Cancel / Back
+        Cancel
       </a>
+
+      <button
+        class="btn btn-primary"
+        id="generateBtn"
+        type="submit"
+      >
+        Generate System Interpretation & Execute →
+      </button>
 
     </div>
 
   </form>
 
 </div>
-
-
-<!-- ============================================================
-     JAVASCRIPT
-============================================================ -->
 
 <script>
 
-const stepsData = {{ steps|tojson }};
+const SOURCES = {{ data_sources|map(attribute='__dict__')|list|tojson if false else '[]' }};
 
-const panels = [
-  'headers',
-  'columns',
-  'remove-columns',
-  'rename',
-  'filter',
-  'sort',
-  'rows',
-  'replace',
-  'type',
-  'fill',
-  'text',
-  'alignment'
+const SOURCE_DATA = [
+{% for s in data_sources %}
+  {
+    id: {{ s['id']|int }},
+    name: {{ s['name']|tojson }},
+    version: {{ s['version']|tojson }},
+    columns: {{ s['columns']|tojson }}
+  },
+{% endfor %}
 ];
 
-let selectedPreviewRow = null;
-let selectedCellText = '';
+const OPS = {{ logic_operators|tojson }};
+const CALCS = {{ calc_operations|tojson }};
+const CLAUSES = {{ clauses|tojson }};
 
+let plan = {
+  base_source:null,
+  sources:[],
+  joins:[],
+  filters:[],
+  calculations:[],
+  conditions:[],
+  period:{},
+  result:{},
+  exposure:{},
+  ranking:{},
+  stop:{},
+  else_description:'',
+  except_description:''
+};
 
-/* ============================================================
-   SHOW OPERATION PANEL
-============================================================ */
+let selected = -1;
 
-function showPanel(name) {
-
-  panels.forEach(function(panel) {
-
-    const element =
-      document.getElementById(
-        'panel-' + panel
-      );
-
-    if (element) {
-
-      element.style.display =
-        panel === name
-          ? 'block'
-          : 'none';
-
-    }
-
-  });
-
-
-  const selected =
-    document.getElementById(
-      'panel-' + name
-    );
-
-  if (selected) {
-
-    selected.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
-    });
-
-  }
-
-}
-
-
-/* ============================================================
-   ROW SELECTION
-============================================================ */
-
-function selectRow(row) {
-
-  document
-    .querySelectorAll(
-      '#previewTable tbody tr'
-    )
-    .forEach(function(r) {
-
-      r.classList.remove(
-        'selected-row'
-      );
-
-    });
-
-
-  row.classList.add(
-    'selected-row'
+function esc(v){
+  return String(v ?? '').replace(
+    /[&<>"']/g,
+    m => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#039;'
+    }[m])
   );
-
-
-  selectedPreviewRow =
-    parseInt(
-      row.dataset.rowIndex,
-      10
-    );
-
-
-  const headerRow =
-    document.getElementById(
-      'headerRowNumber'
-    );
-
-  if (headerRow) {
-
-    headerRow.value =
-      selectedPreviewRow;
-
-  }
-
-
-  const info =
-    document.getElementById(
-      'selectedRowInfo'
-    );
-
-  info.textContent =
-    'Selected preview row ' +
-    selectedPreviewRow +
-    '. This row can be used as the new headers.';
-
 }
 
-
 /* ============================================================
-   CLEAR ROW
+   LOGIC VOCABULARY
 ============================================================ */
 
-function clearRowSelection() {
+const LOGIC_VOCABULARY = [
+  'FROM',
+  'JOIN',
+  'WHEN',
+  'TO',
+  'WHERE',
+  'IN',
+  'NOT IN',
+  'BETWEEN',
+  'GROUP BY',
+  'CALCULATE',
+  'IF',
+  'AND',
+  'OR',
+  'WHILE',
+  'EXCEPT',
+  'STOP',
+  'CONTINUE',
+  'THEN',
+  'ELSE'
+];
+
+let selectedLogicOperator = null;
+
+function renderLogicVocabulary(items=LOGIC_VOCABULARY){
+
+  const dropdown =
+    document.getElementById('logicVocabularyDropdown');
+
+  if(!dropdown) return;
+
+  if(!items.length){
+
+    dropdown.innerHTML =
+      '<div class="logic-option-empty">No matching logic operators found.</div>';
 
-  selectedPreviewRow = null;
-
-  document
-    .querySelectorAll(
-      '#previewTable tbody tr'
-    )
-    .forEach(function(r) {
-
-      r.classList.remove(
-        'selected-row'
-      );
-
-    });
-
-
-  document.getElementById(
-    'selectedRowInfo'
-  ).textContent =
-    'No row selected.';
-
-}
-
-
-/* ============================================================
-   COPY
-============================================================ */
-
-async function copyText(text) {
-
-  try {
-
-    await navigator.clipboard.writeText(
-      text
-    );
-
-    showCopyMessage(
-      'Copied to clipboard.'
-    );
-
-  }
-
-  catch (error) {
-
-    const textarea =
-      document.createElement(
-        'textarea'
-      );
-
-    textarea.value = text;
-
-    document.body.appendChild(
-      textarea
-    );
-
-    textarea.select();
-
-    document.execCommand(
-      'copy'
-    );
-
-    textarea.remove();
-
-    showCopyMessage(
-      'Copied to clipboard.'
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   COPY MESSAGE
-============================================================ */
-
-function showCopyMessage(message) {
-
-  const info =
-    document.getElementById(
-      'selectedRowInfo'
-    );
-
-  info.textContent =
-    message;
-
-  setTimeout(function() {
-
-    if (!selectedPreviewRow) {
-
-      info.textContent =
-        'No row selected.';
-
-    }
-
-    else {
-
-      info.textContent =
-        'Selected preview row ' +
-        selectedPreviewRow +
-        '.';
-
-    }
-
-  }, 1800);
-
-}
-
-
-/* ============================================================
-   CELL CLICK
-============================================================ */
-
-function cellClicked(cell) {
-
-  selectRow(
-    cell.parentElement
-  );
-
-  selectedCellText =
-    cell.innerText;
-
-  copyText(
-    selectedCellText
-  );
-
-}
-
-
-/* ============================================================
-   COPY CELL
-============================================================ */
-
-function copySelectedCell() {
-
-  if (!selectedCellText) {
-
-    showCopyMessage(
-      'Click a cell first.'
-    );
-
-    return;
-
-  }
-
-  copyText(
-    selectedCellText
-  );
-
-}
-
-
-/* ============================================================
-   ROW TEXT
-============================================================ */
-
-function rowText(row) {
-
-  return Array
-    .from(row.cells)
-    .slice(1)
-    .map(function(cell) {
-
-      return cell.innerText;
-
-    })
-    .join('\t');
-
-}
-
-
-/* ============================================================
-   COPY ROW
-============================================================ */
-
-function copySelectedRow() {
-
-  if (!selectedPreviewRow) {
-
-    showCopyMessage(
-      'Select a row first.'
-    );
-
-    return;
-
-  }
-
-
-  const row =
-    document.querySelector(
-      '#previewTable tbody tr[data-row-index="' +
-      selectedPreviewRow +
-      '"]'
-    );
-
-
-  if (row) {
-
-    copyText(
-      rowText(row)
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   COPY ALL DATA
-============================================================ */
-
-function copyVisibleData() {
-
-  const table =
-    document.getElementById(
-      'previewTable'
-    );
-
-
-  const lines = [];
-
-
-  const headers =
-    Array
-      .from(
-        table.querySelectorAll(
-          'thead th'
-        )
-      )
-      .slice(1)
-      .map(function(cell) {
-
-        return cell.innerText;
-
-      });
-
-
-  lines.push(
-    headers.join('\t')
-  );
-
-
-  table
-    .querySelectorAll(
-      'tbody tr'
-    )
-    .forEach(function(row) {
-
-      lines.push(
-        rowText(row)
-      );
-
-    });
-
-
-  copyText(
-    lines.join('\n')
-  );
-
-}
-
-
-/* ============================================================
-   SELECT ALL COLUMNS
-============================================================ */
-
-function checkAll(panelId, checked) {
-
-  const panel =
-    document.getElementById(
-      panelId
-    );
-
-
-  if (!panel) {
     return;
   }
 
-
-  panel
-    .querySelectorAll(
-      'input[name="columns"]'
-    )
-    .forEach(function(box) {
-
-      box.checked =
-        checked;
-
-    });
-
+  dropdown.innerHTML =
+    items.map(op => `
+      <div
+        class="logic-option ${selectedLogicOperator===op?'selected':''}"
+        onclick="selectLogicOperator('${op.replace(/'/g,"\\'")}')"
+      >
+        ${esc(op)}
+      </div>
+    `).join('');
 }
 
+function openLogicVocabulary(){
 
-/* ============================================================
-   ALIGNMENT SELECT ALL
-============================================================ */
-
-function toggleAllAlignment(master) {
+  filterLogicVocabulary();
 
   document
-    .querySelectorAll(
-      '#panel-alignment .alignment-column'
-    )
-    .forEach(function(box) {
-
-      box.checked =
-        master.checked;
-
-    });
-
+    .getElementById('logicVocabularyDropdown')
+    ?.classList.add('open');
 }
 
-
-/* ============================================================
-   EDIT MODE
-============================================================ */
-
-function setEditMode(index) {
+function closeLogicVocabulary(){
 
   document
-    .querySelectorAll(
-      '.edit-index'
+    .getElementById('logicVocabularyDropdown')
+    ?.classList.remove('open');
+}
+
+function toggleLogicVocabulary(){
+
+  const d =
+    document.getElementById('logicVocabularyDropdown');
+
+  if(!d) return;
+
+  d.classList.contains('open')
+    ? closeLogicVocabulary()
+    : openLogicVocabulary();
+}
+
+function filterLogicVocabulary(){
+
+  const input =
+    document.getElementById('logicSearch');
+
+  if(!input) return;
+
+  const q =
+    input.value.trim().toLowerCase();
+
+  renderLogicVocabulary(
+    LOGIC_VOCABULARY.filter(
+      op => op.toLowerCase().includes(q)
     )
-    .forEach(function(element) {
+  );
 
-      element.value =
-        index;
-
-    });
-
-
-  document.getElementById(
-    'headersStepIndex'
-  ).value =
-    index;
-
-
-  document.getElementById(
-    'editingBanner'
-  ).style.display =
-    'block';
-
+  document
+    .getElementById('logicVocabularyDropdown')
+    ?.classList.add('open');
 }
 
+function selectLogicOperator(operator){
 
-/* ============================================================
-   SET SELECT
-============================================================ */
+  selectedLogicOperator = operator;
 
-function setSelectValue(
-  form,
-  name,
-  value
-) {
+  const input =
+    document.getElementById('logicSearch');
 
-  const element =
-    form.querySelector(
-      '[name="' + name + '"]'
-    );
+  const label =
+    document.getElementById('selectedLogicLabel');
 
+  const button =
+    document.getElementById('addLogicButton');
 
-  if (
-    element &&
-    value !== undefined &&
-    value !== null
-  ) {
+  if(input)
+    input.value = operator;
 
-    element.value =
-      value;
+  if(label){
 
+    label.textContent =
+      `Selected: ${operator}`;
+
+    label.classList.add('has-selection');
   }
 
+  if(button)
+    button.disabled = false;
+
+  renderLogicVocabulary();
 }
 
+function addSelectedLogicStep(){
 
-/* ============================================================
-   SET INPUT
-============================================================ */
-
-function setInputValue(
-  form,
-  name,
-  value
-) {
-
-  const element =
-    form.querySelector(
-      '[name="' + name + '"]'
-    );
-
-
-  if (element) {
-
-    element.value =
-      value === undefined ||
-      value === null
-        ? ''
-        : value;
-
-  }
-
-}
-
-
-/* ============================================================
-   SET CHECKBOXES
-============================================================ */
-
-function setCheckboxes(
-  form,
-  values
-) {
-
-  const wanted =
-    new Set(
-      values || []
-    );
-
-
-  form
-    .querySelectorAll(
-      'input[name="columns"]'
-    )
-    .forEach(function(box) {
-
-      box.checked =
-        wanted.has(
-          box.value
-        );
-
-    });
-
-
-  const all =
-    form.querySelector(
-      '#alignmentSelectAll'
-    );
-
-
-  if (all) {
-
-    const boxes =
-      Array.from(
-        form.querySelectorAll(
-          '.alignment-column'
-        )
-      );
-
-
-    all.checked =
-      boxes.length > 0 &&
-      boxes.every(function(box) {
-
-        return box.checked;
-
-      });
-
-  }
-
-}
-
-
-/* ============================================================
-   EDIT STEP
-============================================================ */
-
-function editStep(index) {
-
-  const step =
-    stepsData[index];
-
-
-  if (!step) {
+  if(!selectedLogicOperator)
     return;
+
+  addStep(selectedLogicOperator);
+
+  selectedLogicOperator = null;
+
+  const input =
+    document.getElementById('logicSearch');
+
+  const label =
+    document.getElementById('selectedLogicLabel');
+
+  const button =
+    document.getElementById('addLogicButton');
+
+  if(input)
+    input.value = '';
+
+  if(label){
+
+    label.textContent =
+      'No logic operator selected';
+
+    label.classList.remove('has-selection');
   }
 
+  if(button)
+    button.disabled = true;
 
-  const operation =
-    step.operation;
+  renderLogicVocabulary();
 
-
-  let panel =
-    operation;
-
-
-  if (
-    [
-      'remove_top_rows',
-      'remove_bottom_rows',
-      'keep_top_rows',
-      'remove_blank_rows',
-      'remove_duplicates'
-    ].includes(operation)
-  ) {
-
-    panel =
-      'rows';
-
-  }
-
-
-  if (
-    [
-      'trim',
-      'clean_text'
-    ].includes(operation)
-  ) {
-
-    panel =
-      'text';
-
-  }
-
-
-  if (
-    operation ===
-    'replace_headers_with_row'
-  ) {
-
-    panel =
-      'headers';
-
-  }
-
-
-  if (
-    operation ===
-    'select_columns'
-  ) {
-
-    panel =
-      'columns';
-
-  }
-
-
-  if (
-    operation ===
-    'remove_columns'
-  ) {
-
-    panel =
-      'remove-columns';
-
-  }
-
-
-  if (
-    operation ===
-    'rename_column'
-  ) {
-
-    panel =
-      'rename';
-
-  }
-
-
-  if (
-    [
-      'replace_value',
-      'replace_text'
-    ].includes(operation)
-  ) {
-
-    panel =
-      'replace';
-
-  }
-
-
-  if (
-    operation ===
-    'change_type'
-  ) {
-
-    panel =
-      'type';
-
-  }
-
-
-  if (
-    [
-      'fill_down',
-      'fill_up'
-    ].includes(operation)
-  ) {
-
-    panel =
-      'fill';
-
-  }
-
-
-  if (
-    operation ===
-    'alignment'
-  ) {
-
-    panel =
-      'alignment';
-
-  }
-
-
-  showPanel(panel);
-
-  setEditMode(index);
-
-
-  const form =
-    document
-      .getElementById(
-        'panel-' + panel
-      )
-      .querySelector(
-        'form'
-      );
-
-
-  if (!form) {
-    return;
-  }
-
-
-  const action =
-    form.querySelector(
-      'input[name="action"]'
-    );
-
-
-  if (action) {
-
-    action.value =
-      'edit_step';
-
-  }
-
-
-  const stepIndex =
-    form.querySelector(
-      'input[name="step_index"]'
-    );
-
-
-  if (stepIndex) {
-
-    stepIndex.value =
-      index;
-
-  }
-
-
-  if (
-    operation ===
-    'replace_headers_with_row'
-  ) {
-
-    setInputValue(
-      form,
-      'row_number',
-      step.row_number
-    );
-
-  }
-
-
-  else if (
-    [
-      'select_columns',
-      'remove_columns',
-      'remove_duplicates',
-      'trim',
-      'alignment'
-    ].includes(operation)
-  ) {
-
-    setCheckboxes(
-      form,
-      step.columns
-    );
-
-
-    if (
-      operation ===
-      'alignment'
-    ) {
-
-      setSelectValue(
-        form,
-        'alignment',
-        step.alignment
-      );
-
-    }
-
-  }
-
-
-  else if (
-    operation ===
-    'rename_column'
-  ) {
-
-    setSelectValue(
-      form,
-      'old_name',
-      step.old_name
-    );
-
-    setInputValue(
-      form,
-      'new_name',
-      step.new_name
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'filter'
-  ) {
-
-    setSelectValue(
-      form,
-      'column',
-      step.column
-    );
-
-    setSelectValue(
-      form,
-      'operator',
-      step.operator
-    );
-
-    setInputValue(
-      form,
-      'value',
-      step.value
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'sort'
-  ) {
-
-    setSelectValue(
-      form,
-      'column',
-      step.column
-    );
-
-    setSelectValue(
-      form,
-      'direction',
-      step.direction
-    );
-
-  }
-
-
-  else if (
-    [
-      'remove_top_rows',
-      'remove_bottom_rows',
-      'keep_top_rows'
-    ].includes(operation)
-  ) {
-
-    setSelectValue(
-      form,
-      'operation',
-      operation
-    );
-
-    setInputValue(
-      form,
-      'count',
-      step.count
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'remove_blank_rows' ||
-    operation ===
-    'remove_duplicates'
-  ) {
-
-    setSelectValue(
-      form,
-      'operation',
-      operation
-    );
-
-    setCheckboxes(
-      form,
-      step.columns || []
-    );
-
-    setInputValue(
-      form,
-      'count',
-      step.count || 1
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'replace_value' ||
-    operation ===
-    'replace_text'
-  ) {
-
-    setSelectValue(
-      form,
-      'column',
-      step.column
-    );
-
-    setInputValue(
-      form,
-      'old_value',
-      step.old_value
-    );
-
-    setInputValue(
-      form,
-      'new_value',
-      step.new_value
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'change_type'
-  ) {
-
-    setSelectValue(
-      form,
-      'column',
-      step.column
-    );
-
-    setSelectValue(
-      form,
-      'target_type',
-      step.target_type
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'fill_down' ||
-    operation ===
-    'fill_up'
-  ) {
-
-    setSelectValue(
-      form,
-      'operation',
-      operation
-    );
-
-    setSelectValue(
-      form,
-      'column',
-      step.column
-    );
-
-  }
-
-
-  else if (
-    operation ===
-    'trim' ||
-    operation ===
-    'clean_text'
-  ) {
-
-    setSelectValue(
-      form,
-      'operation',
-      operation
-    );
-
-    setSelectValue(
-      form,
-      'column',
-      step.column
-    );
-
-  }
-
+  closeLogicVocabulary();
 }
-
-
-/* ============================================================
-   CANCEL EDIT
-============================================================ */
-
-function cancelEdit() {
-
-  document.getElementById(
-    'editingBanner'
-  ).style.display =
-    'none';
-
-
-  document
-    .querySelectorAll(
-      '.edit-index'
-    )
-    .forEach(function(element) {
-
-      element.value =
-        '';
-
-    });
-
-
-  document.getElementById(
-    'headersAction'
-  ).value =
-    'add_step';
-
-
-  document.getElementById(
-    'headersStepIndex'
-  ).value =
-    '';
-
-}
-
-
-/* ============================================================
-   HEADER ROW SELECTION
-============================================================ */
 
 document.addEventListener(
-  'keydown',
-  function(event) {
+  'click',
+  function(event){
 
-    if (
-      event.ctrlKey &&
-      event.key.toLowerCase() === 'c'
-    ) {
+    const wrap =
+      document.querySelector('.logic-search-wrap');
 
-      return;
-
-    }
+    if(wrap && !wrap.contains(event.target))
+      closeLogicVocabulary();
 
   }
 );
 
-</script>
+/* ============================================================
+   SOURCE HELPERS
+============================================================ */
 
+function src(id){
+
+  return SOURCE_DATA.find(
+    x => x.id == id
+  );
+}
+
+function fieldOptions(
+  id,
+  selectedVal=''
+){
+
+  const s = src(id);
+
+  if(!s)
+    return '<option value="">Select field</option>';
+
+  return `
+    <option value="">Select field</option>
+    ${
+      s.columns.map(c => `
+        <option
+          value="${esc(c)}"
+          ${c===selectedVal?'selected':''}
+        >
+          ${esc(c)}
+        </option>
+      `).join('')
+    }
+  `;
+}
+
+function sourceOptions(selectedVal=''){
+
+  return `
+    <option value="">Select source</option>
+    ${
+      SOURCE_DATA.map(s => `
+        <option
+          value="${s.id}"
+          ${s.id==selectedVal?'selected':''}
+        >
+          ${esc(s.name)} (v${esc(s.version)})
+        </option>
+      `).join('')
+    }
+  `;
+}
+
+/* ============================================================
+   REFERENCE HTML
+============================================================ */
+
+function refHtml(prefix,obj={}){
+
+  const type =
+    obj.type || 'field';
+
+  return `
+    <div class="rr-field">
+
+      <label class="rr-label">
+        ${prefix} Type
+      </label>
+
+      <select
+        class="rr-select ref-type"
+        onchange="renderEditor()"
+      >
+
+        <option
+          value="field"
+          ${type==='field'?'selected':''}
+        >
+          Source Field
+        </option>
+
+        <option
+          value="calculation"
+          ${type==='calculation'?'selected':''}
+        >
+          Calculated Field
+        </option>
+
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      ${
+        type==='calculation'
+
+        ?
+
+        `
+          <label class="rr-label">
+            ${prefix} Calculation
+          </label>
+
+          <select class="rr-select ref-calc">
+
+            <option value="">
+              Select calculation
+            </option>
+
+            ${
+              plan.calculations.map(c => `
+                <option
+                  value="${esc(c.name)}"
+                  ${c.name===obj.name?'selected':''}
+                >
+                  ${esc(c.name)}
+                </option>
+              `).join('')
+            }
+
+          </select>
+        `
+
+        :
+
+        `
+          <label class="rr-label">
+            ${prefix} Source
+          </label>
+
+          <select
+            class="rr-select ref-source"
+            onchange="renderEditor()"
+          >
+            ${sourceOptions(obj.source_id)}
+          </select>
+
+          <label
+            class="rr-label"
+            style="margin-top:8px"
+          >
+            ${prefix} Field
+          </label>
+
+          <select class="rr-select ref-field">
+            ${fieldOptions(obj.source_id,obj.field||'')}
+          </select>
+        `
+      }
+
+    </div>
+  `;
+}
+
+/* ============================================================
+   STEP SUMMARY
+============================================================ */
+
+function summary(step){
+
+  let x = step.config || {};
+
+  if(step.op==='FROM')
+    return `Primary source: ${src(x.source_id)?.name || 'Not selected'}`;
+
+  if(step.op==='JOIN')
+    return `${(x.join_type||'INNER').toUpperCase()} JOIN ${
+      src(x.right_source_id)?.name || 'source'
+    } ON ${
+      src(x.left_source_id)?.name || 'source'
+    }.${x.left_field||'field'} = ${
+      src(x.right_source_id)?.name || 'source'
+    }.${x.right_field||'field'}`;
+
+  if(step.op==='CALCULATE')
+    return `${x.name||'Calculated field'} = ${
+      x.expression_text ||
+      x.operation ||
+      'configure calculation'
+    }`;
+
+  if(
+    [
+      'WHERE',
+      'WHEN',
+      'IF',
+      'AND',
+      'OR',
+      'WHILE',
+      'EXCEPT'
+    ].includes(step.op)
+  )
+    return `${
+      x.left_text || 'condition'
+    } ${
+      x.operator || ''
+    } ${
+      x.right_text ||
+      x.value ||
+      ''
+    }`.trim();
+
+  if(step.op==='GROUP BY')
+    return `Group by ${
+      (x.fields||[]).join(', ') ||
+      'select fields'
+    }`;
+
+  if(step.op==='STOP')
+    return `STOP ${
+      x.scope || 'record'
+    } when ${
+      x.description ||
+      'condition not configured'
+    }`;
+
+  if(step.op==='THEN')
+    return x.description ||
+      'Create risk / result';
+
+  if(step.op==='ELSE')
+    return x.description ||
+      'Alternative action';
+
+  if(step.op==='TO')
+    return `${x.to || 'end period'}`;
+
+  if(step.op==='CONTINUE')
+    return x.description ||
+      'Continue evaluation';
+
+  return JSON.stringify(x);
+}
+
+/* ============================================================
+   STEP MANAGEMENT
+============================================================ */
+
+function addStep(op){
+
+  plan.steps =
+    plan.steps || [];
+
+  const s = {
+    op,
+    config:{}
+  };
+
+  if(
+    op==='FROM' &&
+    !plan.base_source
+  ){
+
+    s.config = {
+      source_id:''
+    };
+
+  }
+
+  plan.steps.push(s);
+
+  selected =
+    plan.steps.length - 1;
+
+  render();
+}
+
+function removeStep(i){
+
+  plan.steps.splice(i,1);
+
+  selected =
+    Math.min(
+      selected,
+      plan.steps.length - 1
+    );
+
+  syncDerived();
+
+  render();
+}
+
+function moveStep(i,d){
+
+  let j = i + d;
+
+  if(
+    j < 0 ||
+    j >= plan.steps.length
+  )
+    return;
+
+  [
+    plan.steps[i],
+    plan.steps[j]
+  ] = [
+    plan.steps[j],
+    plan.steps[i]
+  ];
+
+  selected = j;
+
+  syncDerived();
+
+  render();
+}
+
+/* ============================================================
+   CANVAS
+============================================================ */
+
+function render(){
+
+  const c =
+    document.getElementById('canvas');
+
+  if(
+    !plan.steps ||
+    !plan.steps.length
+  ){
+
+    c.innerHTML = `
+      <div class="empty">
+
+        No logic blocks yet.
+
+        <br><br>
+
+        Start with <b>FROM</b>, then add
+        JOIN, WHEN, WHERE, GROUP BY,
+        CALCULATE, IF, EXCEPT and THEN
+        as required.
+
+      </div>
+    `;
+
+  }
+
+  else{
+
+    c.innerHTML =
+      plan.steps.map(
+        (s,i) => `
+
+          <div
+            class="step"
+            onclick="selectStep(${i})"
+          >
+
+            <span class="tag">
+              ${esc(s.op)}
+            </span>
+
+            <div class="summary">
+              ${esc(summary(s))}
+            </div>
+
+            <div class="tools">
+
+              <button
+                type="button"
+                class="iconbtn"
+                onclick="event.stopPropagation();moveStep(${i},-1)"
+              >
+                ↑
+              </button>
+
+              <button
+                type="button"
+                class="iconbtn"
+                onclick="event.stopPropagation();moveStep(${i},1)"
+              >
+                ↓
+              </button>
+
+              <button
+                type="button"
+                class="iconbtn"
+                onclick="event.stopPropagation();removeStep(${i})"
+              >
+                ×
+              </button>
+
+            </div>
+
+          </div>
+        `
+      ).join('');
+
+  }
+
+  document
+    .getElementById('planPreview')
+    .textContent =
+      JSON.stringify(
+        buildPlan(),
+        null,
+        2
+      );
+
+  if(selected >= 0)
+    renderEditor();
+
+  else
+    document.getElementById('editor').innerHTML =
+      '<div class="rr-muted">Select a logic block.</div>';
+}
+
+function selectStep(i){
+
+  selected = i;
+
+  renderEditor();
+}
+
+/* ============================================================
+   STEP EDITOR
+============================================================ */
+
+function renderEditor(){
+
+  if(
+    selected < 0 ||
+    !plan.steps?.[selected]
+  )
+    return;
+
+  const s =
+    plan.steps[selected];
+
+  const x =
+    s.config || {};
+
+  const e =
+    document.getElementById('editor');
+
+  let h = `
+    <div
+      class="rr-muted"
+      style="margin-bottom:12px"
+    >
+      <b>${esc(s.op)}</b> block
+    </div>
+  `;
+
+  if(s.op==='FROM'){
+
+    h += `
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          Primary Approved Data Source
+        </label>
+
+        <select
+          class="rr-select"
+          onchange="
+            setx('source_id',this.value);
+            syncDerived();
+            render()
+          "
+        >
+
+          ${sourceOptions(x.source_id)}
+
+        </select>
+
+      </div>
+
+    `;
+
+  }
+
+  else if(s.op==='JOIN')
+    h += joinEditor(x);
+
+  else if(s.op==='CALCULATE')
+    h += calcEditor(x);
+
+  else if(
+    [
+      'WHERE',
+      'WHEN',
+      'IF',
+      'AND',
+      'OR',
+      'WHILE',
+      'EXCEPT'
+    ].includes(s.op)
+  )
+    h += conditionEditor(x,s.op);
+
+  else if(s.op==='GROUP BY')
+    h += groupEditor(x);
+
+  else if(s.op==='TO'){
+
+    h += `
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          TO
+        </label>
+
+        <input
+          class="rr-input"
+          value="${esc(x.to||'')}"
+          oninput="setx('to',this.value)"
+        >
+
+      </div>
+
+    `;
+
+  }
+
+  else if(s.op==='STOP'){
+
+    h += `
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          Stop Scope
+        </label>
+
+        <select
+          class="rr-select"
+          onchange="setx('scope',this.value)"
+        >
+
+          <option
+            value="record"
+            ${x.scope==='record'?'selected':''}
+          >
+            record
+          </option>
+
+          <option
+            value="taxpayer"
+            ${x.scope==='taxpayer'?'selected':''}
+          >
+            taxpayer
+          </option>
+
+          <option
+            value="source"
+            ${x.scope==='source'?'selected':''}
+          >
+            source
+          </option>
+
+          <option
+            value="rule"
+            ${x.scope==='rule'?'selected':''}
+          >
+            rule
+          </option>
+
+        </select>
+
+      </div>
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          STOP Condition / Reason
+        </label>
+
+        <textarea
+          class="rr-text"
+          oninput="setx('description',this.value)"
+        >${esc(x.description||'')}</textarea>
+
+      </div>
+
+    `;
+
+  }
+
+  else if(
+    s.op==='THEN' ||
+    s.op==='ELSE' ||
+    s.op==='CONTINUE'
+  ){
+
+    h += `
+
+      <div class="rr-field">
+
+        <label class="rr-label">
+          Action / Description
+        </label>
+
+        <textarea
+          class="rr-text"
+          oninput="setx('description',this.value)"
+        >${esc(x.description||'')}</textarea>
+
+      </div>
+
+    `;
+
+  }
+
+  else{
+
+    h += `
+      <div class="rr-muted">
+        Configure this logic block.
+      </div>
+    `;
+
+  }
+
+  e.innerHTML = h;
+}
+
+function setx(k,v){
+
+  plan.steps[selected].config[k] = v;
+
+  syncDerived();
+
+  document
+    .getElementById('planPreview')
+    .textContent =
+      JSON.stringify(
+        buildPlan(),
+        null,
+        2
+      );
+}
+
+/* ============================================================
+   JOIN EDITOR
+============================================================ */
+
+function joinEditor(x){
+
+  return `
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Join Type
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="setx('join_type',this.value)"
+      >
+
+        <option
+          value="INNER"
+          ${x.join_type==='INNER' || !x.join_type?'selected':''}
+        >
+          INNER
+        </option>
+
+        <option
+          value="LEFT"
+          ${x.join_type==='LEFT'?'selected':''}
+        >
+          LEFT
+        </option>
+
+        <option
+          value="RIGHT"
+          ${x.join_type==='RIGHT'?'selected':''}
+        >
+          RIGHT
+        </option>
+
+        <option
+          value="OUTER"
+          ${x.join_type==='OUTER'?'selected':''}
+        >
+          OUTER
+        </option>
+
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Left Source
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('left_source_id',this.value);
+          renderEditor()
+        "
+      >
+        ${sourceOptions(x.left_source_id)}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Left Field
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="setx('left_field',this.value)"
+      >
+        ${fieldOptions(x.left_source_id,x.left_field)}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Right Source
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('right_source_id',this.value);
+          renderEditor()
+        "
+      >
+        ${sourceOptions(x.right_source_id)}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Right Field
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="setx('right_field',this.value)"
+      >
+        ${fieldOptions(x.right_source_id,x.right_field)}
+      </select>
+
+    </div>
+
+    <label class="rr-label">
+
+      <input
+        type="checkbox"
+        ${x.allow_many_to_many?'checked':''}
+        onchange="setx('allow_many_to_many',this.checked)"
+      >
+
+      Allow many-to-many join (explicit)
+
+    </label>
+
+  `;
+}
+
+/* ============================================================
+   CALCULATION EDITOR
+============================================================ */
+
+function calcEditor(x){
+
+  return `
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Calculated Field Name
+      </label>
+
+      <input
+        class="rr-input"
+        value="${esc(x.name||'')}"
+        oninput="setx('name',this.value)"
+      >
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Operation
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('operation',this.value);
+          renderEditor()
+        "
+      >
+
+        <option value="">
+          Select operation
+        </option>
+
+        ${
+          CALCS.map(
+            v => `
+              <option
+                value="${esc(v)}"
+                ${v===x.operation?'selected':''}
+              >
+                ${esc(v)}
+              </option>
+            `
+          ).join('')
+        }
+
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Left Source
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('left_source_id',this.value);
+          renderEditor()
+        "
+      >
+        ${sourceOptions(x.left?.source_id||x.left_source_id)}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Left Field
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="setx('left_field',this.value)"
+      >
+        ${fieldOptions(
+          x.left?.source_id||x.left_source_id,
+          x.left?.field||x.left_field
+        )}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Right Source
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('right_source_id',this.value);
+          renderEditor()
+        "
+      >
+        ${sourceOptions(x.right?.source_id||x.right_source_id)}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Right Field
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="setx('right_field',this.value)"
+      >
+        ${fieldOptions(
+          x.right?.source_id||x.right_source_id,
+          x.right?.field||x.right_field
+        )}
+      </select>
+
+    </div>
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Expression Text
+      </label>
+
+      <input
+        class="rr-input"
+        value="${esc(x.expression_text||'')}"
+        placeholder="e.g. VAT Sales - Income Tax Sales"
+        oninput="setx('expression_text',this.value)"
+      >
+
+    </div>
+
+  `;
+}
+
+/* ============================================================
+   CONDITION EDITOR
+============================================================ */
+
+function conditionEditor(x,op){
+
+  const leftCalc =
+    (x.left_type||'field') === 'calculation';
+
+  const rightField =
+    x.right_type === 'field';
+
+  const rightCalc =
+    rightField &&
+    (x.right_ref_type||'field') === 'calculation';
+
+  const calcOptions =
+    '<option value="">Select calculation</option>' +
+
+    (plan.calculations||[])
+      .map(
+        c => `
+          <option
+            value="${esc(c.name)}"
+            ${c.name===x.left_name?'selected':''}
+          >
+            ${esc(c.name)}
+          </option>
+        `
+      )
+      .join('');
+
+  const rightCalcOptions =
+    '<option value="">Select calculation</option>' +
+
+    (plan.calculations||[])
+      .map(
+        c => `
+          <option
+            value="${esc(c.name)}"
+            ${c.name===x.right_name?'selected':''}
+          >
+            ${esc(c.name)}
+          </option>
+        `
+      )
+      .join('');
+
+  return `
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Left Type
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('left_type',this.value);
+          renderEditor()
+        "
+      >
+
+        <option
+          value="field"
+          ${!leftCalc?'selected':''}
+        >
+          Source Field
+        </option>
+
+        <option
+          value="calculation"
+          ${leftCalc?'selected':''}
+        >
+          Calculated Field
+        </option>
+
+      </select>
+
+    </div>
+
+    ${
+      leftCalc
+
+      ?
+
+      `
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Left Calculation
+          </label>
+
+          <select
+            class="rr-select"
+            onchange="setx('left_name',this.value)"
+          >
+            ${calcOptions}
+          </select>
+
+        </div>
+      `
+
+      :
+
+      `
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Left Source
+          </label>
+
+          <select
+            class="rr-select"
+            onchange="
+              setx('left_source_id',this.value);
+              renderEditor()
+            "
+          >
+            ${sourceOptions(x.left_source_id)}
+          </select>
+
+        </div>
+
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Left Field
+          </label>
+
+          <select
+            class="rr-select"
+            onchange="setx('left_field',this.value)"
+          >
+            ${fieldOptions(
+              x.left_source_id,
+              x.left_field
+            )}
+          </select>
+
+        </div>
+      `
+    }
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Operator
+      </label>
+
+      <select
+        class="rr-select"
+        onchange="
+          setx('operator',this.value);
+          renderEditor()
+        "
+      >
+
+        ${
+          OPS.map(
+            v => `
+              <option
+                value="${esc(v)}"
+                ${v===x.operator?'selected':''}
+              >
+                ${esc(v)}
+              </option>
+            `
+          ).join('')
+        }
+
+      </select>
+
+    </div>
+
+    ${
+      ['EXISTS','NOT EXISTS'].includes(x.operator)
+
+      ?
+
+      ''
+
+      :
+
+      `
+
+        <div class="rr-field">
+
+          <label class="rr-label">
+            Right Type
+          </label>
+
+          <select
+            class="rr-select"
+            onchange="
+              setx('right_type',this.value);
+              renderEditor()
+            "
+          >
+
+            <option
+              value="value"
+              ${!rightField?'selected':''}
+            >
+              Value
+            </option>
+
+            <option
+              value="field"
+              ${rightField?'selected':''}
+            >
+              Field / Calculation
+            </option>
+
+          </select>
+
+        </div>
+
+        ${
+          rightField
+
+          ?
+
+          `
+
+            <div class="rr-field">
+
+              <label class="rr-label">
+                Right Reference Type
+              </label>
+
+              <select
+                class="rr-select"
+                onchange="
+                  setx('right_ref_type',this.value);
+                  renderEditor()
+                "
+              >
+
+                <option
+                  value="field"
+                  ${!rightCalc?'selected':''}
+                >
+                  Source Field
+                </option>
+
+                <option
+                  value="calculation"
+                  ${rightCalc?'selected':''}
+                >
+                  Calculated Field
+                </option>
+
+              </select>
+
+            </div>
+
+            ${
+              rightCalc
+
+              ?
+
+              `
+                <div class="rr-field">
+
+                  <label class="rr-label">
+                    Right Calculation
+                  </label>
+
+                  <select
+                    class="rr-select"
+                    onchange="setx('right_name',this.value)"
+                  >
+                    ${rightCalcOptions}
+                  </select>
+
+                </div>
+              `
+
+              :
+
+              `
+                <div class="rr-field">
+
+                  <label class="rr-label">
+                    Right Source
+                  </label>
+
+                  <select
+                    class="rr-select"
+                    onchange="
+                      setx('right_source_id',this.value);
+                      renderEditor()
+                    "
+                  >
+                    ${sourceOptions(x.right_source_id)}
+                  </select>
+
+                </div>
+
+                <div class="rr-field">
+
+                  <label class="rr-label">
+                    Right Field
+                  </label>
+
+                  <select
+                    class="rr-select"
+                    onchange="setx('right_field',this.value)"
+                  >
+                    ${fieldOptions(
+                      x.right_source_id,
+                      x.right_field
+                    )}
+                  </select>
+
+                </div>
+              `
+            }
+
+          `
+
+          :
+
+          `
+
+            <div class="rr-field">
+
+              <label class="rr-label">
+                Value
+              </label>
+
+              <input
+                class="rr-input"
+                value="${esc(x.value||'')}"
+                oninput="setx('value',this.value)"
+                placeholder="For IN/NOT IN use comma-separated values"
+              >
+
+            </div>
+
+          `
+        }
+
+      `
+    }
+
+    <div class="rr-field">
+
+      <label class="rr-label">
+        Business Text / Explanation
+      </label>
+
+      <input
+        class="rr-input"
+        value="${esc(x.description||'')}"
+        oninput="setx('description',this.value)"
+      >
+
+    </div>
+
+  `;
+}
+
+/* ============================================================
+   GROUP BY
+============================================================ */
+
+function groupEditor(x){
+
+  return `
+
+    <div class="rr-muted">
+      Select the fields that define the analysis grain.
+    </div>
+
+    <div
+      id="groupFields"
+      style="margin-top:10px"
+    >
+
+      ${
+        (x.fields||[])
+          .map(
+            (f,i) => `
+
+              <div class="cond">
+
+                <select
+                  class="rr-select"
+                  onchange="setGroup(${i},this.value)"
+                >
+                  ${allFieldOptions(f)}
+                </select>
+
+              </div>
+
+            `
+          ).join('')
+      }
+
+    </div>
+
+    <button
+      type="button"
+      class="btn btn-secondary"
+      onclick="addGroup()"
+    >
+      + Add Group Field
+    </button>
+
+  `;
+}
+
+function allFieldOptions(sel){
+
+  let out =
+    '<option value="">Select source.field</option>';
+
+  SOURCE_DATA.forEach(
+    s => {
+
+      s.columns.forEach(
+        c => {
+
+          let v =
+            JSON.stringify({
+              source_id:s.id,
+              field:c
+            });
+
+          out += `
+            <option
+              value='${esc(v)}'
+              ${sel===v?'selected':''}
+            >
+              ${esc(s.name)}.${esc(c)}
+            </option>
+          `;
+
+        }
+      );
+
+    }
+  );
+
+  return out;
+}
+
+function addGroup(){
+
+  let x =
+    plan.steps[selected].config;
+
+  x.fields =
+    x.fields || [];
+
+  x.fields.push('');
+
+  renderEditor();
+}
+
+function setGroup(i,v){
+
+  plan.steps[selected]
+    .config
+    .fields[i] = v;
+
+  syncDerived();
+}
+
+/* ============================================================
+   BUILD PLAN
+============================================================ */
+
+function buildPlan(){
+
+  syncDerived();
+
+  const p =
+    JSON.parse(
+      JSON.stringify(plan)
+    );
+
+  delete p.steps;
+
+  p.sources =
+    SOURCE_DATA
+      .filter(
+        s =>
+          p._sourceIds?.includes(s.id)
+      )
+      .map(
+        s => ({
+          id:s.id,
+          name:s.name,
+          version:s.version,
+          columns:s.columns
+        })
+      );
+
+  delete p._sourceIds;
+
+  return p;
+}
+
+/* ============================================================
+   DERIVED EXECUTION PLAN
+============================================================ */
+
+function syncDerived(){
+
+  const ids =
+    new Set();
+
+  let base = null;
+
+  (plan.steps||[])
+    .forEach(
+      s => {
+
+        let x =
+          s.config || {};
+
+        if(s.op==='FROM'){
+
+          base =
+            x.source_id
+              ? Number(x.source_id)
+              : base;
+
+        }
+
+        [
+          'source_id',
+          'left_source_id',
+          'right_source_id'
+        ]
+        .forEach(
+          k => {
+
+            if(x[k])
+              ids.add(
+                Number(x[k])
+              );
+
+          }
+        );
+
+      }
+    );
+
+  plan.base_source =
+    base
+      ? {source_id:Number(base)}
+      : null;
+
+  plan._sourceIds =
+    [...ids];
+
+  plan.joins =
+    (plan.steps||[])
+      .filter(
+        s => s.op==='JOIN'
+      )
+      .map(
+        s =>
+          Object.assign(
+            {join_type:'INNER'},
+            s.config || {}
+          )
+      );
+
+  plan.filters =
+    (plan.steps||[])
+      .filter(
+        s =>
+          [
+            'WHERE',
+            'WHEN',
+            'WHILE',
+            'EXCEPT'
+          ].includes(s.op)
+      )
+      .map(
+        s => conditionObj(s)
+      );
+
+  plan.conditions =
+    (plan.steps||[])
+      .filter(
+        s =>
+          [
+            'IF',
+            'AND',
+            'OR'
+          ].includes(s.op)
+      )
+      .map(
+        s => conditionObj(s)
+      );
+
+  plan.calculations =
+    (plan.steps||[])
+      .filter(
+        s => s.op==='CALCULATE'
+      )
+      .map(
+        s => calcObj(s)
+      );
+
+  const stop =
+    (plan.steps||[])
+      .find(
+        s => s.op==='STOP'
+      );
+
+  plan.stop =
+    stop
+      ? stop.config
+      : {};
+
+  const els =
+    (plan.steps||[])
+      .find(
+        s => s.op==='ELSE'
+      );
+
+  plan.else_description =
+    els?.config?.description || '';
+
+  const ex =
+    (plan.steps||[])
+      .find(
+        s => s.op==='EXCEPT'
+      );
+
+  plan.except_description =
+    ex?.config?.description || '';
+}
+
+/* ============================================================
+   CONDITION OBJECT
+============================================================ */
+
+function conditionObj(s){
+
+  const x =
+    s.config || {};
+
+  return {
+
+    clause:s.op,
+
+    left:{
+      type:x.left_type || 'field',
+      source_id:Number(
+        x.left_source_id
+      ) || 0,
+      field:x.left_field || '',
+      name:x.left_name || ''
+    },
+
+    operator:
+      x.operator || '=',
+
+    right_type:
+      x.right_type || 'value',
+
+    right:
+      x.right_type==='field'
+        ? {
+            type:x.right_ref_type || 'field',
+            source_id:Number(
+              x.right_source_id
+            ) || 0,
+            field:x.right_field || '',
+            name:x.right_name || ''
+          }
+        : undefined,
+
+    value:
+      x.value || '',
+
+    connector:
+      s.op==='OR'
+        ? 'OR'
+        : 'AND',
+
+    description:
+      x.description || ''
+
+  };
+}
+
+/* ============================================================
+   CALCULATION OBJECT
+============================================================ */
+
+function calcObj(s){
+
+  const x =
+    s.config || {};
+
+  return {
+
+    name:
+      x.name || '',
+
+    operation:
+      x.operation || '',
+
+    left:{
+      type:'field',
+      source_id:Number(
+        x.left_source_id
+      ) || 0,
+      field:
+        x.left_field || ''
+    },
+
+    right:{
+      type:'field',
+      source_id:Number(
+        x.right_source_id
+      ) || 0,
+      field:
+        x.right_field || ''
+    },
+
+    expression_text:
+      x.expression_text || ''
+
+  };
+}
+
+/* ============================================================
+   INFORMATION REQUESTS
+============================================================ */
+
+function addRequest(){
+
+  const box =
+    document.getElementById('requests');
+
+  const d =
+    document.createElement('div');
+
+  d.className =
+    'cond';
+
+  d.innerHTML = `
+
+    <div class="rr-row">
+
+      <div>
+
+        <label class="rr-label">
+          Request Title
+        </label>
+
+        <input
+          class="rr-input"
+          name="request_title"
+        >
+
+      </div>
+
+      <div>
+
+        <label class="rr-label">
+          Period
+        </label>
+
+        <input
+          class="rr-input"
+          name="request_period"
+        >
+
+      </div>
+
+    </div>
+
+    <div class="rr-row">
+
+      <div>
+
+        <label class="rr-label">
+          Purpose
+        </label>
+
+        <input
+          class="rr-input"
+          name="request_purpose"
+        >
+
+      </div>
+
+      <div>
+
+        <label class="rr-label">
+          Evidence Type
+        </label>
+
+        <input
+          class="rr-input"
+          name="request_evidence"
+        >
+
+      </div>
+
+    </div>
+
+    <label class="rr-label">
+
+      <input
+        type="checkbox"
+        name="request_mandatory"
+        value="1"
+        checked
+      >
+
+      Mandatory
+
+    </label>
+
+    <button
+      type="button"
+      class="btn btn-danger"
+      onclick="this.parentElement.remove()"
+    >
+      Remove
+    </button>
+
+  `;
+
+  box.appendChild(d);
+}
+
+/* ============================================================
+   FORM SUBMISSION
+============================================================ */
+
+function prepareSubmit(){
+
+  syncDerived();
+
+  if(!plan.base_source){
+
+    alert(
+      'Add a FROM step and select the primary approved data source.'
+    );
+
+    return false;
+  }
+
+  if(
+    !(
+      plan.conditions?.length ||
+      plan.filters?.length ||
+      plan.calculations?.length
+    )
+  ){
+
+    alert(
+      'Build at least one executable condition or calculation.'
+    );
+
+    return false;
+  }
+
+  const payload =
+    buildPlan();
+
+  if(
+    !payload ||
+    !payload.base_source ||
+    !payload.base_source.source_id
+  ){
+
+    alert(
+      'The executable rule plan is incomplete. Select the primary source again.'
+    );
+
+    return false;
+  }
+
+  document.getElementById(
+    'rule_plan'
+  ).value =
+    JSON.stringify(payload);
+
+  const btn =
+    document.getElementById(
+      'generateBtn'
+    );
+
+  if(btn){
+
+    btn.disabled = true;
+
+    btn.textContent =
+      'Saving and executing against approved data…';
+
+  }
+
+  return true;
+}
+
+document
+  .getElementById('riskRuleForm')
+  ?.addEventListener(
+    'submit',
+    function(e){
+
+      if(!prepareSubmit())
+        e.preventDefault();
+
+    }
+  );
+
+/* ============================================================
+   INITIALISE EDIT MODE
+============================================================ */
+
+(function init(){
+
+  try{
+
+    const existing =
+      {{ (rule['detection_logic_json'] if rule else '{}')|default('{}')|safe }};
+
+    if(
+      existing &&
+      typeof existing === 'object' &&
+      Object.keys(existing).length
+    ){
+
+      plan =
+        Object.assign(
+          plan,
+          existing
+        );
+
+      plan.steps =
+        plan.steps || [];
+
+    }
+
+  }
+  catch(e){
+
+    console.error(
+      'Could not load existing rule plan:',
+      e
+    );
+
+  }
+
+  if(
+    !plan.steps?.length &&
+    plan.base_source?.source_id
+  ){
+
+    plan.steps = [
+      {
+        op:'FROM',
+        config:{
+          source_id:
+            plan.base_source.source_id
+        }
+      }
+    ];
+
+  }
+
+  renderLogicVocabulary();
+
+  render();
+
+})();
+
+</script>
 
 {% endblock %}
