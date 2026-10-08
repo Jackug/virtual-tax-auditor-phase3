@@ -44,6 +44,10 @@ SCOPES=['https://www.googleapis.com/auth/gmail.send','https://www.googleapis.com
 app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','change-me'); app.config.update(SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',MAX_CONTENT_LENGTH=10*1024*1024)
 
 def now(): return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+@app.template_filter('fromjson')
+def fromjson_filter(value):
+    try: return json.loads(value) if value else {}
+    except Exception: return {}
 def db():
     c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.execute('PRAGMA foreign_keys=ON'); return c
 
@@ -166,6 +170,33 @@ CREATE TABLE IF NOT EXISTS knowledge_chunk_staging(
 );
 CREATE INDEX IF NOT EXISTS idx_kb_staging_batch
     ON knowledge_chunk_staging(batch_token);
+CREATE TABLE IF NOT EXISTS data_sources(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_ref TEXT UNIQUE NOT NULL, source_name TEXT NOT NULL,
+    source_type TEXT NOT NULL, description TEXT, owner_department TEXT, reporting_period TEXT, tax_type TEXT,
+    current_version INTEGER DEFAULT 1, status TEXT DEFAULT 'Draft', created_by TEXT, created_at TEXT, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS data_source_versions(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL, version_number INTEGER NOT NULL,
+    original_filename TEXT NOT NULL, stored_filename TEXT UNIQUE NOT NULL, mime_type TEXT, size_bytes INTEGER,
+    file_path TEXT NOT NULL, uploaded_by TEXT, uploaded_at TEXT, version_status TEXT DEFAULT 'Draft',
+    record_count INTEGER DEFAULT 0, column_count INTEGER DEFAULT 0, columns_json TEXT,
+    validation_status TEXT DEFAULT 'Pending', validation_summary TEXT, validation_errors INTEGER DEFAULT 0,
+    validation_warnings INTEGER DEFAULT 0, change_summary TEXT, approved_by TEXT, approved_at TEXT,
+    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE, UNIQUE(source_id, version_number)
+);
+CREATE TABLE IF NOT EXISTS data_source_reviews(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL, version_number INTEGER NOT NULL,
+    decision TEXT NOT NULL, comments TEXT, reviewed_by TEXT NOT NULL, reviewed_at TEXT NOT NULL,
+    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS data_source_issues(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL, version_number INTEGER NOT NULL,
+    issue_type TEXT NOT NULL, severity TEXT NOT NULL, column_name TEXT, row_reference TEXT,
+    description TEXT NOT NULL, created_at TEXT NOT NULL,
+    FOREIGN KEY(source_id) REFERENCES data_sources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_data_source_versions_status ON data_source_versions(version_status);
+CREATE INDEX IF NOT EXISTS idx_data_source_issues_source_version ON data_source_issues(source_id, version_number);
 '''); seed(c); c.commit(); c.close()
 
 def seed(c):
@@ -631,124 +662,20 @@ def ensure_approved_knowledge_indexed():
     return missing
 
 def knowledge_context_for_case(c, case_id):
-    """
-    Build a broader, case-aware retrieval query and search APPROVED Knowledge Base
-    content only. The retrieval is intentionally deterministic and bounded.
-
-    The existing VTA audit engine currently analyses sales/imports/purchases.
-    We therefore include the case facts plus legal concepts that commonly
-    govern those reconciliation issues. This does not create or approve a
-    finding; it only supplies approved knowledge context to the analysis.
-    """
-    case = c.execute(
-        'SELECT * FROM audit_cases WHERE id=?',
-        (case_id,)
-    ).fetchone()
-
+    case = c.execute('SELECT * FROM audit_cases WHERE id=?', (case_id,)).fetchone()
     if not case:
-        return [], 'No audit case was found for Knowledge Base retrieval.'
-
-    taxpayer = c.execute(
-        'SELECT * FROM taxpayers WHERE id=?',
-        (case['taxpayer_id'],)
-    ).fetchone()
-
-    if not taxpayer:
-        return [], 'No taxpayer record was found for Knowledge Base retrieval.'
-
-    # Pull the latest risk assessment and its drivers where available.
-    assessment = c.execute(
-        'SELECT * FROM risk_assessments WHERE taxpayer_id=? '
-        'ORDER BY id DESC LIMIT 1',
-        (taxpayer['id'],)
-    ).fetchone()
-
-    drivers = []
-    if assessment:
-        drivers = c.execute(
-            'SELECT rd.description, rr.name, rr.natural_language, '
-            'rr.category, rr.structured_logic '
-            'FROM risk_drivers rd '
-            'JOIN risk_rules rr ON rr.id=rd.rule_id '
-            'WHERE rd.assessment_id=? ORDER BY rd.id',
-            (assessment['id'],)
-        ).fetchall()
-
-    # Use the actual audit case/risk language plus controlled legal concepts.
-    # Terms are deliberately broad enough to retrieve relevant provisions from
-    # an Act while remaining tied to this case.
-    query_parts = [
-        'tax law',
-        'income tax',
-        'tax liability',
-        'business income',
-        'sales',
-        'turnover',
-        'purchases',
-        'imports',
-        'customs',
-        'declaration',
-        'assessment',
-        'records',
-        'returns',
-        taxpayer['sector'] or '',
-        taxpayer['financial_year'] or ''
-    ]
-
-    for driver in drivers:
-        query_parts.extend([
-            driver['name'] or '',
-            driver['category'] or '',
-            driver['natural_language'] or '',
-            driver['structured_logic'] or '',
-            driver['description'] or ''
-        ])
-
-    # Also incorporate the latest AI findings if the case has already been
-    # analysed. This makes subsequent analyses more targeted without relying
-    # on unapproved knowledge.
-    findings = c.execute(
-        'SELECT risk_category, description, audit_test, explanation '
-        'FROM findings WHERE case_id=? ORDER BY id DESC LIMIT 10',
-        (case_id,)
-    ).fetchall()
-
-    for finding in findings:
-        query_parts.extend([
-            finding['risk_category'] or '',
-            finding['description'] or '',
-            finding['audit_test'] or '',
-            finding['explanation'] or ''
-        ])
-
-    query = ' '.join(str(x) for x in query_parts if x)
-
-    # Search only approved, indexed knowledge. A single combined query keeps
-    # retrieval bounded and produces one clean audit-trail query for this run.
-    rows = search_approved_knowledge(
-        query,
-        limit=8,
-        case_id=case_id
-    )
-
+        return [], ''
+    taxpayer = c.execute('SELECT * FROM taxpayers WHERE id=?', (case['taxpayer_id'],)).fetchone()
+    query = f"tax audit {taxpayer['sector']} {taxpayer['financial_year']} sales imports purchases compliance reconciliation"
+    # Search uses its own connection so it can record retrievals cleanly.
+    rows = search_approved_knowledge(query, limit=5, case_id=case_id)
     if not rows:
-        return [], (
-            'No approved Knowledge Base content matched this case after '
-            'case-aware legal retrieval. The analysis therefore did not rely '
-            'on unapproved or general knowledge.'
-        )
-
+        return [], 'No approved Knowledge Base content matched this case. The analysis therefore did not rely on unapproved or general knowledge.'
     context = []
-    for rank, row in enumerate(rows, start=1):
+    for row in rows:
         context.append(
-            f"[{rank}] {row['document_ref']} v{row['version_number']} | "
-            f"{row['title']} | {row['category']} | "
-            f"{row['document_type']} | Tax Type: {row['tax_type'] or 'General'} | "
-            f"Page/Sheet: {row['page_number']} | "
-            f"Source: {row['source_filename']}\n"
-            f"{row['text_content']}"
+            f"[{row['document_ref']} v{row['version_number']} | {row['title']} | {row['category']} | page/sheet {row['page_number']}] {row['text_content']}"
         )
-
     return rows, '\n\n'.join(context)
 
 
@@ -1437,10 +1364,127 @@ def knowledge_base_reindex_approved():
     return redirect(url_for('knowledge_base'))
 
 
+DATA_SOURCE_EXTENSIONS = {'csv','xlsx','xls'}
+DATA_SOURCE_TYPES = ['Taxpayer Master','Payments','Returns','Assessments','VAT','CIT','PAYE','WHT','Customs / Imports','Customs / Exports','EFRIS','Payment Integrator','Third-Party Data','Audit History','Other']
+DATA_SOURCE_TAX_TYPES = ['General','VAT','CIT','PAYE','WHT','Excise Duty','Customs','Other']
+
+def data_source_allowed_file(filename):
+    return bool(filename and '.' in filename and filename.rsplit('.',1)[1].lower() in DATA_SOURCE_EXTENSIONS)
+
+def data_source_ext(filename):
+    return filename.rsplit('.',1)[1].lower() if '.' in filename else ''
+
+def inspect_data_source(path):
+    if pd is None: raise RuntimeError('pandas is required for data-source validation.')
+    ext=data_source_ext(path.name)
+    if ext=='csv':
+        df=pd.read_csv(path,nrows=5000,low_memory=False)
+        with open(path,'rb') as fh: total_rows=max(sum(1 for _ in fh)-1,0)
+    else:
+        df=pd.read_excel(path,nrows=5000)
+        try: total_rows=int(pd.read_excel(path,usecols=[0]).shape[0])
+        except Exception: total_rows=len(df)
+    df.columns=[str(x).strip() for x in df.columns]; cols=list(df.columns); errors=[]; warnings=[]
+    if not cols: errors.append('No columns were detected.')
+    if len(cols)!=len(set(cols)): errors.append('Duplicate column names were detected.')
+    blank=[c for c in cols if not str(c).strip() or str(c).lower().startswith('unnamed')]
+    if blank: warnings.append('Blank/unnamed columns detected: '+', '.join(blank[:10]))
+    blank_rows=len(df)-len(df.dropna(how='all'))
+    if blank_rows: warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
+    normalized={c.lower().replace(' ','').replace('_','') for c in cols}
+    if not normalized.intersection({'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno'}):
+        warnings.append('No obvious TIN column was detected. TIN mapping will be required before Taxpayer 360 ingestion.')
+    null_summary={c:int(df[c].isna().sum()) for c in cols if int(df[c].isna().sum())>0}
+    if null_summary:
+        top=sorted(null_summary.items(),key=lambda x:x[1],reverse=True)[:10]
+        warnings.append('Missing values detected in: '+', '.join(f'{k} ({v})' for k,v in top))
+    summary={'sample_rows':int(len(df)),'record_count':int(total_rows),'column_count':len(cols),'columns':cols,'nulls_sample':null_summary,'errors':errors,'warnings':warnings}
+    return summary, ('Failed' if errors else ('Warnings' if warnings else 'Passed'))
+
 @app.route('/data-sources')
 @login_required
 def data_sources():
-    c=db(); t=c.execute('SELECT * FROM taxpayers LIMIT 1').fetchone(); ms=c.execute('SELECT * FROM taxpayer_metrics WHERE taxpayer_id=?',(t['id'],)).fetchall(); rules=c.execute('SELECT * FROM risk_rules').fetchall(); c.close(); return render_template('data_sources.html',taxpayer=t,metrics=ms,rules=rules)
+    c=db()
+    rows=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_errors,v.validation_warnings,v.version_status,v.uploaded_by,v.uploaded_at,v.approved_by,v.approved_at FROM data_sources d LEFT JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version ORDER BY d.id DESC").fetchall()
+    pending=c.execute("SELECT d.*,v.version_number,v.original_filename,v.record_count,v.column_count,v.validation_status,v.validation_summary,v.validation_errors,v.validation_warnings,v.uploaded_at,v.uploaded_by FROM data_sources d JOIN data_source_versions v ON v.source_id=d.id AND v.version_number=d.current_version WHERE v.version_status='Draft' ORDER BY d.id DESC").fetchall()
+    c.close(); return render_template('data_sources.html',rows=rows,pending=pending,source_types=DATA_SOURCE_TYPES,tax_types=DATA_SOURCE_TAX_TYPES)
+
+@app.route('/data-sources/register',methods=['POST'])
+@login_required
+def data_source_register():
+    name=request.form.get('source_name','').strip(); source_type=request.form.get('source_type','').strip(); description=request.form.get('description','').strip(); owner=request.form.get('owner_department','').strip(); period=request.form.get('reporting_period','').strip(); tax_type=request.form.get('tax_type','').strip() or 'General'; file=request.files.get('data_file')
+    if not name or source_type not in DATA_SOURCE_TYPES: flash('Source name and valid source type are required.','error'); return redirect(url_for('data_sources'))
+    if not file or not file.filename: flash('Please select a CSV or Excel data source.','error'); return redirect(url_for('data_sources'))
+    if not data_source_allowed_file(file.filename): flash('Unsupported data source. Allowed: CSV, XLSX and XLS.','error'); return redirect(url_for('data_sources'))
+    safe=secure_filename(file.filename)
+    if not safe: flash('The selected filename is not valid.','error'); return redirect(url_for('data_sources'))
+    stamp=datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f'); source_ref='DS-'+stamp; target=UPLOAD/'data_sources'; target.mkdir(parents=True,exist_ok=True); stored=f'{source_ref}_v1_{safe}'; path=target/stored; file.save(path)
+    try:
+        summary,validation=inspect_data_source(path); c=db()
+        c.execute("INSERT INTO data_sources(source_ref,source_name,source_type,description,owner_department,reporting_period,tax_type,current_version,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,1,'Draft',?,?,?)",(source_ref,name,source_type,description,owner,period,tax_type,email(),now(),now()))
+        sid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(sid,1,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),summary['record_count'],summary['column_count'],json.dumps(summary['columns']),validation,json.dumps(summary),len(summary['errors']),len(summary['warnings']),'Initial data-source registration.'))
+        for msg in summary['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,1,'Validation','Error',?,?)",(sid,msg,now()))
+        for msg in summary['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,1,'Validation','Warning',?,?)",(sid,msg,now()))
+        c.commit(); c.close()
+    except Exception as exc:
+        try: path.unlink(missing_ok=True)
+        except Exception: pass
+        flash(f'Data source validation failed: {exc}','error'); return redirect(url_for('data_sources'))
+    log('DATA_SOURCE_REGISTERED',f'{source_ref}: {name}; v1; validation={validation}'); flash(f'{source_ref} registered as Version 1 ({validation}). It is NOT available to the VTA until approved.','success'); return redirect(url_for('data_sources'))
+
+@app.route('/data-sources/<int:source_id>/review',methods=['POST'])
+@login_required
+def data_source_review(source_id):
+    decision=request.form.get('decision','').strip(); comments=request.form.get('comments','').strip()
+    if decision not in ('Approved','Rejected','Needs Revision'): flash('Invalid review decision.','error'); return redirect(url_for('data_sources'))
+    c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
+    if not src: c.close(); abort(404)
+    v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone()
+    if not v: c.close(); abort(404)
+    if decision=='Approved' and v['validation_status']=='Failed': c.close(); flash('This source cannot be approved because validation failed. Correct it and upload a new version.','error'); return redirect(url_for('data_sources'))
+    c.execute('INSERT INTO data_source_reviews(source_id,version_number,decision,comments,reviewed_by,reviewed_at) VALUES(?,?,?,?,?,?)',(source_id,v['version_number'],decision,comments,email(),now()))
+    c.execute('UPDATE data_source_versions SET version_status=?,approved_by=?,approved_at=? WHERE id=?',(decision,email(),now() if decision=='Approved' else None,v['id']))
+    c.execute('UPDATE data_sources SET status=?,updated_at=? WHERE id=?',('Approved' if decision=='Approved' else ('Rejected' if decision=='Rejected' else 'Draft'),now(),source_id)); c.commit(); c.close()
+    log('DATA_SOURCE_REVIEWED',f'{src["source_ref"]} v{v["version_number"]}: {decision}; {comments}'); flash(f'{src["source_ref"]} Version {v["version_number"]}: {decision}.','success'); return redirect(url_for('data_sources'))
+
+@app.route('/data-sources/<int:source_id>/version',methods=['POST'])
+@login_required
+def data_source_new_version(source_id):
+    file=request.files.get('data_file'); change=request.form.get('change_summary','').strip()
+    if not file or not file.filename or not data_source_allowed_file(file.filename): flash('Please upload a CSV, XLSX or XLS file for the new version.','error'); return redirect(url_for('data_sources'))
+    safe=secure_filename(file.filename); c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
+    if not src: c.close(); abort(404)
+    next_v=int(src['current_version'])+1; ref=src['source_ref']; target=UPLOAD/'data_sources'; target.mkdir(parents=True,exist_ok=True); stored=f'{ref}_v{next_v}_{safe}'; path=target/stored; file.save(path)
+    try:
+        summary,validation=inspect_data_source(path); c.execute("UPDATE data_source_versions SET version_status='Superseded' WHERE source_id=? AND version_status='Approved'",(source_id,))
+        c.execute("INSERT INTO data_source_versions(source_id,version_number,original_filename,stored_filename,mime_type,size_bytes,file_path,uploaded_by,uploaded_at,version_status,record_count,column_count,columns_json,validation_status,validation_summary,validation_errors,validation_warnings,change_summary) VALUES(?,?,?,?,?,?,?,?,?,'Draft',?,?,?,?,?,?,?,?)",(source_id,next_v,safe,stored,file.mimetype,path.stat().st_size,str(path),email(),now(),summary['record_count'],summary['column_count'],json.dumps(summary['columns']),validation,json.dumps(summary),len(summary['errors']),len(summary['warnings']),change or f'New version {next_v}.'))
+        for msg in summary['errors']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Error',?,?)",(source_id,next_v,msg,now()))
+        for msg in summary['warnings']: c.execute("INSERT INTO data_source_issues(source_id,version_number,issue_type,severity,description,created_at) VALUES(?,?, 'Validation','Warning',?,?)",(source_id,next_v,msg,now()))
+        c.execute("UPDATE data_sources SET current_version=?,status='Draft',updated_at=? WHERE id=?",(next_v,now(),source_id)); c.commit()
+    except Exception as exc:
+        c.rollback()
+        try: path.unlink(missing_ok=True)
+        except Exception: pass
+        c.close(); flash(f'New version validation failed: {exc}','error'); return redirect(url_for('data_sources'))
+    c.close(); log('DATA_SOURCE_VERSION_REGISTERED',f'{ref}: v{next_v}; validation={validation}'); flash(f'{ref} Version {next_v} uploaded as Draft ({validation}). The previous approved version remains retained.','success'); return redirect(url_for('data_sources'))
+
+@app.route('/data-sources/<int:source_id>/versions')
+@login_required
+def data_source_versions(source_id):
+    c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
+    if not src: c.close(); abort(404)
+    versions=c.execute('SELECT * FROM data_source_versions WHERE source_id=? ORDER BY version_number DESC',(source_id,)).fetchall(); reviews=c.execute('SELECT * FROM data_source_reviews WHERE source_id=? ORDER BY id DESC',(source_id,)).fetchall(); c.close(); return render_template('data_source_versions.html',source=src,versions=versions,reviews=reviews)
+
+@app.route('/data-sources/<int:source_id>/download')
+@login_required
+def data_source_download(source_id):
+    c=db(); src=c.execute('SELECT * FROM data_sources WHERE id=?',(source_id,)).fetchone()
+    if not src: c.close(); abort(404)
+    v=c.execute('SELECT * FROM data_source_versions WHERE source_id=? AND version_number=?',(source_id,src['current_version'])).fetchone(); c.close()
+    if not v: abort(404)
+    return send_from_directory(str(UPLOAD/'data_sources'),v['stored_filename'],as_attachment=True,download_name=v['original_filename'])
+
 @app.route('/risk-assessment',methods=['GET','POST'])
 @login_required
 def risk_assessment():
@@ -1484,266 +1528,10 @@ def select_taxpayer(tid):
 @app.route('/case/<int:cid>')
 @login_required
 def case_detail(cid):
-    c = db()
-
-    case = getcase(c, cid)
-
+    c=db(); case=getcase(c,cid)
     if not case:
-        c.close()
-        abort(404)
-
-    # ---------------------------------------------------------
-    # Latest AI Audit Analysis
-    # ---------------------------------------------------------
-    analysis = c.execute(
-        '''
-        SELECT *
-        FROM audit_analyses
-        WHERE case_id=?
-        ORDER BY id DESC
-        LIMIT 1
-        ''',
-        (cid,)
-    ).fetchone()
-
-    # ---------------------------------------------------------
-    # Findings
-    # ---------------------------------------------------------
-    findings = c.execute(
-        '''
-        SELECT *
-        FROM findings
-        WHERE case_id=?
-        ORDER BY id
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # Communications
-    # ---------------------------------------------------------
-    comm = c.execute(
-        '''
-        SELECT *
-        FROM communications
-        WHERE case_id=?
-        ORDER BY id DESC
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # Taxpayer Responses
-    # ---------------------------------------------------------
-    responses = c.execute(
-        '''
-        SELECT *
-        FROM taxpayer_responses
-        WHERE case_id=?
-        ORDER BY id DESC
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # Evidence
-    # ---------------------------------------------------------
-    evidence = c.execute(
-        '''
-        SELECT *
-        FROM evidence
-        WHERE case_id=?
-        ORDER BY id DESC
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # AI Response Analyses
-    # ---------------------------------------------------------
-    ra = c.execute(
-        '''
-        SELECT *
-        FROM response_analyses
-        WHERE case_id=?
-        ORDER BY id DESC
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # Second Human Validation
-    # ---------------------------------------------------------
-    val = c.execute(
-        '''
-        SELECT *
-        FROM second_validations
-        WHERE case_id=?
-        ORDER BY id DESC
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # Further Actions
-    # ---------------------------------------------------------
-    acts = c.execute(
-        '''
-        SELECT *
-        FROM further_actions
-        WHERE case_id=?
-        ORDER BY id DESC
-        ''',
-        (cid,)
-    ).fetchall()
-
-    # ---------------------------------------------------------
-    # Outcome
-    # ---------------------------------------------------------
-    outcome = c.execute(
-        '''
-        SELECT *
-        FROM outcomes
-        WHERE case_id=?
-        ''',
-        (cid,)
-    ).fetchone()
-
-    # ---------------------------------------------------------
-    # APPROVED KNOWLEDGE RETRIEVED FOR THIS ANALYSIS
-    # ---------------------------------------------------------
-    knowledge_retrievals = []
-
-    if analysis:
-
-        knowledge_retrievals = c.execute(
-            '''
-            SELECT
-                kr.id AS retrieval_id,
-                kr.query_text,
-                kr.rank_order,
-                kr.retrieved_at,
-
-                kc.id AS chunk_id,
-                kc.chunk_number,
-                kc.page_number,
-                kc.source_filename,
-                kc.text_content,
-
-                kd.document_ref,
-                kd.title,
-                kd.category,
-                kd.document_type,
-                kd.tax_type,
-                kd.issuing_authority,
-
-                kv.version_number,
-                kv.version_status
-
-            FROM knowledge_retrievals kr
-
-            JOIN knowledge_chunks kc
-                ON kc.id = kr.chunk_id
-
-            JOIN knowledge_documents kd
-                ON kd.id = kc.document_id
-
-            JOIN knowledge_document_versions kv
-                ON kv.document_id = kc.document_id
-                AND kv.version_number = kc.version_number
-
-            WHERE kr.case_id=?
-              AND kr.analysis_id=?
-              AND kv.version_status='Approved'
-
-            ORDER BY kr.rank_order ASC, kr.id ASC
-            ''',
-            (cid, analysis['id'])
-        ).fetchall()
-
-    # ---------------------------------------------------------
-    # CLEAN METHODOLOGY
-    #
-    # Remove the large Knowledge Base text from Methodology.
-    # It remains available through the Legal Basis section.
-    # ---------------------------------------------------------
-    methodology_display = ''
-
-    if analysis:
-
-        methodology_display = analysis['methodology'] or ''
-
-        markers = [
-            'Approved Knowledge Base context retrieved for this analysis:',
-            'Approved Knowledge Base context retrieved for this analysis'
-        ]
-
-        for marker in markers:
-
-            if marker in methodology_display:
-
-                methodology_display = methodology_display.split(
-                    marker,
-                    1
-                )[0].strip()
-
-                break
-
-    # ---------------------------------------------------------
-    # WORKFLOW STATE
-    # ---------------------------------------------------------
-    open_actions = [
-        a for a in acts
-        if a['status'] == 'Open'
-    ]
-
-    unresolved_findings = [
-        f for f in findings
-        if f['status'] not in (
-            'Human Validated',
-            'Rejected'
-        )
-    ]
-
-    latest_validation = val[0] if val else None
-
-    c.close()
-
-    return render_template(
-        'case.html',
-
-        case=case,
-
-        analysis=analysis,
-
-        # Clean methodology
-        methodology_display=methodology_display,
-
-        # Approved legal material
-        knowledge_retrievals=knowledge_retrievals,
-
-        findings=findings,
-
-        communications=comm,
-
-        responses=responses,
-
-        evidence=evidence,
-
-        response_analyses=ra,
-
-        validations=val,
-
-        actions=acts,
-
-        outcome=outcome,
-
-        open_actions=open_actions,
-
-        unresolved_findings=unresolved_findings,
-
-        latest_validation=latest_validation
-    )
+        c.close(); abort(404)
+    analysis=c.execute('SELECT * FROM audit_analyses WHERE case_id=? ORDER BY id DESC LIMIT 1',(cid,)).fetchone(); findings=c.execute('SELECT * FROM findings WHERE case_id=? ORDER BY id',(cid,)).fetchall(); comm=c.execute('SELECT * FROM communications WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); responses=c.execute('SELECT * FROM taxpayer_responses WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); evidence=c.execute('SELECT * FROM evidence WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); ra=c.execute('SELECT * FROM response_analyses WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); val=c.execute('SELECT * FROM second_validations WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); acts=c.execute('SELECT * FROM further_actions WHERE case_id=? ORDER BY id DESC',(cid,)).fetchall(); outcome=c.execute('SELECT * FROM outcomes WHERE case_id=?',(cid,)).fetchone(); open_actions=[a for a in acts if a['status']=='Open']; unresolved_findings=[f for f in findings if f['status'] not in ('Human Validated','Rejected')]; latest_validation=val[0] if val else None; c.close(); return render_template('case.html',case=case,analysis=analysis,findings=findings,communications=comm,responses=responses,evidence=evidence,response_analyses=ra,validations=val,actions=acts,outcome=outcome,open_actions=open_actions,unresolved_findings=unresolved_findings,latest_validation=latest_validation)
 @app.route('/case/<int:cid>/analyze',methods=['POST'])
 @login_required
 def analyze(cid): run_analysis(cid); flash('AI Audit Analysis completed.','success'); return redirect(url_for('case_detail',cid=cid))

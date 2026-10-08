@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head"><div><h1>{{ source.source_name }}</h1><p>{{ source.source_ref }} · Version history and approval record</p></div><a class="btn" href="{{ url_for('data_sources') }}">Back to Data Sources</a></div>
+<div class="card"><h2>Versions</h2><div class="table-wrap"><table><thead><tr><th>Version</th><th>File</th><th>Records</th><th>Validation</th><th>Status</th><th>Uploaded</th><th>Approved</th></tr></thead><tbody>
+{% for v in versions %}<tr><td>v{{ v.version_number }}</td><td>{{ v.original_filename }}</td><td>{{ '{:,}'.format(v.record_count or 0) }}</td><td>{{ v.validation_status }}<br><small>{{ v.validation_errors or 0 }} errors · {{ v.validation_warnings or 0 }} warnings</small></td><td><span class="badge">{{ v.version_status }}</span></td><td>{{ v.uploaded_by }}<br><small>{{ v.uploaded_at }}</small></td><td>{% if v.approved_by %}{{ v.approved_by }}<br><small>{{ v.approved_at }}</small>{% else %}—{% endif %}</td></tr>{% else %}<tr><td colspan="7">No versions.</td></tr>{% endfor %}
+</tbody></table></div></div>
+<div class="card"><h2>Review History</h2><div class="table-wrap"><table><thead><tr><th>Version</th><th>Decision</th><th>Reviewer</th><th>Date</th><th>Comments</th></tr></thead><tbody>{% for r in reviews %}<tr><td>v{{ r.version_number }}</td><td>{{ r.decision }}</td><td>{{ r.reviewed_by }}</td><td>{{ r.reviewed_at }}</td><td>{{ r.comments or '—' }}</td></tr>{% else %}<tr><td colspan="5">No reviews yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

@@ -1,1 +1,70 @@
-{% extends 'base.html' %}{% block content %}<div class="card"><div class="label">DATA & EVIDENCE</div><h2>Data Sources / Taxpayer Evidence Base</h2><p class="muted">Current synthetic taxpayer and metrics available to the Phase 3 engine.</p></div><div class="two" style="margin-top:15px"><div class="card"><h3>Taxpayer</h3><table class="table">{% for k,v in [('TIN',taxpayer.tin),('Name',taxpayer.name),('Sector',taxpayer.sector),('Station',taxpayer.station),('Financial Year',taxpayer.financial_year),('Status',taxpayer.status)] %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</table></div><div class="card"><h3>Available Metrics</h3><table class="table"><tr><th>Metric</th><th>Declared</th><th>Observed</th><th>Source</th></tr>{% for m in metrics %}<tr><td>{{ m.metric_name }}</td><td>UGX {{ '{:,.0f}'.format(m.declared_value) }}</td><td>UGX {{ '{:,.0f}'.format(m.observed_value) }}</td><td>{{ m.source }}</td></tr>{% endfor %}</table></div></div><div class="card" style="margin-top:15px"><h3>Approved Risk Rules</h3><table class="table"><tr><th>Rule</th><th>Natural-language rule</th><th>Structured logic</th></tr>{% for r in rules %}<tr><td>{{ r.name }}</td><td>{{ r.natural_language }}</td><td>{{ r.structured_logic }}</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head"><div><h1>Data Sources</h1><p>Controlled registration, validation, approval and versioning of taxpayer data used by the Virtual Tax Auditor.</p></div></div>
+
+<div class="card" style="margin-bottom:20px">
+  <h2>Register New Data Source</h2>
+  <p class="muted">Uploaded data remains Draft and cannot be used by Taxpayer 360, Risk Assessment or AI Audit Analysis until a human approves the current version.</p>
+  <form method="post" action="{{ url_for('data_source_register') }}" enctype="multipart/form-data">
+    <div class="grid grid-3">
+      <label>Source Name<input name="source_name" required placeholder="e.g. DT Payments FY 2025/26"></label>
+      <label>Source Type<select name="source_type" required><option value="">Select...</option>{% for x in source_types %}<option>{{ x }}</option>{% endfor %}</select></label>
+      <label>Tax Type<select name="tax_type">{% for x in tax_types %}<option>{{ x }}</option>{% endfor %}</select></label>
+      <label>Reporting Period<input name="reporting_period" placeholder="e.g. FY 2025/26"></label>
+      <label>Owner Department<input name="owner_department" placeholder="e.g. Domestic Taxes"></label>
+      <label>Data File<input type="file" name="data_file" accept=".csv,.xlsx,.xls" required></label>
+    </div>
+    <label>Description<textarea name="description" rows="3" placeholder="Describe what this source contains and its intended use."></textarea></label>
+    <button class="btn btn-primary" type="submit">Upload & Validate</button>
+  </form>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+  <div class="section-head"><div><h2>Approval Queue</h2><span class="muted">Human review is mandatory before the source becomes available to the VTA.</span></div><span class="badge">{{ pending|length }} Pending</span></div>
+  {% if pending %}
+  {% for p in pending %}
+  <div class="subcard" style="margin-top:14px">
+    <div class="section-head"><div><h3>{{ p.source_name }}</h3><div class="muted">{{ p.source_ref }} · Version {{ p.version_number }} · {{ p.original_filename }}</div></div><span class="badge">{{ p.validation_status }}</span></div>
+    <div class="grid grid-4">
+      <div><strong>Records</strong><br>{{ '{:,}'.format(p.record_count or 0) }}</div>
+      <div><strong>Columns</strong><br>{{ p.column_count or 0 }}</div>
+      <div><strong>Errors</strong><br>{{ p.validation_errors or 0 }}</div>
+      <div><strong>Warnings</strong><br>{{ p.validation_warnings or 0 }}</div>
+    </div>
+    {% if p.validation_summary %}
+      {% set vs = p.validation_summary|fromjson %}
+      {% if vs.warnings %}<div class="alert alert-warning" style="margin-top:12px"><strong>Validation warnings</strong><ul>{% for w in vs.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if vs.errors %}<div class="alert alert-danger" style="margin-top:12px"><strong>Validation errors</strong><ul>{% for e in vs.errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+      <details style="margin-top:10px"><summary>Detected columns</summary><p>{{ vs.columns|join(', ') }}</p></details>
+    {% endif %}
+    <form method="post" action="{{ url_for('data_source_review', source_id=p.id) }}" style="margin-top:15px">
+      <label>Reviewer comments<textarea name="comments" rows="2" placeholder="Reason for approval, rejection or revision request"></textarea></label>
+      <div class="actions">
+        <button class="btn btn-primary" name="decision" value="Approved">Approve</button>
+        <button class="btn" name="decision" value="Needs Revision">Needs Revision</button>
+        <button class="btn btn-danger" name="decision" value="Rejected">Reject</button>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+  {% else %}<p class="muted">No data sources are waiting for approval.</p>{% endif %}
+</div>
+
+<div class="card">
+  <div class="section-head"><div><h2>Registered Data Sources</h2><span class="muted">Only Approved versions are eligible for downstream VTA use.</span></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Source</th><th>Type</th><th>Version</th><th>Records</th><th>Validation</th><th>Status</th><th>Approval</th><th>Actions</th></tr></thead><tbody>
+  {% for r in rows %}<tr>
+    <td><strong>{{ r.source_name }}</strong><br><span class="muted">{{ r.source_ref }}</span><br><small>{{ r.original_filename }}</small></td>
+    <td>{{ r.source_type }}<br><small>{{ r.tax_type }}</small></td>
+    <td>v{{ r.version_number }}</td>
+    <td>{{ '{:,}'.format(r.record_count or 0) }}</td>
+    <td>{{ r.validation_status }}<br><small>{{ r.validation_errors or 0 }} errors · {{ r.validation_warnings or 0 }} warnings</small></td>
+    <td><span class="badge">{{ r.version_status }}</span></td>
+    <td>{% if r.approved_by %}{{ r.approved_by }}<br><small>{{ r.approved_at }}</small>{% else %}—{% endif %}</td>
+    <td><a class="btn" href="{{ url_for('data_source_versions', source_id=r.id) }}">Versions</a> <a class="btn" href="{{ url_for('data_source_download', source_id=r.id) }}">Download</a>
+      <form method="post" action="{{ url_for('data_source_new_version', source_id=r.id) }}" enctype="multipart/form-data" style="margin-top:8px"><input type="file" name="data_file" accept=".csv,.xlsx,.xls" required><input name="change_summary" placeholder="Version change summary" required><button class="btn" type="submit">Upload New Version</button></form>
+    </td>
+  </tr>{% else %}<tr><td colspan="8" class="muted">No data sources registered yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}
