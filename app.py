@@ -814,25 +814,6 @@ def tasks():
         'latest_finding_id': latest_finding_id,
     }
     return render_template('tasks.html',counts=counts,workflow=workflow)
-@app.route('/business')
-@login_required
-def business_rules():
-    c = db()
-    rules = c.execute('''
-        SELECT r.*,
-               (SELECT MAX(v.version_number)
-                  FROM risk_rule_versions v
-                 WHERE v.rule_id = r.id) AS latest_version,
-               (SELECT v.status
-                  FROM risk_rule_versions v
-                 WHERE v.rule_id = r.id
-                 ORDER BY v.version_number DESC LIMIT 1) AS latest_status
-        FROM risk_rules r
-        ORDER BY r.id DESC
-    ''').fetchall()
-    c.close()
-    return render_template('business_rules.html', rules=rules)
-
 ALLOWED_KB_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'}
 KB_CATEGORIES = ['Tax Laws', 'Regulations', 'Procedures', 'Audit Guidance', 'Sector Knowledge', 'Risk Knowledge']
 KB_DOCUMENT_TYPES = ['Act', 'Regulation', 'Statutory Instrument', 'Procedure', 'Manual', 'Guideline', 'Circular', 'Directive', 'Sector Guide', 'Risk Note', 'Other']
@@ -1465,6 +1446,57 @@ def _rule_form_payload(c):
     exposure={'type':f.get('exposure_type','Estimated Revenue Exposure').strip(),'formula':f.get('exposure_formula','').strip(),'minimum_exposure':minimum,'rate':f.get('exposure_rate','').strip()}
     ranking={'base_score':f.get('base_score','').strip() or '0','exposure_weight':f.get('exposure_weight','').strip() or '0','frequency_weight':f.get('frequency_weight','').strip() or '0','low_max':f.get('low_max','').strip() or '39','medium_max':f.get('medium_max','').strip() or '69','high_max':f.get('high_max','').strip() or '89','critical_min':f.get('critical_min','').strip() or '90'}
     return name,category,tax_type,scope,period,natural,detection,legal,requests,exposure,ranking
+
+@app.route('/business')
+@login_required
+def business_rules():
+    """Analyst-facing Business Rules / Risk Rule Library."""
+    c=db()
+    rows=c.execute('''
+        SELECT r.*,
+               (SELECT MAX(v.version_number)
+                  FROM risk_rule_versions v
+                 WHERE v.rule_id=r.id) AS latest_version,
+               (SELECT v.status
+                  FROM risk_rule_versions v
+                 WHERE v.rule_id=r.id
+                 ORDER BY v.version_number DESC LIMIT 1) AS latest_status
+          FROM risk_rules r
+         ORDER BY r.id DESC
+    ''').fetchall()
+    c.close()
+    return render_template('business_rules.html', rules=rows)
+
+
+# Compatibility endpoints used by the Business Rules Library template.
+# The underlying implementation remains the existing Phase-3 risk-rule workflow.
+@app.route('/business/rules/create')
+@login_required
+def business_rule_create():
+    return redirect(url_for('risk_rule_new'))
+
+
+@app.route('/business/rules/<int:rule_id>')
+@login_required
+def business_rule_view(rule_id):
+    return redirect(url_for('risk_rule_detail', rule_id=rule_id))
+
+
+@app.route('/business/rules/<int:rule_id>/edit')
+@login_required
+def business_rule_edit(rule_id):
+    return redirect(url_for('risk_rule_edit', rule_id=rule_id))
+
+
+@app.route('/business/rules/<int:rule_id>/versions')
+@login_required
+def business_rule_versions(rule_id):
+    # Version history is currently exposed through the existing rule-detail workflow.
+    # This endpoint is intentionally kept as a compatibility route so the Business
+    # Rules Library does not fail URL generation while the dedicated versions view
+    # is added.
+    return redirect(url_for('risk_rule_detail', rule_id=rule_id))
+
 
 @app.route('/risk-rules')
 @login_required
