@@ -1,130 +1,144 @@
-{% extends 'base.html' %}{% block content %}
-<div class="card"><h2>{% if rule %}Edit Risk Rule · Version {{ rule.version_number|default(1) }}{% else %}Create Risk Rule{% endif %}</h2>
-<p class="muted">This page defines the reusable analyst rule. It does not create a taxpayer finding. The system stores the analyst definition, validates it against approved controlled data, generates a readable interpretation, previews it, and requires human approval before activation.</p></div>
-<form method="POST" id="ruleForm">
-<div class="card"><h3>1. Rule Definition</h3><div class="grid">
-<div><label>Rule Name *</label><input name="rule_name" required value="{{ rule.name if rule else '' }}"></div>
-<div><label>Analyst's Original Business Rule *</label><input name="analyst_wording" required value="{{ rule.natural_language if rule else '' }}" placeholder="e.g. Identify taxpayers whose observed sales exceed declared sales by more than 20%."></div>
-<div><label>Risk Category *</label><select name="risk_category" required><option value="">Select</option>{% for x in categories %}<option {% if rule and (rule.risk_category or rule.category)==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
-<div><label>Tax Type</label><select name="tax_type">{% for x in tax_types %}<option {% if rule and rule.tax_type==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
-<div><label>Taxpayer Scope</label><input name="taxpayer_scope" value="{{ rule.taxpayer_scope if rule else '' }}" placeholder="e.g. VAT registered taxpayers"></div>
-<div><label>Applicable Period</label><input name="applicable_period" value="{{ rule.applicable_period if rule else '' }}" placeholder="e.g. FY 2025/26"></div>
-<div><label>Period Description</label><input name="period_description" value=""></div>
-<div class="two" style="grid-column:span 2"><div><label>Risk Description</label><input name="risk_description" value="{{ rule.name if rule else '' }}"></div><div><label>Exclusions / Exceptions</label><input name="except_description"></div></div>
-</div></div>
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Risk Rule' if rule else 'Create Business Risk' }}{% endblock %}
+{% block content %}
+<style>
+.br-wrap{max-width:1450px;margin:0 auto;padding:22px}.br-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:18px}.br-title{margin:0;color:#12345b;font-size:27px}.muted{color:#64748b;font-size:12px;line-height:1.5}.card{background:#fff;border:1px solid #dbe3ec;border-radius:10px;padding:17px;margin-bottom:14px;box-shadow:0 2px 8px rgba(15,35,60,.04)}.card h3{margin:0 0 8px;color:#12345b;font-size:16px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}.field{margin-bottom:11px}.label{display:block;font-size:12px;font-weight:800;color:#334155;margin-bottom:5px}.input,.select,.textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px;padding:9px 10px;font-size:13px;background:#fff}.textarea{min-height:75px;resize:vertical}.btn{border:0;border-radius:7px;padding:9px 14px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block;font-size:12px}.primary{background:#173f66;color:#fff}.secondary{background:#fff;color:#173f66;border:1px solid #b9c8d7}.danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}.stagebar{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:14px}.stage{padding:9px;border:1px solid #dbe3ec;border-radius:8px;background:#f8fafc;font-size:11px;font-weight:800;color:#64748b;text-align:center}.stage.active{background:#e7f0f8;color:#123f66;border-color:#8eb0cc}.stage.done{background:#ecfdf3;color:#166534;border-color:#a7e1bc}.stage-num{font-size:10px;display:block;margin-bottom:2px}.source-row{border:1px solid #dbe3ec;border-radius:8px;padding:12px;margin:8px 0;background:#fbfdff}.source-head{display:flex;justify-content:space-between;gap:10px;align-items:center}.source-title{font-weight:800;color:#173f66;font-size:13px}.mapping{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.map-ok{font-size:10px;color:#166534;font-weight:800}.map-warn{font-size:10px;color:#92400e;font-weight:800}.logic-grid{display:grid;grid-template-columns:180px 1fr 330px;gap:14px}.vocab{display:flex;flex-wrap:wrap;gap:6px}.vocab button{border:1px solid #c7d6e4;background:#f8fbfe;color:#17466f;border-radius:6px;padding:7px 9px;font-size:11px;font-weight:800;cursor:pointer}.steps{min-height:450px}.step{border:1px solid #d5dee9;border-left:4px solid #245985;border-radius:8px;background:#fff;margin-bottom:8px;padding:11px 40px 11px 12px;position:relative;cursor:pointer}.step.selected{background:#eff6ff;border-color:#8db4d2}.tag{display:inline-block;background:#e7f0f8;color:#17466f;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:900;margin-bottom:5px}.step-summary{font-size:12px;color:#1f2937;white-space:pre-wrap}.tools{position:absolute;right:7px;top:7px;display:flex;gap:3px}.mini{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:3px 6px;cursor:pointer}.editor{border:1px solid #dbe3ec;border-radius:8px;padding:12px;background:#fbfdff;min-height:420px}.note{background:#edf5ff;border:1px solid #c8dbef;border-radius:7px;padding:11px;font-size:12px;line-height:1.5}.warning{background:#fff7e6;border:1px solid #f0d28b;border-radius:7px;padding:11px;font-size:12px;line-height:1.5}.identity-warning{margin-top:8px}.calc-row,.cond-row{border:1px solid #dbe3ec;border-radius:7px;padding:10px;margin:7px 0;background:#fff}.actions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}.json-preview{background:#102d4a;color:#fff;border-radius:7px;padding:12px;font:11px Consolas,monospace;white-space:pre-wrap;max-height:260px;overflow:auto}.hidden{display:none!important}
+@media(max-width:1050px){.logic-grid{grid-template-columns:1fr}.stagebar{grid-template-columns:repeat(3,1fr)}.grid3,.grid2,.mapping{grid-template-columns:1fr}}
+</style>
+<div class="br-wrap">
+  <div class="br-head">
+    <div><div class="muted">Business Risk Engine / Risk Rule Library</div><h1 class="br-title">{{ 'Edit Business Risk' if rule else 'Build Business Risk' }}</h1><div class="muted">Build the rule as structured business logic. The system will interpret, test and retain the exact executable rule.</div></div>
+    <a class="btn secondary" href="{{ url_for('business_rules') }}">← Back to Library</a>
+  </div>
 
-<div class="card"><h3>2. Detection Logic</h3>
-<p class="muted">The engine can only execute controlled operators against approved data sources. Select the primary source and configure the condition/calculation. The generated JSON is retained as the executable rule definition.</p>
-<div class="grid">
-<div><label>Primary Data Source *</label><select id="baseSource"><option value="">Select approved source</option>{% for s in data_sources %}<option value="{{ s.id }}">{{ s.name }} · v{{ s.version }} · {{ s.ref }}</option>{% endfor %}</select></div>
-<div><label>Field 1 *</label><select id="leftField"></select></div>
-<div><label>Operator *</label><select id="operator">{% for x in logic_operators %}<option>{{ x }}</option>{% endfor %}</select></div>
-<div><label>Compare With</label><select id="rightType"><option value="value">Value</option><option value="field">Another Field</option></select></div>
-<div id="rightFieldBox"><label>Field 2</label><select id="rightField"></select></div>
-<div id="rightValueBox"><label>Threshold / Value</label><input id="rightValue" placeholder="e.g. 20% or 10000000"></div>
+  <div class="stagebar">
+    {% for n,title in [(1,'Risk Definition'),(2,'Data Sources'),(3,'Relationships'),(4,'Detection Logic'),(5,'Test & Top 5'),(6,'Explanation')] %}
+    <div class="stage {% if n==1 %}active{% endif %}" id="stagebar{{n}}"><span class="stage-num">STAGE {{n}}</span>{{title}}</div>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="{{ url_for('risk_rule_new') if not rule else url_for('risk_rule_edit',rule_id=rule['id']) }}" id="riskRuleForm">
+    <input type="hidden" name="rule_plan" id="rule_plan">
+    <input type="hidden" name="risk_description" id="risk_description" value="{{ rule['name'] if rule else '' }}">
+
+    <!-- STAGE 1 -->
+    <section class="card stage-panel" id="stage1">
+      <h3>Stage 1 — Risk Definition</h3>
+      <div class="muted" style="margin-bottom:12px">Stage 1 intentionally contains only the three business identifiers of the risk.</div>
+      <div class="grid3">
+        <div class="field"><label class="label">Risk Name *</label><input class="input" name="rule_name" required value="{{ rule['name'] if rule else '' }}"></div>
+        <div class="field"><label class="label">Risk Category *</label><select class="select" name="risk_category" required><option value="">Select</option>{% for x in categories %}<option value="{{x}}" {% if rule and rule['risk_category']==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select></div>
+        <div class="field"><label class="label">Tax Type *</label><select class="select" name="tax_type" required>{% for x in tax_types %}<option value="{{x}}" {% if rule and rule['tax_type']==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select></div>
+      </div>
+      <div class="actions"><span class="muted">Next: choose the approved datasets that will participate in the risk.</span><button type="button" class="btn primary" onclick="goStage(2)">Continue to Data Sources →</button></div>
+    </section>
+
+    <!-- STAGE 2 -->
+    <section class="card stage-panel hidden" id="stage2">
+      <h3>Stage 2 — Data Sources & Taxpayer Identity</h3>
+      <div class="note">Every participating dataset must have both <b>TIN</b> and <b>Taxpayer Name</b>. The system attempts to detect them automatically. If either cannot be identified, you must select the correct column before continuing.</div>
+      <div id="sourceList" style="margin-top:10px">
+        {% for s in data_sources %}
+        <div class="source-row" data-source-id="{{s['id']}}">
+          <div class="source-head"><label><input type="checkbox" class="source-check" value="{{s['id']}}" onchange="renderMappings()"> <span class="source-title">{{s['name']}}</span> <span class="muted">v{{s['version']}} · {{s['record_count'] or 0}} records</span></label><span class="muted">{{s['type']}}</span></div>
+          <div class="mapping hidden" id="mapping-{{s['id']}}">
+            <div class="field"><label class="label">TIN Column *</label><select class="select tin-select" data-source="{{s['id']}}"></select><div class="map-status" id="tin-status-{{s['id']}}"></div></div>
+            <div class="field"><label class="label">Taxpayer Name Column *</label><select class="select name-select" data-source="{{s['id']}}"></select><div class="map-status" id="name-status-{{s['id']}}"></div></div>
+          </div>
+        </div>
+        {% else %}<div class="warning">No approved data sources are available. Approve a data source before building a risk.</div>{% endfor %}
+      </div>
+      <div id="identityWarning" class="warning identity-warning hidden"></div>
+      <div class="actions"><button type="button" class="btn secondary" onclick="goStage(1)">← Back</button><button type="button" class="btn primary" onclick="validateStage2()">Continue to Relationships →</button></div>
+    </section>
+
+    <!-- STAGE 3 -->
+    <section class="card stage-panel hidden" id="stage3">
+      <h3>Stage 3 — Data Relationships & Preparation</h3>
+      <div class="muted">Define how the selected datasets relate before detection logic is applied. The engine checks join keys, missing identities, unmatched taxpayers and many-to-many multiplication.</div>
+      <div id="joins"></div>
+      <button type="button" class="btn secondary" onclick="addJoin()">+ Add Data Relationship / JOIN</button>
+      <div class="grid3" style="margin-top:14px">
+        <div class="field"><label class="label">Analysis Period Field</label><select class="select" id="periodField"><option value="">No explicit period field</option></select></div>
+        <div class="field"><label class="label">FROM Period</label><input class="input" id="periodFrom" placeholder="e.g. 2025/26"></div>
+        <div class="field"><label class="label">TO Period</label><input class="input" id="periodTo" placeholder="e.g. 2025/26"></div>
+      </div>
+      <div class="note">For a join such as Income Tax to VAT, define the identity relationship explicitly (for example TIN = TIN) and add Financial Year or Month as an additional relationship where required.</div>
+      <div id="prepChecks" style="margin-top:10px"></div>
+      <div class="actions"><button type="button" class="btn secondary" onclick="goStage(2)">← Back</button><button type="button" class="btn primary" onclick="validateStage3()">Continue to Detection Logic →</button></div>
+    </section>
+
+    <!-- STAGE 4 -->
+    <section class="card stage-panel hidden" id="stage4">
+      <h3>Stage 4 — Business Risk Detection Logic</h3>
+      <div class="note">This is the main function of the Business Risk Engine. Build the exact executable logic using controlled fields, calculations, conditions and historical operators. Do not write SQL or Python.</div>
+      <div class="logic-grid" style="margin-top:12px">
+        <div class="card" style="margin:0;padding:12px"><h3>Logic Blocks</h3><div class="muted" style="margin-bottom:8px">Add blocks in the order the engine should understand them.</div><div class="vocab" id="vocab"></div></div>
+        <div class="card" style="margin:0;padding:12px"><h3>Executable Sequence</h3><div id="steps" class="steps"></div><button type="button" class="btn secondary" onclick="addStep('WHERE')">+ Add WHERE</button></div>
+        <div class="card" style="margin:0;padding:12px"><h3>Configure Selected Block</h3><div id="editor" class="editor"><div class="muted">Select a block to configure it.</div></div></div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3>Risk Exposure</h3><div class="grid3"><div class="field"><label class="label">Exposure Type</label><select class="select" name="exposure_type" id="exposureType">{% for x in exposure_types %}<option value="{{x}}">{{x}}</option>{% endfor %}</select></div><div class="field"><label class="label">Exposure Field / Calculation</label><input class="input" id="exposureField" placeholder="e.g. Sales Variance"></div><div class="field"><label class="label">Minimum Exposure</label><input class="input" id="minimumExposure" placeholder="0"></div></div></div>
+      <div class="card"><h3>Legal Backing</h3><div class="muted" style="margin-bottom:8px">Only approved Knowledge Base documents may support the rule.</div><div style="max-height:170px;overflow:auto">{% for x in legal_basis %}<label style="display:block;font-size:11px;margin:6px 0"><input type="checkbox" name="legal_basis" value="{{x['document_id']}}" {% if x['document_id'] in selected_basis %}checked{% endif %}> <b>{{x['document_ref']}}</b> — {{x['title']}} (v{{x['version_number']}})</label>{% else %}<div class="muted">No approved Knowledge Base legal documents available.</div>{% endfor %}</div></div>
+      <div class="card"><h3>Information Requests</h3><div id="requests"></div><button type="button" class="btn secondary" onclick="addRequest()">+ Add Information Request</button></div>
+      <div class="actions"><button type="button" class="btn secondary" onclick="goStage(3)">← Back</button><button type="submit" class="btn primary" id="submitRule">Generate Interpretation & Test Rule →</button></div>
+      <div class="muted" style="margin-top:8px">Submission saves the structured rule, generates the system interpretation, executes it against approved data and opens Stages 5–6 for human review. It does not activate the rule or populate production Risk Universe until approval.</div>
+    </section>
+  </form>
 </div>
-<div class="two"><div><label>Risk Result</label><input id="riskResult" value="{{ rule.name if rule else '' }}"></div><div><label>Data Quality Stop Rule</label><input id="stopRule" placeholder="e.g. do not evaluate records with unresolved critical data issues"></div></div>
-
-<h4>Calculated Fields</h4>
-<div id="calcs"></div>
-<button type="button" class="btn btn-secondary" onclick="addCalc()">+ Add Calculation</button>
-
-<div style="margin-top:15px"><label>Advanced Rule JSON (reviewable/executable)</label>
-<textarea name="rule_plan" id="rulePlan" style="min-height:220px" required></textarea>
-<div class="muted">You may inspect or amend the structured definition. It is validated against the approved data-source catalogue before saving.</div></div>
-</div>
-
-<div class="card"><h3>3. Legal Backing — Approved Knowledge Base</h3>
-<p class="muted">Only Approved Knowledge Base documents are selectable. The selected document/version is frozen into this rule version.</p>
-{% for d in legal_basis %}<label><input type="checkbox" name="legal_basis" value="{{ d.document_id }}" {% if d.document_id in selected_basis %}checked{% endif %}> <b>{{ d.title }}</b> · {{ d.document_ref }} · v{{ d.version_number }} · {{ d.category }}</label>{% else %}<div class="notice">No Approved Knowledge Base document is available. A rule cannot be activated until legal backing is approved.</div>{% endfor %}
-</div>
-
-<div class="card"><h3>4. Information Requests</h3><p class="muted">These requests are attached to the rule and can be used by the auditor when the rule triggers.</p>
-<div id="requests"></div><button type="button" class="btn btn-secondary" onclick="addRequest()">+ Add Information Request</button></div>
-
-<div class="card"><h3>5. Revenue Exposure</h3><div class="grid">
-<div><label>Exposure Type</label><select name="exposure_type">{% for x in exposure_types %}<option>{{ x }}</option>{% endfor %}</select></div>
-<div><label>Exposure Calculation Field</label><select name="exposure_field" id="exposureField"></select></div>
-<div><label>Formula / Interpretation</label><input name="exposure_formula" placeholder="e.g. (Observed Sales - Declared Sales) × VAT rate"></div>
-<div><label>Minimum Estimated Exposure (UGX)</label><input name="minimum_exposure" type="number" step="0.01" value="0"></div>
-<div><label>Exposure Rate (optional)</label><input name="exposure_rate" type="number" step="0.000001" placeholder="e.g. 0.18"></div>
-</div><div class="muted">This is an estimated revenue exposure for prioritisation, not an established tax liability.</div></div>
-
-<div class="card"><h3>6. Risk Ranking</h3><div class="grid">
-<div><label>Base Score</label><input name="base_score" type="number" step="0.01" value="0"></div>
-<div><label>Exposure Weight</label><input name="exposure_weight" type="number" step="0.01" value="0"></div>
-<div><label>Frequency Weight</label><input name="frequency_weight" type="number" step="0.01" value="0"></div>
-<div><label>Low Maximum</label><input name="low_max" type="number" step="0.01" value="39"></div>
-<div><label>Medium Maximum</label><input name="medium_max" type="number" step="0.01" value="69"></div>
-<div><label>High Maximum</label><input name="high_max" type="number" step="0.01" value="89"></div>
-<div><label>Critical Minimum</label><input name="critical_min" type="number" step="0.01" value="90"></div>
-<div><label>Ranking Explanation</label><input name="ranking_description" placeholder="Explain how the configured score prioritises taxpayers"></div>
-</div><div class="muted">The bands are analyst-configured; the engine does not silently substitute its own thresholds.</div></div>
-
-<div class="actions"><button class="btn btn-success" type="submit">Save Rule Version & Generate Interpretation</button> <a class="btn btn-secondary" href="{{ url_for('business_rules') }}">Cancel</a></div>
-</form>
 
 <script>
-const sources={{ data_sources|tojson }};
-const existing={{ (rule.detection_logic_json if rule else '{}')|tojson }};
-let calcRows=[];
-function src(id){return sources.find(x=>String(x.id)===String(id));}
-function fields(id){const s=src(id);return s?s.columns:[]}
-function fillSelect(el,items,selected){el.innerHTML='<option value="">Select</option>'+items.map(x=>'<option value="'+escapeHtml(x)+'">'+escapeHtml(x)+'</option>').join('');if(selected)el.value=selected}
-function escapeHtml(x){return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function updateFields(){
- const b=document.getElementById('baseSource').value;
- fillSelect(document.getElementById('leftField'),fields(b));
- fillSelect(document.getElementById('rightField'),fields(b));
-}
-document.getElementById('baseSource').addEventListener('change',updateFields);
-document.getElementById('rightType').addEventListener('change',function(){
- document.getElementById('rightFieldBox').style.display=this.value==='field'?'block':'none';
- document.getElementById('rightValueBox').style.display=this.value==='field'?'none':'block';
-});
-function addCalc(data){
- const i=calcRows.length;calcRows.push(data||{});
- const wrap=document.getElementById('calcs');
- const d=document.createElement('div');d.className='card';d.dataset.i=i;
- d.innerHTML='<div class="grid"><div><label>Calculation Name</label><input class="c-name"></div><div><label>Operation</label><select class="c-op">{% for x in calc_operations %}<option>{{ x }}</option>{% endfor %}</select></div><div><label>Left Field</label><select class="c-left"></select></div><div><label>Right Field</label><select class="c-right"></select></div></div><button type="button" class="btn btn-danger" onclick="this.parentElement.remove();calcRows[i]=null">Remove</button>';
- wrap.appendChild(d);
- const b=document.getElementById('baseSource').value;fillSelect(d.querySelector('.c-left'),fields(b));fillSelect(d.querySelector('.c-right'),fields(b));
- if(data){d.querySelector('.c-name').value=data.name||'';d.querySelector('.c-op').value=data.operation||'SUBTRACT';if(data.left)d.querySelector('.c-left').value=data.left.field||'';if(data.right)d.querySelector('.c-right').value=data.right.field||'';}
-}
-function addRequest(data){
- const wrap=document.getElementById('requests');const d=document.createElement('div');d.className='card';
- d.innerHTML='<div class="grid"><div><label>Request Title</label><input name="request_title"></div><div><label>Purpose</label><input name="request_purpose"></div><div><label>Period</label><input name="request_period"></div><div><label>Evidence Type</label><input name="request_evidence"></div></div><label><input type="checkbox" name="request_mandatory" value="1" checked> Mandatory</label><button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">Remove</button>';
- wrap.appendChild(d);if(data){d.querySelector('[name=request_title]').value=data.title||'';d.querySelector('[name=request_purpose]').value=data.purpose||'';d.querySelector('[name=request_period]').value=data.period||'';d.querySelector('[name=request_evidence]').value=data.evidence_type||'';d.querySelector('[name=request_mandatory]').checked=!!data.mandatory}
-}
-function updateExposureFields(){const e=document.getElementById('exposureField');const names=Array.from(document.querySelectorAll('#calcs .c-name')).map(x=>x.value.trim()).filter(Boolean);e.innerHTML='<option value="">Select calculation</option>'+names.map(x=>'<option value="'+escapeHtml(x)+'">'+escapeHtml(x)+'</option>').join('');}
-function buildPlan(){
- const base=document.getElementById('baseSource').value;const b=src(base);const lf=document.getElementById('leftField').value;
- const rt=document.getElementById('rightType').value;const op=document.getElementById('operator').value;
- const cond={connector:'AND',left:{source_id:Number(base),field:lf},operator:op,right_type:rt};
- if(rt==='field')cond.right={source_id:Number(base),field:document.getElementById('rightField').value};else cond.value=document.getElementById('rightValue').value;
- const calcs=[];
- document.querySelectorAll('#calcs>div.card').forEach(d=>{
-   const name=d.querySelector('.c-name').value.trim();if(!name)return;
-   calcs.push({name,operation:d.querySelector('.c-op').value,left:{source_id:Number(base),field:d.querySelector('.c-left').value},right:d.querySelector('.c-right').value?{source_id:Number(base),field:d.querySelector('.c-right').value}:null,expression_text:d.querySelector('.c-op').value});
- });
- const plan={analyst_wording:document.querySelector('[name=analyst_wording]').value,base_source:{source_id:Number(base),name:b?b.name:''},sources:base?[{id:Number(base)}]:[],joins:[],filters:[],calculations:calcs,conditions:[cond],preview_fields:[{source_id:Number(base),field:lf}],exposure:{type:document.querySelector('[name=exposure_type]').value,formula:document.querySelector('[name=exposure_formula]').value,minimum:document.querySelector('[name=minimum_exposure]').value,rate:document.querySelector('[name=exposure_rate]').value,field:document.querySelector('[name=exposure_field]').value},ranking:{base_score:document.querySelector('[name=base_score]').value,exposure_weight:document.querySelector('[name=exposure_weight]').value,frequency_weight:document.querySelector('[name=frequency_weight]').value,low_max:document.querySelector('[name=low_max]').value,medium_max:document.querySelector('[name=medium_max]').value,high_max:document.querySelector('[name=high_max]').value,critical_min:document.querySelector('[name=critical_min]').value,description:document.querySelector('[name=ranking_description]').value},period:{description:document.querySelector('[name=period_description]').value},result:{risk_description:document.querySelector('[name=risk_description]').value},except_description:document.querySelector('[name=except_description]').value,stop:{description:document.getElementById('stopRule').value}};
- document.getElementById('rulePlan').value=JSON.stringify(plan,null,2);
-}
-function init(){
- let p={};try{p=JSON.parse(existing||'{}')}catch(e){}
- if(p.base_source){document.getElementById('baseSource').value=p.base_source.source_id;updateFields();}
- const c=(p.conditions||[])[0];if(c){document.getElementById('leftField').value=c.left?.field||'';document.getElementById('operator').value=c.operator||'>';document.getElementById('rightType').value=c.right_type||'value';if(c.right)document.getElementById('rightField').value=c.right.field||'';document.getElementById('rightValue').value=c.value||'';}
- (p.calculations||[]).forEach(addCalc);
- if(!(p.calculations||[]).length)addCalc();
- (p.information_requests||[]).forEach(addRequest);
- if(!p.information_requests)addRequest();
- const ex=p.exposure||{};document.querySelector('[name=exposure_formula]').value=ex.formula||'';document.querySelector('[name=minimum_exposure]').value=ex.minimum||0;document.querySelector('[name=exposure_rate]').value=ex.rate||'';
- const rk=p.ranking||{};['base_score','exposure_weight','frequency_weight','low_max','medium_max','high_max','critical_min','ranking_description'].forEach(k=>{const el=document.querySelector('[name='+k+']');if(el&&rk[k]!==undefined)el.value=rk[k]});
- document.getElementById('rightType').dispatchEvent(new Event('change'));
- updateExposureFields();if(!document.getElementById('rulePlan').value)buildPlan();
-}
-document.getElementById('ruleForm').addEventListener('submit',function(){updateExposureFields();buildPlan();});
-document.getElementById('calcs').addEventListener('input',updateExposureFields);
-document.getElementById('baseSource').addEventListener('change',function(){updateFields();document.querySelectorAll('#calcs .c-left,#calcs .c-right').forEach(el=>fillSelect(el,fields(this.value)));});
-updateFields();init();
-</script>{% endblock %}
+const SOURCE_DATA=[{% for s in data_sources %}{id:{{s['id']|int}},name:{{s['name']|tojson}},version:{{s['version']|tojson}},columns:{{s['columns']|tojson}}},{% endfor %}];
+const OPS={{logic_operators|tojson}};
+const CALCS={{calc_operations|tojson}};
+const existing={{(rule['detection_logic_json'] if rule else '{}')|default('{}')|safe}};
+let plan={base_source:null,sources:[],identity_mappings:[],joins:[],filters:[],calculations:[],conditions:[],period:{},result:{},exposure:{},ranking:{},stop:{},else_description:'',except_description:'',steps:[]};
+let selected=-1;
+const VOCAB=['FROM','JOIN','WHEN','TO','WHERE','IN','NOT IN','BETWEEN','GROUP BY','CALCULATE','IF','AND','OR','WHILE','EXCEPT','STOP','CONTINUE','THEN','ELSE'];
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function goStage(n){document.querySelectorAll('.stage-panel').forEach(x=>x.classList.add('hidden'));document.getElementById('stage'+n).classList.remove('hidden');document.querySelectorAll('.stage').forEach((x,i)=>x.classList.toggle('active',i===n-1));window.scrollTo({top:0,behavior:'smooth'});if(n===2)renderMappings();if(n===3)renderJoins();if(n===4){renderVocab();renderSteps();}}
+function src(id){return SOURCE_DATA.find(x=>x.id==id)}
+function optsSource(sel=''){return '<option value="">Select source</option>'+SOURCE_DATA.map(s=>`<option value="${s.id}" ${s.id==sel?'selected':''}>${esc(s.name)} (v${esc(s.version)})</option>`).join('')}
+function optsField(id,sel=''){const s=src(id);if(!s)return '<option value="">Select field</option>';return '<option value="">Select field</option>'+s.columns.map(c=>`<option value="${esc(c)}" ${c===sel?'selected':''}>${esc(c)}</option>`).join('')}
+function norm(x){return String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
+function detect(cols,type){const aliases=type==='tin'?['tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno','taxidentificationnumber','taxidentificationno']:['taxpayername','taxpayer','name','taxpayerlegalname','registeredname','businessname','companyname','entityname'];return cols.find(c=>aliases.includes(norm(c)))||''}
+function renderMappings(){document.querySelectorAll('.source-check').forEach(ch=>{const id=Number(ch.value),box=document.getElementById('mapping-'+id);if(!box)return;box.classList.toggle('hidden',!ch.checked);if(ch.checked){const s=src(id);const tin=box.querySelector('.tin-select'),nm=box.querySelector('.name-select');tin.innerHTML=optsField(id,detect(s.columns,'tin'));nm.innerHTML=optsField(id,detect(s.columns,'name'));setMapStatus(id,'tin',tin.value,detect(s.columns,'tin'));setMapStatus(id,'name',nm.value,detect(s.columns,'name'));tin.onchange=()=>setMapStatus(id,'tin',tin.value,detect(s.columns,'tin'));nm.onchange=()=>setMapStatus(id,'name',nm.value,detect(s.columns,'name'));}});}
+function setMapStatus(id,type,val,auto){const el=document.getElementById(type+'-status-'+id);if(!el)return;el.className=val?'map-ok':'map-warn';el.textContent=val?(val===auto?'Auto-detected; analyst may change it.':'Analyst-selected mapping.'):'Required — select a column.';}
+function selectedSources(){return [...document.querySelectorAll('.source-check:checked')].map(x=>Number(x.value))}
+function validateStage2(){const ids=selectedSources();const w=document.getElementById('identityWarning');let errors=[];if(!ids.length)errors.push('Select at least one approved dataset.');const maps=[];ids.forEach(id=>{const row=document.querySelector(`.source-row[data-source-id="${id}"]`),tin=row.querySelector('.tin-select')?.value||'',nm=row.querySelector('.name-select')?.value||'';if(!tin)errors.push(`${src(id).name}: select the TIN column.`);if(!nm)errors.push(`${src(id).name}: select the Taxpayer Name column.`);maps.push({source_id:id,tin_field:tin,name_field:nm,tin_auto_detected:tin===detect(src(id).columns,'tin'),name_auto_detected:nm===detect(src(id).columns,'name')});});plan.identity_mappings=maps;w.innerHTML=errors.length?'<b>Stage 2 cannot continue.</b><br>'+errors.join('<br>'):'Identity mappings complete. Every selected dataset has a TIN and Taxpayer Name mapping.';w.classList.toggle('hidden',!errors.length);if(errors.length)return;plan.sources=ids.map(id=>{const s=src(id);return{id:s.id,name:s.name,version:s.version,columns:s.columns,ref:''}});if(!plan.base_source)plan.base_source={source_id:ids[0],name:src(ids[0]).name};goStage(3)}
+function addJoin(){plan.joins.push({join_type:'INNER',left_source_id:plan.base_source?.source_id||selectedSources()[0]||'',left_field:'',right_source_id:selectedSources().find(x=>x!==Number(plan.base_source?.source_id))||'',right_field:'',additional_conditions:[]});renderJoins()}
+function renderJoins(){const box=document.getElementById('joins');if(!box)return;if(!plan.joins.length){box.innerHTML='<div class="warning" style="margin:10px 0">No cross-dataset relationship has been defined. If only one dataset is used, this is acceptable.</div>';return;}box.innerHTML=plan.joins.map((j,i)=>`<div class="calc-row"><div class="grid3"><div class="field"><label class="label">Join Type</label><select class="select" onchange="jset(${i},'join_type',this.value)">${['INNER','LEFT','RIGHT','OUTER'].map(x=>`<option ${x===j.join_type?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label class="label">Left Source</label><select class="select" onchange="jset(${i},'left_source_id',this.value)">${optsSource(j.left_source_id)}</select></div><div class="field"><label class="label">Left Field</label><select class="select" onchange="jset(${i},'left_field',this.value)">${optsField(j.left_source_id,j.left_field)}</select></div></div><div class="grid3"><div class="field"><label class="label">Right Source</label><select class="select" onchange="jset(${i},'right_source_id',this.value)">${optsSource(j.right_source_id)}</select></div><div class="field"><label class="label">Right Field</label><select class="select" onchange="jset(${i},'right_field',this.value)">${optsField(j.right_source_id,j.right_field)}</select></div><div class="field"><label class="label">Many-to-many</label><label class="label"><input type="checkbox" onchange="jset(${i},'allow_many_to_many',this.checked)" ${j.allow_many_to_many?'checked':''}> Explicitly allow</label></div></div><button type="button" class="btn danger" onclick="plan.joins.splice(${i},1);renderJoins()">Remove relationship</button></div>`).join('');}
+function jset(i,k,v){plan.joins[i][k]=v;renderJoins()}
+function validateStage3(){if(!plan.sources.length){alert('Select data sources in Stage 2.');return}for(const j of plan.joins){if(!j.left_source_id||!j.left_field||!j.right_source_id||!j.right_field){alert('Complete every JOIN source and field before continuing.');return}}plan.period={field:document.getElementById('periodField').value,from:document.getElementById('periodFrom').value,to:document.getElementById('periodTo').value};goStage(4)}
+function renderVocab(){document.getElementById('vocab').innerHTML=VOCAB.map(x=>`<button type="button" onclick="addStep('${x}')">${x}</button>`).join('')}
+function addStep(op){plan.steps.push({op,config:{}});selected=plan.steps.length-1;renderSteps()}
+function removeStep(i){plan.steps.splice(i,1);selected=Math.min(selected,plan.steps.length-1);syncPlan();renderSteps()}
+function moveStep(i,d){const j=i+d;if(j<0||j>=plan.steps.length)return;[plan.steps[i],plan.steps[j]]=[plan.steps[j],plan.steps[i]];selected=j;syncPlan();renderSteps()}
+function renderSteps(){const box=document.getElementById('steps');if(!plan.steps.length){box.innerHTML='<div class="warning">Start with FROM, then JOIN/WHEN/WHERE/CALCULATE/IF and finish with THEN.</div>'}else box.innerHTML=plan.steps.map((s,i)=>`<div class="step ${selected===i?'selected':''}" onclick="selectStep(${i})"><span class="tag">${s.op}</span><div class="step-summary">${esc(stepSummary(s))}</div><div class="tools"><button type="button" class="mini" onclick="event.stopPropagation();moveStep(${i},-1)">↑</button><button type="button" class="mini" onclick="event.stopPropagation();moveStep(${i},1)">↓</button><button type="button" class="mini" onclick="event.stopPropagation();removeStep(${i})">×</button></div></div>`).join('');if(selected>=0)renderEditor();syncPlan()}
+function selectStep(i){selected=i;renderSteps()}
+function setx(k,v){plan.steps[selected].config[k]=v;syncPlan();renderSteps()}
+function stepSummary(s){const x=s.config||{};if(s.op==='FROM')return `Primary source: ${src(x.source_id)?.name||'Not selected'}`;if(s.op==='JOIN')return `${x.join_type||'INNER'} JOIN ${src(x.right_source_id)?.name||'source'} ON ${x.left_field||'field'} = ${x.right_field||'field'}`;if(s.op==='CALCULATE')return `${x.name||'Calculated field'} = ${x.operation||'operation'} ${x.expression_text||''}`;if(['WHERE','WHEN','IF','AND','OR','WHILE','EXCEPT'].includes(s.op))return `${x.left_text||'condition'} ${x.operator||''} ${x.right_text||x.value||''}`;if(s.op==='GROUP BY')return `Group by ${(x.fields||[]).join(', ')||'fields'}`;if(s.op==='STOP')return `Stop ${x.scope||'record'} when ${x.description||'condition'}`;return x.description||x.to||'Configure block'}
+function refSelect(type,name,obj){return `<div class="field"><label class="label">${name} Type</label><select class="select" onchange="setx('${type}_type',this.value);renderEditor()"><option value="field" ${obj.type!=='calculation'?'selected':''}>Source Field</option><option value="calculation" ${obj.type==='calculation'?'selected':''}>Calculated Field</option></select></div>`}
+function fieldRef(prefix,obj={}){const calc=obj.type==='calculation';return refSelect(prefix,prefix==='left'?'Left':'Right',obj)+(calc?`<div class="field"><label class="label">${prefix==='left'?'Left':'Right'} Calculation</label><select class="select" onchange="setx('${prefix}_name',this.value)"><option value="">Select calculation</option>${plan.calculations.map(c=>`<option value="${esc(c.name)}" ${c.name===obj.name?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>`:`<div class="field"><label class="label">${prefix==='left'?'Left':'Right'} Source</label><select class="select" onchange="setx('${prefix}_source_id',this.value);renderEditor()">${optsSource(obj.source_id)}</select></div><div class="field"><label class="label">${prefix==='left'?'Left':'Right'} Field</label><select class="select" onchange="setx('${prefix}_field',this.value)">${optsField(obj.source_id,obj.field)}</select></div>`)}
+function renderEditor(){if(selected<0)return;const s=plan.steps[selected],x=s.config||{},e=document.getElementById('editor');let h=`<div class="muted" style="margin-bottom:10px"><b>${s.op}</b> block</div>`;if(s.op==='FROM')h+=`<div class="field"><label class="label">Primary Approved Data Source</label><select class="select" onchange="setx('source_id',this.value)">${optsSource(x.source_id)}</select></div>`;else if(s.op==='JOIN')h+=`<div class="field"><label class="label">Join Type</label><select class="select" onchange="setx('join_type',this.value)">${['INNER','LEFT','RIGHT','OUTER'].map(v=>`<option ${v===x.join_type?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label class="label">Left Source</label><select class="select" onchange="setx('left_source_id',this.value);renderEditor()">${optsSource(x.left_source_id)}</select></div><div class="field"><label class="label">Left Field</label><select class="select" onchange="setx('left_field',this.value)">${optsField(x.left_source_id,x.left_field)}</select></div><div class="field"><label class="label">Right Source</label><select class="select" onchange="setx('right_source_id',this.value);renderEditor()">${optsSource(x.right_source_id)}</select></div><div class="field"><label class="label">Right Field</label><select class="select" onchange="setx('right_field',this.value)">${optsField(x.right_source_id,x.right_field)}</select></div><label class="label"><input type="checkbox" onchange="setx('allow_many_to_many',this.checked)" ${x.allow_many_to_many?'checked':''}> Allow many-to-many explicitly</label>`;else if(s.op==='CALCULATE')h+=`<div class="field"><label class="label">Calculated Field Name</label><input class="input" value="${esc(x.name||'')}" oninput="setx('name',this.value)"></div><div class="field"><label class="label">Calculation</label><select class="select" onchange="setx('operation',this.value);renderEditor()"><option value="">Select</option>${CALCS.map(v=>`<option ${v===x.operation?'selected':''}>${v}</option>`).join('')}</select></div>${fieldRef('left',x.left||{type:'field',source_id:x.left_source_id,field:x.left_field})}${fieldRef('right',x.right||{type:'field',source_id:x.right_source_id,field:x.right_field})}<div class="field"><label class="label">Expression / Business Meaning</label><input class="input" value="${esc(x.expression_text||'')}" placeholder="e.g. VAT Sales - Income Tax Sales" oninput="setx('expression_text',this.value)"></div>`;else if(['WHERE','WHEN','IF','AND','OR','WHILE','EXCEPT'].includes(s.op))h+=conditionEditor(x);else if(s.op==='GROUP BY')h+=`<div class="muted">Grouping fields are defined through calculated aggregates. Add a SUM/COUNT/AVERAGE calculation and select its group-by fields in the execution plan.</div>`;else if(s.op==='TO')h+=`<div class="field"><label class="label">TO</label><input class="input" value="${esc(x.to||'')}" oninput="setx('to',this.value)"></div>`;else if(s.op==='STOP')h+=`<div class="field"><label class="label">STOP Scope</label><select class="select" onchange="setx('scope',this.value)"><option>record</option><option>taxpayer</option><option>source</option><option>rule</option></select></div><div class="field"><label class="label">STOP Reason / Condition</label><textarea class="textarea" oninput="setx('description',this.value)">${esc(x.description||'')}</textarea></div>`;else if(['THEN','ELSE','CONTINUE'].includes(s.op))h+=`<div class="field"><label class="label">Action / Description</label><textarea class="textarea" oninput="setx('description',this.value)">${esc(x.description||'')}</textarea></div>`;e.innerHTML=h}
+function conditionEditor(x){const lt=x.left_type||'field',rt=x.right_type||'value';return `<div class="field"><label class="label">Left Type</label><select class="select" onchange="setx('left_type',this.value);renderEditor()"><option value="field" ${lt==='field'?'selected':''}>Source Field</option><option value="calculation" ${lt==='calculation'?'selected':''}>Calculated Field</option></select></div>${lt==='calculation'?`<div class="field"><label class="label">Left Calculation</label><select class="select" onchange="setx('left_name',this.value)"><option value="">Select</option>${plan.calculations.map(c=>`<option ${c.name===x.left_name?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>`:`<div class="field"><label class="label">Left Source</label><select class="select" onchange="setx('left_source_id',this.value);renderEditor()">${optsSource(x.left_source_id)}</select></div><div class="field"><label class="label">Left Field</label><select class="select" onchange="setx('left_field',this.value)">${optsField(x.left_source_id,x.left_field)}</select></div>`}<div class="field"><label class="label">Condition</label><select class="select" onchange="setx('operator',this.value);renderEditor()">${OPS.map(v=>`<option ${v===x.operator?'selected':''}>${v}</option>`).join('')}</select></div>${['EXISTS','NOT EXISTS'].includes(x.operator)?'':`<div class="field"><label class="label">Right Type</label><select class="select" onchange="setx('right_type',this.value);renderEditor()"><option value="value" ${rt!=='field'?'selected':''}>Value</option><option value="field" ${rt==='field'?'selected':''}>Field / Calculation</option></select></div>${rt==='field'?fieldRef('right',x.right||{type:x.right_ref_type||'field',source_id:x.right_source_id,field:x.right_field,name:x.right_name}):`<div class="field"><label class="label">Value</label><input class="input" value="${esc(x.value||'')}" oninput="setx('value',this.value)" placeholder="For IN/NOT IN use comma-separated values"></div>`}<div class="field"><label class="label">Business Explanation</label><input class="input" value="${esc(x.description||'')}" oninput="setx('description',this.value)"></div>`}
+function syncPlan(){let ids=new Set(selectedSources());plan.steps.forEach(s=>{const x=s.config||{};['source_id','left_source_id','right_source_id'].forEach(k=>{if(x[k])ids.add(Number(x[k]))});});if(plan.base_source?.source_id)ids.add(Number(plan.base_source.source_id));plan.sources=SOURCE_DATA.filter(s=>ids.has(s.id)).map(s=>({id:s.id,name:s.name,version:s.version,columns:s.columns,ref:''}));const from=plan.steps.find(s=>s.op==='FROM');if(from?.config?.source_id)plan.base_source={source_id:Number(from.config.source_id),name:src(from.config.source_id)?.name||''};plan.joins=plan.steps.filter(s=>s.op==='JOIN').map(s=>Object.assign({join_type:'INNER'},s.config));plan.filters=plan.steps.filter(s=>['WHERE','WHEN','WHILE','EXCEPT'].includes(s.op)).map(conditionObj);plan.conditions=plan.steps.filter(s=>['IF','AND','OR'].includes(s.op)).map(conditionObj);plan.calculations=plan.steps.filter(s=>s.op==='CALCULATE').map(calcObj);const stop=plan.steps.find(s=>s.op==='STOP');plan.stop=stop?.config||{};const el=plan.steps.find(s=>s.op==='ELSE');plan.else_description=el?.config?.description||'';const ex=plan.steps.find(s=>s.op==='EXCEPT');plan.except_description=ex?.config?.description||'';}
+function conditionObj(s){const x=s.config||{};return{clause:s.op,left:{type:x.left_type||'field',source_id:Number(x.left_source_id)||0,field:x.left_field||'',name:x.left_name||''},operator:x.operator||'=',right_type:x.right_type||'value',right:x.right_type==='field'?{type:x.right?.type||x.right_ref_type||'field',source_id:Number(x.right?.source_id||x.right_source_id)||0,field:x.right?.field||x.right_field||'',name:x.right?.name||x.right_name||''}:undefined,value:x.value||'',connector:s.op==='OR'?'OR':'AND',description:x.description||''}}
+function calcObj(s){const x=s.config||{};return{name:x.name||'',operation:x.operation||'',left:x.left||{type:'field',source_id:Number(x.left_source_id)||0,field:x.left_field||''},right:x.right||{type:'field',source_id:Number(x.right_source_id)||0,field:x.right_field||''},expression_text:x.expression_text||''}}
+function buildPlan(){syncPlan();const p=JSON.parse(JSON.stringify(plan));delete p.steps;p.exposure={type:document.getElementById('exposureType').value,field:document.getElementById('exposureField').value,minimum:document.getElementById('minimumExposure').value};return p}
+function addRequest(){const box=document.getElementById('requests');const d=document.createElement('div');d.className='calc-row';d.innerHTML='<div class="grid2"><div class="field"><label class="label">Request Title</label><input class="input" name="request_title"></div><div class="field"><label class="label">Period</label><input class="input" name="request_period"></div></div><div class="grid2"><div class="field"><label class="label">Purpose</label><input class="input" name="request_purpose"></div><div class="field"><label class="label">Evidence Type</label><input class="input" name="request_evidence"></div></div><label class="label"><input type="checkbox" name="request_mandatory" value="1" checked> Mandatory</label><button type="button" class="btn danger" onclick="this.parentElement.remove()">Remove</button>';box.appendChild(d)}
+function prepareSubmit(){validateStage2();if(!plan.sources.length){alert('Select at least one data source.');return false}if(!plan.base_source?.source_id){alert('Add a FROM block and select the primary data source in Stage 4.');goStage(4);return false}if(!plan.conditions.length&&!plan.filters.length&&!plan.calculations.length){alert('Build at least one calculation, filter or detection condition.');goStage(4);return false}document.getElementById('risk_description').value=document.querySelector('[name="rule_name"]').value;document.getElementById('rule_plan').value=JSON.stringify(buildPlan());const b=document.getElementById('submitRule');b.disabled=true;b.textContent='Generating interpretation and testing…';return true}
+document.getElementById('riskRuleForm').addEventListener('submit',function(e){if(!prepareSubmit())e.preventDefault()});
+(function init(){
+ try{
+  if(existing&&Object.keys(existing).length){
+   plan=Object.assign(plan,existing);plan.steps=plan.steps||[];
+   const ids=(plan.sources||[]).map(x=>Number(x.id));
+   document.querySelectorAll('.source-check').forEach(ch=>{ch.checked=ids.includes(Number(ch.value));});
+  }
+ }catch(e){}
+ renderMappings();
+ const pm=plan.period||{}; if(document.getElementById('periodField')) document.getElementById('periodField').value=pm.field||''; if(document.getElementById('periodFrom')) document.getElementById('periodFrom').value=pm.from||''; if(document.getElementById('periodTo')) document.getElementById('periodTo').value=pm.to||'';
+ renderVocab();
+})();
+</script>
+{% endblock %}
