@@ -69,6 +69,10 @@
     background: #9a6a00;
   }
 
+  .btn-info {
+    background: #286c8f;
+  }
+
   .status {
     display: inline-block;
     padding: 4px 9px;
@@ -103,8 +107,47 @@
     color: #59636c;
   }
 
+  .status-critical {
+    background: #f8dada;
+    color: #8b2222;
+  }
+
+  .status-high {
+    background: #ffe1d0;
+    color: #8a3d16;
+  }
+
+  .status-medium {
+    background: #fff0d2;
+    color: #765300;
+  }
+
+  .status-low {
+    background: #dff1e4;
+    color: #216438;
+  }
+
   .notice {
     margin-bottom: 15px;
+    padding: 12px;
+    border-radius: 6px;
+    background: #f3f7fb;
+    border: 1px solid #d9e3ec;
+  }
+
+  .notice-warning {
+    background: #fff8e8;
+    border-color: #ead7a2;
+  }
+
+  .notice-danger {
+    background: #fff0f0;
+    border-color: #e4b4b4;
+  }
+
+  .notice-success {
+    background: #eef9f1;
+    border-color: #b9d8c1;
   }
 
   .small {
@@ -129,21 +172,221 @@
   }
 
   .table td {
-    max-width: 260px;
+    max-width: 320px;
     word-break: break-word;
+    vertical-align: top;
   }
 
   .required {
     color: #a52a2a;
   }
 
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .metric-card {
+    border: 1px solid #dce3e9;
+    border-radius: 7px;
+    padding: 14px;
+    background: #fff;
+  }
+
+  .metric-value {
+    font-size: 23px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+
+  .metric-label {
+    font-size: 11px;
+    color: #687682;
+  }
+
+  .quality-score {
+    font-size: 30px;
+    font-weight: 700;
+  }
+
+  .quality-excellent {
+    color: #287a46;
+  }
+
+  .quality-good {
+    color: #4f7d3b;
+  }
+
+  .quality-review {
+    color: #9a6a00;
+  }
+
+  .quality-poor {
+    color: #a52a2a;
+  }
+
+  .profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .profile-card {
+    border: 1px solid #dce3e9;
+    border-radius: 7px;
+    padding: 14px;
+    background: #fff;
+  }
+
+  .profile-card h4 {
+    margin: 0 0 8px 0;
+  }
+
+  .bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 5px;
+    background: #e9edf1;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: #17365d;
+  }
+
+  .exception-card {
+    border: 1px solid #dce3e9;
+    border-radius: 7px;
+    padding: 14px;
+    margin-bottom: 10px;
+    background: #fff;
+  }
+
+  .exception-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .exception-title {
+    font-weight: 700;
+  }
+
+  .exception-values {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .value-box {
+    background: #f7f9fb;
+    border: 1px solid #e1e7ec;
+    border-radius: 5px;
+    padding: 9px;
+  }
+
+  .value-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #687682;
+    margin-bottom: 4px;
+  }
+
+  .value-content {
+    word-break: break-word;
+    font-family: monospace;
+    font-size: 11px;
+  }
+
+  details {
+    margin-top: 10px;
+  }
+
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .control-card {
+    border: 1px solid #dce3e9;
+    border-radius: 7px;
+    padding: 14px;
+    background: #fff;
+  }
+
+  .control-number {
+    font-size: 11px;
+    font-weight: 700;
+    color: #17365d;
+    margin-bottom: 5px;
+  }
+
+  .inline-form {
+    display: inline;
+  }
+
+  .cleaning-status {
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+  }
+
+  .cleaning-ready {
+    background: #eef9f1;
+    border: 1px solid #b9d8c1;
+    color: #216438;
+  }
+
+  .cleaning-blocked {
+    background: #fff0f0;
+    border: 1px solid #e4b4b4;
+    color: #8b2222;
+  }
+
+  .cleaning-review {
+    background: #fff8e8;
+    border: 1px solid #ead7a2;
+    color: #765300;
+  }
+
+  @media(max-width: 1000px) {
+    .metric-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .control-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   @media(max-width: 800px) {
-    .form-grid {
+    .form-grid,
+    .profile-grid {
       grid-template-columns: 1fr;
     }
 
     .form-grid .full {
       grid-column: auto;
+    }
+
+    .metric-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .exception-values {
+      grid-template-columns: 1fr;
     }
   }
 </style>
@@ -160,15 +403,21 @@
   <h2>Data Sources / Taxpayer Evidence Base</h2>
 
   <p class="muted">
-    Register, validate, review and approve the data sources that may be used
-    by the Virtual Tax Auditor.
+    Register, profile, validate, clean, review and approve the data sources
+    that may be used by the Virtual Tax Auditor.
   </p>
 
   <div class="notice" style="margin-top:12px;">
-    <b>Control principle:</b>
+
+    <b>Step 2C Control Principle:</b>
+
     Uploading a data source does not make it available to the VTA engine.
-    A source must pass validation and receive human approval before it can
-    be used for Taxpayer 360, Risk Assessment or AI Audit Analysis.
+
+    The original source is retained unchanged. The system profiles the source,
+    identifies quality issues, proposes safe transformations, records
+    exceptions and requires controlled human review before a cleaned version
+    can become available for Taxpayer 360, Risk Assessment or AI Audit Analysis.
+
   </div>
 
 </div>
@@ -191,6 +440,7 @@
     <div class="form-grid">
 
       <div>
+
         <label for="source_name">
           Source Name <span class="required">*</span>
         </label>
@@ -202,10 +452,12 @@
           placeholder="e.g. DT Payments"
           required
         >
+
       </div>
 
 
       <div>
+
         <label for="source_type">
           Source Type <span class="required">*</span>
         </label>
@@ -221,16 +473,20 @@
           </option>
 
           {% for source_type in source_types %}
+
           <option value="{{ source_type }}">
             {{ source_type }}
           </option>
+
           {% endfor %}
 
         </select>
+
       </div>
 
 
       <div>
+
         <label for="tax_type">
           Tax Type
         </label>
@@ -245,16 +501,20 @@
           </option>
 
           {% for tax_type in tax_types %}
+
           <option value="{{ tax_type }}">
             {{ tax_type }}
           </option>
+
           {% endfor %}
 
         </select>
+
       </div>
 
 
       <div>
+
         <label for="reporting_period">
           Reporting Period
         </label>
@@ -265,10 +525,12 @@
           name="reporting_period"
           placeholder="e.g. FY 2025/26"
         >
+
       </div>
 
 
       <div>
+
         <label for="owner_department">
           Source Owner / Department
         </label>
@@ -279,10 +541,12 @@
           name="owner_department"
           placeholder="e.g. Domestic Taxes"
         >
+
       </div>
 
 
       <div>
+
         <label for="source_description">
           Description
         </label>
@@ -293,6 +557,7 @@
           name="description"
           placeholder="Brief description of the source"
         >
+
       </div>
 
 
@@ -311,9 +576,14 @@
         >
 
         <div class="muted small" style="margin-top:6px;">
+
           Supported formats: CSV, XLS and XLSX.
-          The system will inspect the file before it becomes eligible
+
+          The system will inspect the source before it becomes eligible
           for approval.
+
+          The original uploaded file is retained unchanged.
+
         </div>
 
       </div>
@@ -327,7 +597,7 @@
         type="submit"
         class="btn"
       >
-        Upload & Validate
+        Upload & Profile
       </button>
 
     </div>
@@ -335,6 +605,811 @@
   </form>
 
 </div>
+
+
+<!-- ============================================================
+     DATA QUALITY / PROFILING RESULTS
+============================================================ -->
+
+{% if quality_profiles is defined and quality_profiles %}
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Data Quality & Profiling
+  </h3>
+
+  <p class="muted">
+    The following results show the structural and basic data-quality
+    assessment performed on registered data sources. Profiling does not
+    modify the original source.
+  </p>
+
+
+  {% for profile in quality_profiles %}
+
+  <div class="profile-card" style="margin-top:14px;">
+
+    <div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;">
+
+      <div>
+
+        <h4>
+          {{ profile.source_name }}
+        </h4>
+
+        <div class="muted small">
+
+          {{ profile.source_ref }}
+
+          {% if profile.version_number %}
+            · Version {{ profile.version_number }}
+          {% endif %}
+
+          {% if profile.original_filename %}
+            · {{ profile.original_filename }}
+          {% endif %}
+
+        </div>
+
+      </div>
+
+
+      {% if profile.quality_band == 'Excellent' %}
+
+      <span class="status status-approved">
+        Excellent
+      </span>
+
+      {% elif profile.quality_band == 'Good' %}
+
+      <span class="status status-low">
+        Good
+      </span>
+
+      {% elif profile.quality_band == 'Needs Review' %}
+
+      <span class="status status-medium">
+        Needs Review
+      </span>
+
+      {% else %}
+
+      <span class="status status-critical">
+        Poor
+      </span>
+
+      {% endif %}
+
+    </div>
+
+
+    <div class="metric-grid">
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Quality Score
+        </div>
+
+        <div class="quality-score
+          {% if profile.quality_score >= 90 %}
+            quality-excellent
+          {% elif profile.quality_score >= 75 %}
+            quality-good
+          {% elif profile.quality_score >= 50 %}
+            quality-review
+          {% else %}
+            quality-poor
+          {% endif %}
+        ">
+
+          {{ "%.1f"|format(profile.quality_score or 0) }}
+
+        </div>
+
+      </div>
+
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Records
+        </div>
+
+        <div class="metric-value">
+
+          {% if profile.record_count is not none %}
+            {{ "{:,}".format(profile.record_count) }}
+          {% else %}
+            —
+          {% endif %}
+
+        </div>
+
+      </div>
+
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Columns
+        </div>
+
+        <div class="metric-value">
+
+          {{ profile.column_count or 0 }}
+
+        </div>
+
+      </div>
+
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Issues
+        </div>
+
+        <div class="metric-value">
+
+          {{ profile.issue_count or 0 }}
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="metric-grid">
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Critical
+        </div>
+
+        <div class="metric-value">
+
+          {{ profile.critical_count or 0 }}
+
+        </div>
+
+      </div>
+
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          High
+        </div>
+
+        <div class="metric-value">
+
+          {{ profile.high_count or 0 }}
+
+        </div>
+
+      </div>
+
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Medium
+        </div>
+
+        <div class="metric-value">
+
+          {{ profile.medium_count or 0 }}
+
+        </div>
+
+      </div>
+
+
+      <div class="metric-card">
+
+        <div class="metric-label">
+          Low / Informational
+        </div>
+
+        <div class="metric-value">
+
+          {{ profile.low_count or 0 }}
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    {% if profile.columns %}
+
+    <details>
+
+      <summary>
+        View Column Profile
+      </summary>
+
+      <div class="table-wrap" style="margin-top:10px;">
+
+        <table class="table">
+
+          <thead>
+
+            <tr>
+              <th>Column</th>
+              <th>Detected Type</th>
+              <th>Non-null</th>
+              <th>Missing</th>
+              <th>Missing %</th>
+              <th>Unique</th>
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            {% for col in profile.columns %}
+
+            <tr>
+
+              <td>
+                <b>{{ col.name }}</b>
+              </td>
+
+              <td>
+                {{ col.detected_type or 'Unknown' }}
+              </td>
+
+              <td>
+                {{ col.non_null_count or 0 }}
+              </td>
+
+              <td>
+                {{ col.missing_count or 0 }}
+              </td>
+
+              <td>
+
+                {% if col.missing_pct is not none %}
+                  {{ "%.2f"|format(col.missing_pct) }}%
+                {% else %}
+                  —
+                {% endif %}
+
+              </td>
+
+              <td>
+                {{ col.unique_count or 0 }}
+              </td>
+
+            </tr>
+
+            {% endfor %}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </details>
+
+    {% endif %}
+
+
+    {% if profile.warnings %}
+
+    <details>
+
+      <summary>
+        View Data Quality Warnings
+      </summary>
+
+      <div style="margin-top:10px;">
+
+        {% for warning in profile.warnings %}
+
+        <div class="notice notice-warning">
+          {{ warning }}
+        </div>
+
+        {% endfor %}
+
+      </div>
+
+    </details>
+
+    {% endif %}
+
+
+    {% if profile.errors %}
+
+    <details>
+
+      <summary>
+        View Validation Errors
+      </summary>
+
+      <div style="margin-top:10px;">
+
+        {% for error in profile.errors %}
+
+        <div class="notice notice-danger">
+          {{ error }}
+        </div>
+
+        {% endfor %}
+
+      </div>
+
+    </details>
+
+    {% endif %}
+
+
+    {% if profile.id %}
+
+    <div class="actions">
+
+      <a
+        class="btn btn-secondary"
+        href="{{ url_for('data_source_versions', source_id=profile.source_id) }}"
+      >
+        View Source Versions
+      </a>
+
+    </div>
+
+    {% endif %}
+
+  </div>
+
+  {% endfor %}
+
+</div>
+
+{% endif %}
+
+
+<!-- ============================================================
+     CLEANING EXCEPTIONS
+============================================================ -->
+
+{% if cleaning_exceptions is defined %}
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Step 2C — Data Quality Exceptions
+  </h3>
+
+  <p class="muted">
+    Exceptions that cannot safely be resolved without a controlled decision
+    are retained here. The original value is never silently overwritten.
+  </p>
+
+
+  {% if cleaning_exceptions %}
+
+  {% for exception in cleaning_exceptions %}
+
+  <div class="exception-card">
+
+    <div class="exception-header">
+
+      <div>
+
+        <div class="exception-title">
+
+          {{ exception.description }}
+
+        </div>
+
+        <div class="muted small" style="margin-top:4px;">
+
+          Source:
+          {{ exception.source_ref or '—' }}
+
+          {% if exception.column_name %}
+            · Column: {{ exception.column_name }}
+          {% endif %}
+
+          {% if exception.row_reference %}
+            · Row: {{ exception.row_reference }}
+          {% endif %}
+
+        </div>
+
+      </div>
+
+
+      {% if exception.severity == 'Critical' %}
+
+      <span class="status status-critical">
+        Critical
+      </span>
+
+      {% elif exception.severity == 'High' %}
+
+      <span class="status status-high">
+        High
+      </span>
+
+      {% elif exception.severity == 'Medium' %}
+
+      <span class="status status-medium">
+        Medium
+      </span>
+
+      {% else %}
+
+      <span class="status status-low">
+        Low
+      </span>
+
+      {% endif %}
+
+    </div>
+
+
+    <div class="exception-values">
+
+      <div class="value-box">
+
+        <div class="value-label">
+          Original Value
+        </div>
+
+        <div class="value-content">
+
+          {{ exception.original_value or '—' }}
+
+        </div>
+
+      </div>
+
+
+      <div class="value-box">
+
+        <div class="value-label">
+          Proposed Value
+        </div>
+
+        <div class="value-content">
+
+          {{ exception.proposed_value or 'No automatic correction proposed' }}
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    {% if exception.status %}
+
+    <div style="margin-top:10px;">
+
+      <b>Status:</b>
+
+      {% if exception.status in ['Resolved','Accepted','Approved'] %}
+
+      <span class="status status-approved">
+        {{ exception.status }}
+      </span>
+
+      {% elif exception.status in ['Rejected','Blocked'] %}
+
+      <span class="status status-rejected">
+        {{ exception.status }}
+      </span>
+
+      {% else %}
+
+      <span class="status status-pending">
+        {{ exception.status }}
+      </span>
+
+      {% endif %}
+
+    </div>
+
+    {% endif %}
+
+
+    {% if exception.status not in ['Resolved','Accepted','Rejected','Approved'] %}
+
+    <form
+      method="POST"
+      action="{{ url_for('data_quality_exception_resolve', exception_id=exception.id) }}"
+      style="margin-top:12px;"
+    >
+
+      <div class="form-grid">
+
+        <div>
+
+          <label>
+            Resolution
+          </label>
+
+          <select
+            name="resolution"
+            required
+          >
+
+            <option value="">
+              -- Select Resolution --
+            </option>
+
+            <option value="Accept Correction">
+              Accept Correction
+            </option>
+
+            <option value="Reject Correction">
+              Reject Correction / Retain Original
+            </option>
+
+            <option value="Mark as Valid">
+              Mark as Valid
+            </option>
+
+            <option value="Override">
+              Override with Corrected Value
+            </option>
+
+          </select>
+
+        </div>
+
+
+        <div>
+
+          <label>
+            Final Value
+          </label>
+
+          <input
+            type="text"
+            name="final_value"
+            placeholder="Required for Override"
+          >
+
+        </div>
+
+
+        <div class="full">
+
+          <label>
+            Review Comment
+          </label>
+
+          <textarea
+            name="comments"
+            rows="3"
+            placeholder="Explain the decision or provide supporting information."
+            required
+          ></textarea>
+
+        </div>
+
+      </div>
+
+
+      <div class="actions">
+
+        <button
+          type="submit"
+          class="btn btn-success"
+        >
+          Resolve Exception
+        </button>
+
+      </div>
+
+    </form>
+
+    {% endif %}
+
+  </div>
+
+  {% endfor %}
+
+  {% else %}
+
+  <div class="empty">
+
+    <b>No unresolved data-quality exceptions.</b>
+
+    <div class="muted" style="margin-top:6px;">
+
+      No human-review exception currently requires action.
+
+    </div>
+
+  </div>
+
+  {% endif %}
+
+</div>
+
+{% endif %}
+
+
+<!-- ============================================================
+     CLEANING / READINESS
+============================================================ -->
+
+{% if cleaning_status is defined %}
+
+<div class="card section">
+
+  <h3 class="section-title">
+    Clean Data Readiness
+  </h3>
+
+
+  {% if cleaning_status == 'Ready' %}
+
+  <div class="cleaning-status cleaning-ready">
+
+    <b>Ready for Clean Version Approval</b>
+
+    <div class="small" style="margin-top:4px;">
+
+      All required data-quality conditions have been satisfied.
+
+    </div>
+
+  </div>
+
+  {% elif cleaning_status == 'Blocked' %}
+
+  <div class="cleaning-status cleaning-blocked">
+
+    <b>Cleaning Blocked</b>
+
+    <div class="small" style="margin-top:4px;">
+
+      Critical or unresolved data-quality issues require action before
+      the cleaned data can proceed.
+
+    </div>
+
+  </div>
+
+  {% else %}
+
+  <div class="cleaning-status cleaning-review">
+
+    <b>Cleaning Requires Review</b>
+
+    <div class="small" style="margin-top:4px;">
+
+      Review and resolve the outstanding data-quality exceptions before
+      generating or approving the cleaned version.
+
+    </div>
+
+  </div>
+
+  {% endif %}
+
+
+  {% if cleaning_summary is defined %}
+
+  <div class="metric-grid">
+
+    <div class="metric-card">
+
+      <div class="metric-label">
+        Original Records
+      </div>
+
+      <div class="metric-value">
+
+        {{ "{:,}".format(cleaning_summary.original_records or 0) }}
+
+      </div>
+
+    </div>
+
+
+    <div class="metric-card">
+
+      <div class="metric-label">
+        Records Reviewed
+      </div>
+
+      <div class="metric-value">
+
+        {{ "{:,}".format(cleaning_summary.records_reviewed or 0) }}
+
+      </div>
+
+    </div>
+
+
+    <div class="metric-card">
+
+      <div class="metric-label">
+        Automatic Changes
+      </div>
+
+      <div class="metric-value">
+
+        {{ "{:,}".format(cleaning_summary.automatic_changes or 0) }}
+
+      </div>
+
+    </div>
+
+
+    <div class="metric-card">
+
+      <div class="metric-label">
+        Unresolved Exceptions
+      </div>
+
+      <div class="metric-value">
+
+        {{ "{:,}".format(cleaning_summary.unresolved or 0) }}
+
+      </div>
+
+    </div>
+
+  </div>
+
+  {% endif %}
+
+
+  {% if cleaning_status == 'Ready' and source_for_cleaning is defined and source_for_cleaning %}
+
+  <form
+    method="POST"
+    action="{{ url_for('data_source_generate_clean_version', source_id=source_for_cleaning.id) }}"
+    style="margin-top:15px;"
+  >
+
+    <div class="notice">
+
+      <b>Controlled Clean Version</b>
+
+      <div class="small" style="margin-top:5px;">
+
+        Generating the clean version will create a new controlled data
+        artifact linked to the original source. The original file will
+        remain unchanged.
+
+      </div>
+
+    </div>
+
+
+    <div class="actions">
+
+      <button
+        type="submit"
+        class="btn btn-success"
+      >
+        Generate Clean Version
+      </button>
+
+    </div>
+
+  </form>
+
+  {% endif %}
+
+</div>
+
+{% endif %}
 
 
 <!-- ============================================================
@@ -348,8 +1423,10 @@
   </h3>
 
   <p class="muted">
-    These sources have been uploaded but are not yet approved for use
-    by the Virtual Tax Auditor.
+
+    These sources have been uploaded and profiled but are not yet approved
+    for use by the Virtual Tax Auditor.
+
   </p>
 
 
@@ -369,6 +1446,7 @@
           <th>File</th>
           <th>Records</th>
           <th>Validation</th>
+          <th>Quality</th>
           <th>Status</th>
           <th>Uploaded By</th>
           <th>Uploaded</th>
@@ -386,13 +1464,19 @@
         <tr>
 
           <td>
-            <b>{{ source.source_name }}</b>
+
+            <b>
+              {{ source.source_name }}
+            </b>
 
             {% if source.source_type %}
+
             <div class="muted small">
               {{ source.source_type }}
             </div>
+
             {% endif %}
+
           </td>
 
 
@@ -412,11 +1496,17 @@
 
 
           <td>
+
             {% if source.record_count is defined and source.record_count is not none %}
+
               {{ "{:,}".format(source.record_count) }}
+
             {% else %}
+
               —
+
             {% endif %}
+
           </td>
 
 
@@ -424,27 +1514,62 @@
 
             {% if source.validation_status == 'Passed' %}
 
-              <span class="status status-approved">
-                Passed
-              </span>
+            <span class="status status-approved">
+              Passed
+            </span>
 
-            {% elif source.validation_status == 'Warning' %}
+            {% elif source.validation_status in ['Warnings','Warning'] %}
 
-              <span class="status status-pending">
-                Warning
-              </span>
+            <span class="status status-pending">
+              Warning
+            </span>
 
             {% elif source.validation_status == 'Failed' %}
 
-              <span class="status status-rejected">
-                Failed
-              </span>
+            <span class="status status-rejected">
+              Failed
+            </span>
 
             {% else %}
 
-              <span class="status status-pending">
-                {{ source.validation_status or 'Pending' }}
-              </span>
+            <span class="status status-pending">
+              {{ source.validation_status or 'Pending' }}
+            </span>
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {% if source.quality_band == 'Excellent' %}
+
+            <span class="status status-approved">
+              Excellent
+            </span>
+
+            {% elif source.quality_band == 'Good' %}
+
+            <span class="status status-low">
+              Good
+            </span>
+
+            {% elif source.quality_band == 'Needs Review' %}
+
+            <span class="status status-medium">
+              Review
+            </span>
+
+            {% elif source.quality_band == 'Poor' %}
+
+            <span class="status status-critical">
+              Poor
+            </span>
+
+            {% else %}
+
+            —
 
             {% endif %}
 
@@ -455,35 +1580,36 @@
 
             {% set s = source.version_status or source.status or 'Draft' %}
 
+
             {% if s == 'Approved' %}
 
-              <span class="status status-approved">
-                Approved
-              </span>
+            <span class="status status-approved">
+              Approved
+            </span>
 
             {% elif s == 'Rejected' %}
 
-              <span class="status status-rejected">
-                Rejected
-              </span>
+            <span class="status status-rejected">
+              Rejected
+            </span>
 
             {% elif s == 'Needs Revision' %}
 
-              <span class="status status-revision">
-                Needs Revision
-              </span>
+            <span class="status status-revision">
+              Needs Revision
+            </span>
 
             {% elif s == 'Superseded' %}
 
-              <span class="status status-superseded">
-                Superseded
-              </span>
+            <span class="status status-superseded">
+              Superseded
+            </span>
 
             {% else %}
 
-              <span class="status status-draft">
-                {{ s }}
-              </span>
+            <span class="status status-draft">
+              {{ s }}
+            </span>
 
             {% endif %}
 
@@ -502,9 +1628,9 @@
 
           <td>
 
-            <div class="actions">
+            {% if source.id is defined %}
 
-              {% if source.id is defined %}
+            <div class="actions">
 
               <a
                 class="btn btn-secondary"
@@ -513,9 +1639,9 @@
                 Review
               </a>
 
-              {% endif %}
-
             </div>
+
+            {% endif %}
 
           </td>
 
@@ -536,7 +1662,9 @@
     <b>No data sources are currently awaiting approval.</b>
 
     <div class="muted" style="margin-top:6px;">
-      Newly uploaded sources will appear here after validation.
+
+      Newly uploaded sources will appear here after profiling.
+
     </div>
 
   </div>
@@ -557,8 +1685,11 @@
   </h3>
 
   <p class="muted">
+
     All registered data sources and their current approval status.
+
     Previous versions remain retained for auditability.
+
   </p>
 
 
@@ -579,6 +1710,7 @@
           <th>Period</th>
           <th>Version</th>
           <th>Records</th>
+          <th>Quality</th>
           <th>Status</th>
           <th>Current Use</th>
           <th>Action</th>
@@ -601,9 +1733,11 @@
             </b>
 
             {% if source.description %}
+
             <div class="muted small">
               {{ source.description }}
             </div>
+
             {% endif %}
 
           </td>
@@ -637,9 +1771,48 @@
           <td>
 
             {% if source.record_count is defined and source.record_count is not none %}
+
               {{ "{:,}".format(source.record_count) }}
+
             {% else %}
+
               —
+
+            {% endif %}
+
+          </td>
+
+
+          <td>
+
+            {% if source.quality_band == 'Excellent' %}
+
+            <span class="status status-approved">
+              Excellent
+            </span>
+
+            {% elif source.quality_band == 'Good' %}
+
+            <span class="status status-low">
+              Good
+            </span>
+
+            {% elif source.quality_band == 'Needs Review' %}
+
+            <span class="status status-medium">
+              Review
+            </span>
+
+            {% elif source.quality_band == 'Poor' %}
+
+            <span class="status status-critical">
+              Poor
+            </span>
+
+            {% else %}
+
+            —
+
             {% endif %}
 
           </td>
@@ -649,35 +1822,36 @@
 
             {% set s = source.version_status or source.status or 'Draft' %}
 
+
             {% if s == 'Approved' %}
 
-              <span class="status status-approved">
-                Approved
-              </span>
+            <span class="status status-approved">
+              Approved
+            </span>
 
             {% elif s == 'Rejected' %}
 
-              <span class="status status-rejected">
-                Rejected
-              </span>
+            <span class="status status-rejected">
+              Rejected
+            </span>
 
             {% elif s == 'Needs Revision' %}
 
-              <span class="status status-revision">
-                Needs Revision
-              </span>
+            <span class="status status-revision">
+              Needs Revision
+            </span>
 
             {% elif s == 'Superseded' %}
 
-              <span class="status status-superseded">
-                Superseded
-              </span>
+            <span class="status status-superseded">
+              Superseded
+            </span>
 
             {% else %}
 
-              <span class="status status-draft">
-                {{ s }}
-              </span>
+            <span class="status status-draft">
+              {{ s }}
+            </span>
 
             {% endif %}
 
@@ -688,15 +1862,15 @@
 
             {% if s == 'Approved' %}
 
-              <span class="status status-approved">
-                Available to VTA
-              </span>
+            <span class="status status-approved">
+              Available to VTA
+            </span>
 
             {% else %}
 
-              <span class="status status-draft">
-                Not Available
-              </span>
+            <span class="status status-draft">
+              Not Available
+            </span>
 
             {% endif %}
 
@@ -739,7 +1913,9 @@
     <b>No registered data sources yet.</b>
 
     <div class="muted" style="margin-top:6px;">
+
       Use the registration form above to upload the first data source.
+
     </div>
 
   </div>
@@ -750,91 +1926,144 @@
 
 
 <!-- ============================================================
-     CONTROL INFORMATION
+     STEP 2C CONTROL INFORMATION
 ============================================================ -->
 
 <div class="card section">
 
   <h3 class="section-title">
-    Data Source Control
+    Step 2C — Data Quality & Cleaning Controls
   </h3>
 
-  <div class="grid">
 
-    <div class="card">
+  <div class="control-grid">
 
-      <div class="label">
-        1. Upload
+
+    <div class="control-card">
+
+      <div class="control-number">
+        2C-1
       </div>
 
-      <div class="muted">
-        The source is registered and stored as a controlled version.
-      </div>
+      <b>Profile</b>
 
-    </div>
+      <div class="muted small" style="margin-top:5px;">
 
+        Inspect records, columns, data types, missing values, duplicates
+        and structural quality.
 
-    <div class="card">
-
-      <div class="label">
-        2. Validate
-      </div>
-
-      <div class="muted">
-        The system checks the structure, records and basic data quality.
       </div>
 
     </div>
 
 
-    <div class="card">
+    <div class="control-card">
 
-      <div class="label">
-        3. Human Review
+      <div class="control-number">
+        2C-2
       </div>
 
-      <div class="muted">
-        An authorised user reviews the source and validation results.
-      </div>
+      <b>Classify Issues</b>
 
-    </div>
+      <div class="muted small" style="margin-top:5px;">
 
+        Separate safe transformations from issues requiring human review.
 
-    <div class="card">
-
-      <div class="label">
-        4. Approve
-      </div>
-
-      <div class="muted">
-        Only approved versions become eligible for VTA analysis.
       </div>
 
     </div>
 
 
-    <div class="card">
+    <div class="control-card">
 
-      <div class="label">
-        5. Version Control
+      <div class="control-number">
+        2C-3
       </div>
 
-      <div class="muted">
-        New versions do not overwrite historical versions.
+      <b>Propose Cleaning</b>
+
+      <div class="muted small" style="margin-top:5px;">
+
+        Generate controlled proposed corrections without modifying the
+        original source.
+
       </div>
 
     </div>
 
 
-    <div class="card">
+    <div class="control-card">
 
-      <div class="label">
-        6. Audit Trail
+      <div class="control-number">
+        2C-4
       </div>
 
-      <div class="muted">
-        Upload, validation, review and approval actions are retained.
+      <b>Resolve Exceptions</b>
+
+      <div class="muted small" style="margin-top:5px;">
+
+        Human reviewers accept, reject, override or validate exceptions.
+
       </div>
+
+    </div>
+
+
+    <div class="control-card">
+
+      <div class="control-number">
+        2C-5
+      </div>
+
+      <b>Clean Version</b>
+
+      <div class="muted small" style="margin-top:5px;">
+
+        Generate a controlled cleaned version linked to the original source.
+
+      </div>
+
+    </div>
+
+
+    <div class="control-card">
+
+      <div class="control-number">
+        2C-6
+      </div>
+
+      <b>Approval & Lineage</b>
+
+      <div class="muted small" style="margin-top:5px;">
+
+        Only an approved, traceable version becomes eligible for VTA use.
+
+      </div>
+
+    </div>
+
+
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     DATA SOURCE CONTROL PRINCIPLE
+============================================================ -->
+
+<div class="card section">
+
+  <div class="notice notice-success">
+
+    <b>Data Governance Principle</b>
+
+    <div class="muted small" style="margin-top:6px;">
+
+      The original uploaded dataset remains immutable. Every proposed
+      transformation, exception resolution, cleaned version, approval
+      decision and downstream use must remain traceable to the source
+      version from which it originated.
 
     </div>
 
