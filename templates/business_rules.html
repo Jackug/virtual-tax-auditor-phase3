@@ -1,520 +1,1245 @@
 {% extends "base.html" %}
 {% block title %}Business Rules / Risk Rule Library{% endblock %}
+
 {% block content %}
+
 <style>
-.br-wrap{max-width:1450px;margin:0 auto;padding:24px}.br-head{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:20px}
-.br-head h1{margin:0;color:#102f55;font-size:30px}.muted{color:#64748b;font-size:13px}
-.btn{display:inline-block;text-decoration:none;border-radius:7px;padding:10px 15px;font-weight:700;font-size:13px;border:1px solid #cbd5e1;background:#fff;color:#27496b}.primary{background:#1f537f;color:#fff;border-color:#1f537f}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.stat{background:#fff;border:1px solid #d8e0ea;border-radius:10px;padding:17px}.stat .k{font-size:12px;color:#64748b}.stat .v{font-size:27px;font-weight:800;color:#102f55;margin-top:5px}
-.panel{background:#fff;border:1px solid #d8e0ea;border-radius:10px;margin-bottom:18px;overflow:hidden}.panel-pad{padding:18px}.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end}.label{display:block;font-size:11px;font-weight:800;color:#334155;margin-bottom:5px}.input,.select{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:6px;padding:10px;background:#fff}
-.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;font-size:12px}.table th{background:#f5f8fb;color:#334155;text-align:left;padding:11px;border-bottom:1px solid #d8e0ea}.table td{padding:12px 11px;border-bottom:1px solid #e6ebf1;vertical-align:top}.table tr:hover{background:#fbfdff}
-.badge{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10px;font-weight:800}.draft{background:#fef3c7;color:#92400e}.review{background:#dbeafe;color:#1e40af}.active{background:#dcfce7;color:#166534}.approved{background:#dcfce7;color:#166534}.rejected{background:#fee2e2;color:#991b1b}.suspended{background:#f1f5f9;color:#475569}.retired{background:#e2e8f0;color:#334155}
-.logic{max-width:330px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px;font-family:ui-monospace,monospace;font-size:10px;white-space:pre-wrap;max-height:70px;overflow:hidden}
-.actions{display:flex;gap:5px;flex-wrap:wrap}.action{padding:6px 9px;border:1px solid #cbd5e1;border-radius:5px;text-decoration:none;color:#294c6e;background:#fff;font-size:11px}
-.empty{padding:45px;text-align:center;color:#64748b}.notice{padding:14px 16px;background:#f7fafc;border:1px solid #d8e0ea;border-radius:8px;color:#27496b;font-size:12px}
-@media(max-width:900px){.stats{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr 1fr}.br-head{align-items:flex-start;flex-direction:column}}
+.br-wrap{
+    max-width:1450px;
+    margin:0 auto;
+    padding:24px
+}
+
+.br-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:20px;
+    margin-bottom:20px
+}
+
+.br-head h1{
+    margin:0;
+    color:#102f55;
+    font-size:30px
+}
+
+.muted{
+    color:#64748b;
+    font-size:13px
+}
+
+.btn{
+    display:inline-block;
+    text-decoration:none;
+    border-radius:7px;
+    padding:10px 15px;
+    font-weight:700;
+    font-size:13px;
+    border:1px solid #cbd5e1;
+    background:#fff;
+    color:#27496b;
+    cursor:pointer
+}
+
+.primary{
+    background:#1f537f;
+    color:#fff;
+    border-color:#1f537f
+}
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:14px;
+    margin-bottom:18px
+}
+
+.stat{
+    background:#fff;
+    border:1px solid #d8e0ea;
+    border-radius:10px;
+    padding:17px
+}
+
+.stat .k{
+    font-size:12px;
+    color:#64748b
+}
+
+.stat .v{
+    font-size:27px;
+    font-weight:800;
+    color:#102f55;
+    margin-top:5px
+}
+
+.panel{
+    background:#fff;
+    border:1px solid #d8e0ea;
+    border-radius:10px;
+    margin-bottom:18px;
+    overflow:hidden
+}
+
+.panel-pad{
+    padding:18px
+}
+
+.filters{
+    display:grid;
+    grid-template-columns:2fr 1fr 1fr 1fr auto;
+    gap:10px;
+    align-items:end
+}
+
+.label{
+    display:block;
+    font-size:11px;
+    font-weight:800;
+    color:#334155;
+    margin-bottom:5px
+}
+
+.input,
+.select{
+    width:100%;
+    box-sizing:border-box;
+    border:1px solid #cbd5e1;
+    border-radius:6px;
+    padding:10px;
+    background:#fff
+}
+
+.input:focus,
+.select:focus{
+    outline:none;
+    border-color:#2563eb;
+    box-shadow:0 0 0 2px rgba(37,99,235,.08)
+}
+
+.table-wrap{
+    overflow:auto
+}
+
+.table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12px
+}
+
+.table th{
+    background:#f5f8fb;
+    color:#334155;
+    text-align:left;
+    padding:11px;
+    border-bottom:1px solid #d8e0ea;
+    white-space:nowrap
+}
+
+.table td{
+    padding:12px 11px;
+    border-bottom:1px solid #e6ebf1;
+    vertical-align:top
+}
+
+.table tr:hover{
+    background:#fbfdff
+}
+
+.badge{
+    display:inline-block;
+    border-radius:999px;
+    padding:4px 9px;
+    font-size:10px;
+    font-weight:800;
+    white-space:nowrap
+}
+
+.draft{
+    background:#fef3c7;
+    color:#92400e
+}
+
+.review{
+    background:#dbeafe;
+    color:#1e40af
+}
+
+.active{
+    background:#dcfce7;
+    color:#166534
+}
+
+.approved{
+    background:#dcfce7;
+    color:#166534
+}
+
+.rejected{
+    background:#fee2e2;
+    color:#991b1b
+}
+
+.suspended{
+    background:#f1f5f9;
+    color:#475569
+}
+
+.retired{
+    background:#e2e8f0;
+    color:#334155
+}
+
+.logic{
+    max-width:330px;
+    background:#f8fafc;
+    border:1px solid #e2e8f0;
+    border-radius:6px;
+    padding:7px;
+    font-family:ui-monospace,monospace;
+    font-size:10px;
+    white-space:pre-wrap;
+    max-height:90px;
+    overflow:auto
+}
+
+.actions{
+    display:flex;
+    gap:5px;
+    flex-wrap:wrap
+}
+
+.action{
+    padding:6px 9px;
+    border:1px solid #cbd5e1;
+    border-radius:5px;
+    text-decoration:none;
+    color:#294c6e;
+    background:#fff;
+    font-size:11px
+}
+
+.action:hover{
+    background:#eef5fb
+}
+
+.empty{
+    padding:45px;
+    text-align:center;
+    color:#64748b
+}
+
+.notice{
+    padding:14px 16px;
+    background:#f7fafc;
+    border:1px solid #d8e0ea;
+    border-radius:8px;
+    color:#27496b;
+    font-size:12px
+}
+
+.engine-ready{
+    display:inline-flex;
+    align-items:center;
+    gap:5px
+}
+
+.engine-ready::before{
+    content:"";
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#16a34a;
+    display:inline-block
+}
+
+.engine-blocked{
+    display:inline-flex;
+    align-items:center;
+    gap:5px
+}
+
+.engine-blocked::before{
+    content:"";
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#94a3b8;
+    display:inline-block
+}
+
+.results-count{
+    margin-top:12px;
+    font-size:12px;
+    color:#64748b
+}
+
+@media(max-width:1100px){
+
+    .filters{
+        grid-template-columns:1fr 1fr
+    }
+
+    .filters > div:last-child{
+        grid-column:span 2
+    }
+}
+
+@media(max-width:900px){
+
+    .stats{
+        grid-template-columns:1fr 1fr
+    }
+
+    .br-head{
+        align-items:flex-start;
+        flex-direction:column
+    }
+}
+
+@media(max-width:600px){
+
+    .br-wrap{
+        padding:12px
+    }
+
+    .stats{
+        grid-template-columns:1fr
+    }
+
+    .filters{
+        grid-template-columns:1fr
+    }
+
+    .filters > div:last-child{
+        grid-column:auto
+    }
+}
 </style>
+
 
 <div class="br-wrap">
 
-  <div class="br-head">
-    <div>
-      <div class="muted">
-        Virtual Tax Auditor · Business Rule Management
-      </div>
-
-      <h1>
-        Business Rules / Risk Rule Library
-      </h1>
-
-      <div class="muted">
-        Analyst-defined executable rules used by the Risk Engine
-        to identify, rank and explain taxpayer risks.
-      </div>
-    </div>
-
-    <a class="btn primary"
-       href="{{ url_for('business_rule_create') }}">
-      + Create Risk Rule
-    </a>
-  </div>
-
-  {% set ns = namespace(total=0,active=0,draft=0,review=0) %}
-
-  {% for r in rules %}
-
-    {% set ns.total = ns.total + 1 %}
-
-    {% if r['latest_status'] in ['Active','Approved'] %}
-      {% set ns.active = ns.active + 1 %}
-    {% endif %}
-
-    {% if r['latest_status']=='Draft' %}
-      {% set ns.draft = ns.draft + 1 %}
-    {% endif %}
-
-    {% if r['latest_status'] in ['Under Review','Review'] %}
-      {% set ns.review = ns.review + 1 %}
-    {% endif %}
-
-  {% endfor %}
-
-  <div class="stats">
-
-    <div class="stat">
-      <div class="k">Total Risk Rules</div>
-      <div class="v">{{ ns.total }}</div>
-    </div>
-
-    <div class="stat">
-      <div class="k">Active / Approved</div>
-      <div class="v">{{ ns.active }}</div>
-    </div>
-
-    <div class="stat">
-      <div class="k">Draft</div>
-      <div class="v">{{ ns.draft }}</div>
-    </div>
-
-    <div class="stat">
-      <div class="k">Under Review</div>
-      <div class="v">{{ ns.review }}</div>
-    </div>
-
-  </div>
-
-  <div class="panel">
-
-    <div class="panel-pad">
-
-      <form id="ruleFilters"
-            class="filters"
-            onsubmit="return false;">
+    <!-- HEADER -->
+    <div class="br-head">
 
         <div>
-          <label class="label">Search</label>
 
-          <input class="input"
-                 id="filterSearch"
-                 placeholder="Rule name, reference or category">
+            <div class="muted">
+                Virtual Tax Auditor · Business Rule Management
+            </div>
+
+            <h1>
+                Business Rules / Risk Rule Library
+            </h1>
+
+            <div class="muted">
+                Analyst-defined executable rules used by the Risk Engine
+                to identify, rank and explain taxpayer risks.
+            </div>
+
         </div>
 
-        <div>
-          <label class="label">Status</label>
-
-          <select class="select" id="filterStatus">
-            <option value="">All Statuses</option>
-
-            {% for s in [
-              'Draft',
-              'Under Review',
-              'Approved',
-              'Active',
-              'Suspended',
-              'Retired',
-              'Rejected'
-            ] %}
-
-            <option value="{{ s }}">
-              {{ s }}
-            </option>
-
-            {% endfor %}
-          </select>
-        </div>
-
-        <div>
-          <label class="label">Risk Category</label>
-
-          <select class="select" id="filterCategory">
-
-            <option value="">
-              All Categories
-            </option>
-
-            {% for c in [
-              'Sales Reconciliation',
-              'Purchases / Imports Reconciliation',
-              'VAT Risk',
-              'CIT Risk',
-              'PAYE Risk',
-              'WHT Risk',
-              'Registration Risk',
-              'Payment Behaviour',
-              'Assessment Behaviour',
-              'Third-Party Mismatch',
-              'Sector / Peer Risk',
-              'Other'
-            ] %}
-
-            <option value="{{ c }}">
-              {{ c }}
-            </option>
-
-            {% endfor %}
-          </select>
-        </div>
-
-        <div>
-          <label class="label">Tax Type</label>
-
-          <select class="select" id="filterTax">
-
-            <option value="">
-              All Tax Types
-            </option>
-
-            {% for t in [
-              'General',
-              'VAT',
-              'CIT',
-              'PAYE',
-              'WHT',
-              'Excise Duty',
-              'Customs',
-              'Other'
-            ] %}
-
-            <option value="{{ t }}">
-              {{ t }}
-            </option>
-
-            {% endfor %}
-
-          </select>
-        </div>
-
-        <div>
-          <button class="btn"
-                  type="button"
-                  onclick="filterRules()">
-            Filter
-          </button>
-        </div>
-
-      </form>
-
-      <div style="margin-top:10px">
-        <button type="button"
-                class="btn"
-                onclick="clearFilters()">
-          Clear Filters
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <div class="panel">
-
-    <div class="panel-pad"
-         style="border-bottom:1px solid #e2e8f0">
-
-      <h2 style="margin:0;color:#12345b;font-size:19px">
-        Risk Rule Library
-      </h2>
-
-      <div class="muted">
-        Only approved/active rule versions may be executed by
-        the Risk Engine. Draft and review versions are not executed.
-      </div>
+        <a
+            class="btn primary"
+            href="{{ url_for('business_rule_create') }}"
+        >
+            + Create Risk Rule
+        </a>
 
     </div>
 
-    <div class="table-wrap">
 
-      <table class="table">
+    <!-- STATISTICS -->
+    {% set ns = namespace(
+        total=0,
+        active=0,
+        draft=0,
+        review=0
+    ) %}
 
-        <thead>
-          <tr>
-            <th>RULE ID</th>
-            <th>RULE NAME</th>
-            <th>RISK CATEGORY</th>
-            <th>TAX TYPE</th>
-            <th>EXECUTION LOGIC</th>
-            <th>VERSION</th>
-            <th>STATUS</th>
-            <th>ENGINE</th>
-            <th>ACTIONS</th>
-          </tr>
-        </thead>
+    {% for r in rules %}
 
-        <tbody>
+        {% set ns.total = ns.total + 1 %}
 
-        {% if rules %}
+        {% if r['latest_status'] in ['Active','Approved'] %}
+            {% set ns.active = ns.active + 1 %}
+        {% endif %}
 
-          {% for r in rules %}
+        {% if r['latest_status'] == 'Draft' %}
+            {% set ns.draft = ns.draft + 1 %}
+        {% endif %}
 
-            {% set s =
-              (r['latest_status']
-              or r['status']
-              or 'Draft')
-            %}
+        {% if r['latest_status'] in ['Under Review','Review'] %}
+            {% set ns.review = ns.review + 1 %}
+        {% endif %}
 
-            {% set cls =
-              'active' if s=='Active'
-              else (
-                'approved' if s=='Approved'
-                else (
-                  'review' if s in ['Under Review','Review']
-                  else (
-                    'rejected' if s=='Rejected'
-                    else (
-                      'suspended' if s=='Suspended'
-                      else (
-                        'retired' if s=='Retired'
-                        else 'draft'
-                      )
-                    )
-                  )
-                )
-              )
-            %}
+    {% endfor %}
 
-            <tr
-              data-search="{{ (
-                (r['name'] or '') ~ ' ' ~
-                (r['rule_ref'] or '') ~ ' ' ~
-                (r['risk_category'] or r['category'] or '') ~ ' ' ~
-                (r['tax_type'] or 'General')
-              )|lower|e }}"
 
-              data-status="{{ s|lower }}"
+    <div class="stats">
 
-              data-category="{{ (
-                r['risk_category']
-                or r['category']
-                or ''
-              )|lower|e }}"
+        <div class="stat">
 
-              data-tax="{{ (
-                r['tax_type']
-                or 'General'
-              )|lower|e }}"
+            <div class="k">
+                Total Risk Rules
+            </div>
+
+            <div class="v">
+                {{ ns.total }}
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="k">
+                Active / Approved
+            </div>
+
+            <div class="v">
+                {{ ns.active }}
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="k">
+                Draft
+            </div>
+
+            <div class="v">
+                {{ ns.draft }}
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="k">
+                Under Review
+            </div>
+
+            <div class="v">
+                {{ ns.review }}
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- FILTERS -->
+    <div class="panel">
+
+        <div class="panel-pad">
+
+            <form
+                id="ruleFilters"
+                class="filters"
+                onsubmit="return false;"
             >
 
-              <td>
-                <a href="{{ url_for(
-                    'business_rule_view',
-                    rule_id=r['id']
-                  ) }}"
-                   style="font-weight:800;color:#15558b">
+                <div>
 
-                  {{ r['rule_ref']
-                     or ('R-' ~ '%04d'|format(r['id'])) }}
+                    <label class="label">
+                        Search
+                    </label>
 
-                </a>
-              </td>
-
-              <td>
-
-                <b>{{ r['name'] }}</b>
-
-                <div class="muted"
-                     style="margin-top:3px">
-
-                  {{ r['natural_language']
-                     |default('',true)
-                     |truncate(140) }}
+                    <input
+                        class="input"
+                        id="filterSearch"
+                        placeholder="Rule name, reference or category"
+                    >
 
                 </div>
 
-              </td>
 
-              <td>
-                {{ r['risk_category']
-                   or r['category']
-                   or '—' }}
-              </td>
+                <div>
 
-              <td>
-                {{ r['tax_type'] or 'General' }}
-              </td>
+                    <label class="label">
+                        Status
+                    </label>
 
-              <td>
-                <div class="logic">
-                  {{ r['detection_logic_json']
-                     or r['structured_logic']
-                     or '{}' }}
+                    <select
+                        class="select"
+                        id="filterStatus"
+                    >
+
+                        <option value="">
+                            All Statuses
+                        </option>
+
+                        {% for s in [
+                            'Draft',
+                            'Under Review',
+                            'Approved',
+                            'Active',
+                            'Suspended',
+                            'Retired',
+                            'Rejected'
+                        ] %}
+
+                        <option value="{{ s }}">
+                            {{ s }}
+                        </option>
+
+                        {% endfor %}
+
+                    </select>
+
                 </div>
-              </td>
 
-              <td>
-                v{{ r['latest_version']
-                    or r['version_number']
-                    or 1 }}
-              </td>
 
-              <td>
-                <span class="badge {{ cls }}">
-                  {{ s }}
-                </span>
-              </td>
+                <div>
 
-              <td>
+                    <label class="label">
+                        Risk Category
+                    </label>
 
-                {% if s in ['Active','Approved'] %}
+                    <select
+                        class="select"
+                        id="filterCategory"
+                    >
 
-                  <span class="badge active">
-                    Ready
-                  </span>
+                        <option value="">
+                            All Categories
+                        </option>
+
+                        {% for c in [
+                            'Sales Reconciliation',
+                            'Purchases / Imports Reconciliation',
+                            'VAT Risk',
+                            'CIT Risk',
+                            'PAYE Risk',
+                            'WHT Risk',
+                            'Registration Risk',
+                            'Payment Behaviour',
+                            'Assessment Behaviour',
+                            'Third-Party Mismatch',
+                            'Sector / Peer Risk',
+                            'Other'
+                        ] %}
+
+                        <option value="{{ c }}">
+                            {{ c }}
+                        </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label class="label">
+                        Tax Type
+                    </label>
+
+                    <select
+                        class="select"
+                        id="filterTax"
+                    >
+
+                        <option value="">
+                            All Tax Types
+                        </option>
+
+                        {% for t in [
+                            'General',
+                            'VAT',
+                            'CIT',
+                            'PAYE',
+                            'WHT',
+                            'Excise Duty',
+                            'Customs',
+                            'Other'
+                        ] %}
+
+                        <option value="{{ t }}">
+                            {{ t }}
+                        </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <button
+                        class="btn"
+                        type="button"
+                        onclick="filterRules()"
+                    >
+                        Filter
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <div style="margin-top:10px">
+
+                <button
+                    type="button"
+                    class="btn"
+                    onclick="clearFilters()"
+                >
+                    Clear Filters
+                </button>
+
+            </div>
+
+
+            <div
+                id="resultsCount"
+                class="results-count"
+            ></div>
+
+        </div>
+
+    </div>
+
+
+    <!-- RULE LIBRARY -->
+    <div class="panel">
+
+        <div
+            class="panel-pad"
+            style="border-bottom:1px solid #e2e8f0"
+        >
+
+            <h2
+                style="
+                    margin:0;
+                    color:#12345b;
+                    font-size:19px
+                "
+            >
+                Risk Rule Library
+            </h2>
+
+            <div class="muted">
+                Only approved/active rule versions may be executed
+                by the Risk Engine. Draft and review versions are not executed.
+            </div>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            RULE ID
+                        </th>
+
+                        <th>
+                            RULE NAME
+                        </th>
+
+                        <th>
+                            RISK CATEGORY
+                        </th>
+
+                        <th>
+                            TAX TYPE
+                        </th>
+
+                        <th>
+                            EXECUTION LOGIC
+                        </th>
+
+                        <th>
+                            VERSION
+                        </th>
+
+                        <th>
+                            STATUS
+                        </th>
+
+                        <th>
+                            ENGINE
+                        </th>
+
+                        <th>
+                            ACTIONS
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="rulesTableBody">
+
+                {% if rules %}
+
+                    {% for r in rules %}
+
+                        {% set s = (
+                            r['latest_status']
+                            or r['status']
+                            or 'Draft'
+                        ) %}
+
+
+                        {% set cls =
+                            'active'
+                            if s == 'Active'
+
+                            else
+                            (
+                                'approved'
+                                if s == 'Approved'
+
+                                else
+                                (
+                                    'review'
+                                    if s in ['Under Review','Review']
+
+                                    else
+                                    (
+                                        'rejected'
+                                        if s == 'Rejected'
+
+                                        else
+                                        (
+                                            'suspended'
+                                            if s == 'Suspended'
+
+                                            else
+                                            (
+                                                'retired'
+                                                if s == 'Retired'
+
+                                                else
+                                                'draft'
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        %}
+
+
+                        <tr
+
+                            data-search="
+                                {{
+                                    (
+                                        (r['name'] or '')
+                                        ~ ' '
+                                        ~ (r['rule_ref'] or '')
+                                        ~ ' '
+                                        ~ (
+                                            r['risk_category']
+                                            or r['category']
+                                            or ''
+                                        )
+                                        ~ ' '
+                                        ~ (
+                                            r['tax_type']
+                                            or 'General'
+                                        )
+                                    )
+                                    |lower
+                                    |e
+                                }}
+                            "
+
+                            data-status="{{ s|lower }}"
+
+                            data-category="
+                                {{
+                                    (
+                                        r['risk_category']
+                                        or r['category']
+                                        or ''
+                                    )
+                                    |lower
+                                    |e
+                                }}
+                            "
+
+                            data-tax="
+                                {{
+                                    (
+                                        r['tax_type']
+                                        or 'General'
+                                    )
+                                    |lower
+                                    |e
+                                }}
+                            "
+                        >
+
+
+                            <!-- RULE ID -->
+                            <td>
+
+                                <a
+                                    href="{{ url_for(
+                                        'business_rule_view',
+                                        rule_id=r['id']
+                                    ) }}"
+                                    style="
+                                        font-weight:800;
+                                        color:#15558b
+                                    "
+                                >
+                                    {{
+                                        r['rule_ref']
+                                        or (
+                                            'R-' ~
+                                            '%04d'|format(r['id'])
+                                        )
+                                    }}
+                                </a>
+
+                            </td>
+
+
+                            <!-- RULE NAME -->
+                            <td>
+
+                                <b>
+                                    {{ r['name'] }}
+                                </b>
+
+                                {% if r['natural_language'] %}
+
+                                <div
+                                    class="muted"
+                                    style="margin-top:3px"
+                                >
+                                    {{
+                                        r['natural_language']
+                                        |truncate(180)
+                                    }}
+                                </div>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <!-- CATEGORY -->
+                            <td>
+
+                                {{
+                                    r['risk_category']
+                                    or r['category']
+                                    or '—'
+                                }}
+
+                            </td>
+
+
+                            <!-- TAX TYPE -->
+                            <td>
+
+                                {{
+                                    r['tax_type']
+                                    or 'General'
+                                }}
+
+                            </td>
+
+
+                            <!-- EXECUTION LOGIC -->
+                            <td>
+
+                                <div class="logic">
+
+                                    {{
+                                        r['detection_logic_json']
+                                        or r['structured_logic']
+                                        or '{}'
+                                    }}
+
+                                </div>
+
+                            </td>
+
+
+                            <!-- VERSION -->
+                            <td>
+
+                                v{{
+                                    r['latest_version']
+                                    or r['version_number']
+                                    or 1
+                                }}
+
+                            </td>
+
+
+                            <!-- STATUS -->
+                            <td>
+
+                                <span
+                                    class="badge {{ cls }}"
+                                >
+                                    {{ s }}
+                                </span>
+
+                            </td>
+
+
+                            <!-- ENGINE STATUS -->
+                            <td>
+
+                                {% if s in ['Active','Approved'] %}
+
+                                    <span
+                                        class="badge active engine-ready"
+                                    >
+                                        Ready
+                                    </span>
+
+                                {% else %}
+
+                                    <span
+                                        class="muted engine-blocked"
+                                    >
+                                        Not Executed
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <!-- ACTIONS -->
+                            <td>
+
+                                <div class="actions">
+
+                                    <a
+                                        class="action"
+                                        href="{{ url_for(
+                                            'business_rule_view',
+                                            rule_id=r['id']
+                                        ) }}"
+                                    >
+                                        View
+                                    </a>
+
+
+                                    <a
+                                        class="action"
+                                        href="{{ url_for(
+                                            'business_rule_edit',
+                                            rule_id=r['id']
+                                        ) }}"
+                                    >
+                                        Edit
+                                    </a>
+
+
+                                    <a
+                                        class="action"
+                                        href="{{ url_for(
+                                            'business_rule_versions',
+                                            rule_id=r['id']
+                                        ) }}"
+                                    >
+                                        Versions
+                                    </a>
+
+                                </div>
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
 
                 {% else %}
 
-                  <span class="muted">
-                    Not Executed
-                  </span>
+                    <tr>
+
+                        <td
+                            colspan="9"
+                            class="empty"
+                        >
+                            No risk rules have been created yet.
+                        </td>
+
+                    </tr>
 
                 {% endif %}
 
-              </td>
+                </tbody>
 
-              <td>
+            </table>
 
-                <div class="actions">
-
-                  <a class="action"
-                     href="{{ url_for(
-                       'business_rule_view',
-                       rule_id=r['id']
-                     ) }}">
-                    View
-                  </a>
-
-                  <a class="action"
-                     href="{{ url_for(
-                       'business_rule_edit',
-                       rule_id=r['id']
-                     ) }}">
-                    Edit
-                  </a>
-
-                  <a class="action"
-                     href="{{ url_for(
-                       'business_rule_versions',
-                       rule_id=r['id']
-                     ) }}">
-                    Versions
-                  </a>
-
-                </div>
-
-              </td>
-
-            </tr>
-
-          {% endfor %}
-
-        {% else %}
-
-          <tr>
-            <td colspan="9"
-                class="empty">
-              No risk rules have been created yet.
-            </td>
-          </tr>
-
-        {% endif %}
-
-        </tbody>
-      </table>
+        </div>
 
     </div>
-  </div>
 
-  <div class="notice">
 
-    <b>Risk Engine Control:</b>
+    <!-- CONTROL NOTICE -->
+    <div class="notice">
 
-    The analyst's business definition, structured executable logic,
-    source versions, calculations, conditions, system interpretation,
-    preview and approval are retained as the rule version.
+        <b>Risk Engine Control:</b>
 
-    Only an approved/active version may feed the Risk Universe.
+        The analyst's business definition, structured executable logic,
+        source versions, calculations, conditions, system interpretation,
+        preview and approval are retained as the rule version.
 
-  </div>
+        Only an approved/active version may feed the Risk Universe.
+
+    </div>
 
 </div>
 
+
 <script>
+
+/* =========================================================
+   FILTER RULES
+   ========================================================= */
 
 function filterRules(){
 
-  const q =
-    (document.getElementById('filterSearch')?.value || '')
-      .toLowerCase()
-      .trim();
+    const q =
+        (
+            document.getElementById('filterSearch')
+            ?.value
+            || ''
+        )
+        .toLowerCase()
+        .trim();
 
-  const st =
-    (document.getElementById('filterStatus')?.value || '')
-      .toLowerCase();
 
-  const cat =
-    (document.getElementById('filterCategory')?.value || '')
-      .toLowerCase();
+    const st =
+        (
+            document.getElementById('filterStatus')
+            ?.value
+            || ''
+        )
+        .toLowerCase();
 
-  const tax =
-    (document.getElementById('filterTax')?.value || '')
-      .toLowerCase();
 
-  document
-    .querySelectorAll('tbody tr[data-search]')
-    .forEach(tr => {
+    const cat =
+        (
+            document.getElementById('filterCategory')
+            ?.value
+            || ''
+        )
+        .toLowerCase();
 
-      const ok =
-        (!q || tr.dataset.search.includes(q)) &&
-        (!st || tr.dataset.status === st) &&
-        (!cat || tr.dataset.category === cat) &&
-        (!tax || tr.dataset.tax === tax);
 
-      tr.style.display =
-        ok ? '' : 'none';
+    const tax =
+        (
+            document.getElementById('filterTax')
+            ?.value
+            || ''
+        )
+        .toLowerCase();
+
+
+    const rows =
+        document.querySelectorAll(
+            '#rulesTableBody tr[data-search]'
+        );
+
+
+    let visible = 0;
+
+
+    rows.forEach(tr => {
+
+        const search =
+            tr.dataset.search || '';
+
+        const status =
+            tr.dataset.status || '';
+
+        const category =
+            tr.dataset.category || '';
+
+        const taxType =
+            tr.dataset.tax || '';
+
+
+        const matchesSearch =
+            !q ||
+            search.includes(q);
+
+
+        const matchesStatus =
+            !st ||
+            status === st;
+
+
+        const matchesCategory =
+            !cat ||
+            category === cat;
+
+
+        const matchesTax =
+            !tax ||
+            taxType === tax;
+
+
+        const visibleRow =
+            matchesSearch &&
+            matchesStatus &&
+            matchesCategory &&
+            matchesTax;
+
+
+        tr.style.display =
+            visibleRow
+                ? ''
+                : 'none';
+
+
+        if(visibleRow){
+            visible++;
+        }
+
     });
+
+
+    updateResultsCount(
+        visible,
+        rows.length
+    );
 }
+
+
+/* =========================================================
+   CLEAR FILTERS
+   ========================================================= */
 
 function clearFilters(){
 
-  [
+    [
+        'filterSearch',
+        'filterStatus',
+        'filterCategory',
+        'filterTax'
+    ].forEach(id => {
+
+        const e =
+            document.getElementById(id);
+
+        if(e){
+            e.value = '';
+        }
+
+    });
+
+
+    filterRules();
+}
+
+
+/* =========================================================
+   RESULTS COUNT
+   ========================================================= */
+
+function updateResultsCount(
+    visible,
+    total
+){
+
+    const el =
+        document.getElementById(
+            'resultsCount'
+        );
+
+    if(!el){
+        return;
+    }
+
+
+    if(total === 0){
+
+        el.textContent =
+            'No rules available.';
+
+        return;
+    }
+
+
+    if(visible === total){
+
+        el.textContent =
+            `Showing all ${total} rule${total===1?'':'s'}.`;
+
+    }else{
+
+        el.textContent =
+            `Showing ${visible} of ${total} rules.`;
+
+    }
+
+}
+
+
+/* =========================================================
+   LIVE FILTERING
+   ========================================================= */
+
+[
     'filterSearch',
     'filterStatus',
     'filterCategory',
     'filterTax'
-  ].forEach(id => {
-
-    const e =
-      document.getElementById(id);
-
-    if(e){
-      e.value = '';
-    }
-
-  });
-
-  filterRules();
-}
-
-[
-  'filterSearch',
-  'filterStatus',
-  'filterCategory',
-  'filterTax'
 ].forEach(id => {
 
-  const e =
-    document.getElementById(id);
+    const e =
+        document.getElementById(id);
 
-  if(e){
+    if(!e){
+        return;
+    }
+
 
     e.addEventListener(
-      id === 'filterSearch'
-        ? 'input'
-        : 'change',
-      filterRules
+        id === 'filterSearch'
+            ? 'input'
+            : 'change',
+        filterRules
     );
 
-  }
-
 });
+
+
+/* =========================================================
+   INITIALISE
+   ========================================================= */
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function(){
+
+        filterRules();
+
+    }
+);
 
 </script>
 
