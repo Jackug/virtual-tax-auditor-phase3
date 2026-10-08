@@ -1,1 +1,1400 @@
-{% extends 'base.html' %}{% block content %}<div class="card"><div class="label">VIRTUAL AUDIT CASES</div><h2>Cases</h2></div><div class="card" style="margin-top:15px"><table class="table"><tr><th>Case</th><th>TIN</th><th>Taxpayer</th><th>Sector</th><th>Status</th><th>Assigned</th><th></th></tr>{% for r in rows %}<tr><td>{{ r.case_ref }}</td><td>{{ r.tin }}</td><td>{{ r.taxpayer_name }}</td><td>{{ r.sector }}</td><td>{{ r.status }}</td><td>{{ r.assigned_to }}</td><td><a class="btn secondary" href="{{ url_for('case_detail',cid=r.id) }}">Open</a></td></tr>{% else %}<tr><td colspan="7">No cases.</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+
+    /* =========================================================
+       GENERAL CASE PAGE
+       ========================================================= */
+
+    .vta-card {
+        margin-top: 15px;
+    }
+
+    .workflow-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+    }
+
+    .workflow-box {
+        border: 1px solid #d7dde5;
+        background: #ffffff;
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 13px;
+    }
+
+    .analysis-summary {
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 18px;
+    }
+
+    .analysis-methodology {
+        background: #f7f9fb;
+        border: 1px solid #d7dde5;
+        border-radius: 6px;
+        padding: 15px;
+        line-height: 1.6;
+    }
+
+    .control-notice {
+        background: #f7f9fb;
+        border: 1px solid #d7dde5;
+        border-radius: 6px;
+        padding: 13px;
+        font-size: 12px;
+        color: #59636e;
+        margin-top: 15px;
+        line-height: 1.6;
+    }
+
+
+    /* =========================================================
+       LEGAL BASIS
+       ========================================================= */
+
+    .legal-section {
+        margin-top: 20px;
+        border: 1px solid #b8cfe3;
+        border-radius: 7px;
+        overflow: hidden;
+        background: #ffffff;
+    }
+
+    .legal-header {
+        background: #edf5fb;
+        border-bottom: 1px solid #b8cfe3;
+        padding: 15px 18px;
+    }
+
+    .legal-header h3 {
+        margin: 0 0 5px 0;
+        color: #123a63;
+    }
+
+    .legal-header p {
+        margin: 0;
+        color: #5b6775;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .legal-item {
+        padding: 18px;
+        border-bottom: 1px solid #e2e7ec;
+    }
+
+    .legal-item:last-child {
+        border-bottom: none;
+    }
+
+    .legal-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 12px;
+    }
+
+    .legal-rank {
+        display: inline-block;
+        background: #123a63;
+        color: #ffffff;
+        border-radius: 14px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 700;
+        margin-right: 8px;
+    }
+
+    .legal-title-inline {
+        font-size: 16px;
+        font-weight: 700;
+        color: #123a63;
+    }
+
+    .legal-approved {
+        display: inline-block;
+        background: #dff3e4;
+        color: #176b2c;
+        border-radius: 14px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .legal-meta {
+        color: #4f5b66;
+        font-size: 12px;
+        line-height: 1.8;
+        margin-bottom: 14px;
+    }
+
+    .legal-meta strong {
+        color: #263442;
+    }
+
+    .legal-passage-label {
+        font-size: 13px;
+        font-weight: 700;
+        color: #263442;
+        margin-bottom: 7px;
+    }
+
+    .legal-passage-preview {
+        background: #fafafa;
+        border-left: 4px solid #123a63;
+        padding: 14px;
+        line-height: 1.6;
+        font-size: 13px;
+        color: #263442;
+        white-space: pre-wrap;
+    }
+
+    .legal-ellipsis {
+        font-weight: 700;
+    }
+
+    .full-passage {
+        margin-top: 8px;
+        border: 1px solid #d7dde5;
+        border-radius: 5px;
+        background: #f8fafc;
+    }
+
+    .full-passage summary {
+        cursor: pointer;
+        padding: 9px 12px;
+        color: #174f82;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .full-passage summary:hover {
+        background: #eef4f9;
+    }
+
+    .full-passage-content {
+        border-top: 1px solid #d7dde5;
+        padding: 14px;
+        background: #ffffff;
+        line-height: 1.65;
+        font-size: 13px;
+        white-space: pre-wrap;
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .legal-source {
+        margin-top: 12px;
+        font-size: 12px;
+        color: #5b6775;
+        line-height: 1.6;
+    }
+
+    .no-knowledge {
+        background: #fff8e5;
+        border: 1px solid #ead28a;
+        border-radius: 6px;
+        padding: 15px;
+        color: #765400;
+        line-height: 1.6;
+    }
+
+
+    /* =========================================================
+       FINDINGS
+       ========================================================= */
+
+    .findings-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .status-ai {
+        color: #7a4e00;
+        font-weight: 700;
+    }
+
+    .status-human {
+        color: #176b2c;
+        font-weight: 700;
+    }
+
+    .status-other {
+        color: #555;
+        font-weight: 700;
+    }
+
+
+    /* =========================================================
+       RESPONSIVE
+       ========================================================= */
+
+    @media (max-width: 900px) {
+
+        .workflow-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .legal-card-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+    }
+
+    @media (max-width: 600px) {
+
+        .workflow-grid {
+            grid-template-columns: 1fr;
+        }
+
+    }
+
+</style>
+
+
+<!-- =========================================================
+     CASE HEADER
+     ========================================================= -->
+
+<div class="card">
+
+    <div class="label">
+        VIRTUAL TAX AUDIT · CLOSED LOOP
+    </div>
+
+    <div class="two">
+
+        <div>
+
+            <h2>
+                {{ case.case_ref }}
+            </h2>
+
+            <p>
+                <b>{{ case.taxpayer_name }}</b>
+                ·
+                {{ case.tin }}
+            </p>
+
+        </div>
+
+        <div style="text-align:right">
+
+            <span class="pill">
+                {{ case.status }}
+            </span>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     CONTROLLED WORKFLOW
+     ========================================================= -->
+
+<div class="card vta-card">
+
+    <h3>
+        Controlled workflow
+    </h3>
+
+    <div class="workflow-grid">
+
+        <div class="workflow-box">
+            <b>1–4</b><br>
+            Risk → AI Audit → Finding Validation
+        </div>
+
+        <div class="workflow-box">
+            <b>5–6</b><br>
+            Communication → Response
+        </div>
+
+        <div class="workflow-box">
+            <b>7</b><br>
+            AI Response Analysis
+        </div>
+
+        <div class="workflow-box">
+            <b>8–9</b><br>
+            Second Validation → Outcome
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     AI AUDIT ANALYSIS NOT YET RUN
+     ========================================================= -->
+
+{% if not analysis %}
+
+<div class="card vta-card">
+
+    <h3>
+        Next action: AI Audit Analysis
+    </h3>
+
+    <p>
+        The selected taxpayer is ready for controlled AI audit analysis.
+    </p>
+
+    <form
+        method="post"
+        action="{{ url_for('analyze', cid=case.id) }}"
+    >
+
+        <button class="btn">
+            Run AI Audit Analysis
+        </button>
+
+    </form>
+
+</div>
+
+{% endif %}
+
+
+<!-- =========================================================
+     AI AUDIT ANALYSIS
+     ========================================================= -->
+
+{% if analysis %}
+
+<div class="card vta-card">
+
+    <h3>
+        AI Audit Analysis
+    </h3>
+
+
+    <!-- =====================================================
+         ANALYSIS SUMMARY
+         ===================================================== -->
+
+    <div class="analysis-summary">
+
+        {{ analysis.summary }}
+
+    </div>
+
+
+    <!-- =====================================================
+         METHODOLOGY
+         ===================================================== -->
+
+    <div class="analysis-methodology">
+
+        <strong>
+            Methodology
+        </strong>
+
+        <div style="margin-top:8px;">
+
+            {% if methodology_display %}
+
+                {{ methodology_display }}
+
+            {% else %}
+
+                The analysis methodology is recorded in the
+                audit trail.
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         LIMITATIONS
+         ===================================================== -->
+
+    <div class="control-notice">
+
+        <strong>
+            AI Control / Limitations
+        </strong>
+
+        <div style="margin-top:6px;">
+
+            {{ analysis.limitations }}
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         LEGAL BASIS
+         ===================================================== -->
+
+    <div class="legal-section">
+
+        <div class="legal-header">
+
+            <h3>
+                Legal Basis
+            </h3>
+
+            <p>
+                Approved Knowledge Base provisions retrieved
+                to support this audit analysis. Only human-approved
+                Knowledge Base versions are presented as
+                authoritative legal material.
+            </p>
+
+        </div>
+
+
+        {% if knowledge_retrievals %}
+
+
+            {% for k in knowledge_retrievals %}
+
+            <div class="legal-item">
+
+
+                <!-- =============================================
+                     DOCUMENT HEADER
+                     ============================================= -->
+
+                <div class="legal-card-header">
+
+                    <div>
+
+                        <span class="legal-rank">
+                            {{ loop.index }}
+                        </span>
+
+                        <span class="legal-title-inline">
+                            {{ k.title }}
+                        </span>
+
+                    </div>
+
+
+                    <span class="legal-approved">
+                        APPROVED
+                    </span>
+
+                </div>
+
+
+                <!-- =============================================
+                     DOCUMENT METADATA
+                     ============================================= -->
+
+                <div class="legal-meta">
+
+                    <div>
+
+                        <strong>
+                            Reference:
+                        </strong>
+
+                        {{ k.document_ref }}
+
+                        &nbsp; | &nbsp;
+
+                        <strong>
+                            Version:
+                        </strong>
+
+                        v{{ k.version_number }}
+
+                    </div>
+
+
+                    <div>
+
+                        <strong>
+                            Category:
+                        </strong>
+
+                        {{ k.category }}
+
+                        &nbsp; | &nbsp;
+
+                        <strong>
+                            Document Type:
+                        </strong>
+
+                        {{ k.document_type }}
+
+                        &nbsp; | &nbsp;
+
+                        <strong>
+                            Tax Type:
+                        </strong>
+
+                        {{ k.tax_type or 'General' }}
+
+                    </div>
+
+
+                    {% if k.issuing_authority %}
+
+                    <div>
+
+                        <strong>
+                            Issuing Authority:
+                        </strong>
+
+                        {{ k.issuing_authority }}
+
+                    </div>
+
+                    {% endif %}
+
+                </div>
+
+
+                <!-- =============================================
+                     RELEVANT PASSAGE
+                     ============================================= -->
+
+                <div class="legal-passage-label">
+
+                    Relevant legal passage
+
+                </div>
+
+
+                <div class="legal-passage-preview">
+
+                    {% if k.text_content %}
+
+                        {% if k.text_content|length > 1000 %}
+
+                            {{ k.text_content[:1000] }}
+
+                            <span class="legal-ellipsis">
+                                …
+                            </span>
+
+                        {% else %}
+
+                            {{ k.text_content }}
+
+                        {% endif %}
+
+                    {% else %}
+
+                        No legal text was available for this
+                        retrieval.
+
+                    {% endif %}
+
+                </div>
+
+
+                <!-- =============================================
+                     FULL PASSAGE
+                     ============================================= -->
+
+                {% if k.text_content and k.text_content|length > 1000 %}
+
+                <details class="full-passage">
+
+                    <summary>
+                        View full legal passage
+                    </summary>
+
+                    <div class="full-passage-content">
+
+                        {{ k.text_content }}
+
+                    </div>
+
+                </details>
+
+                {% endif %}
+
+
+                <!-- =============================================
+                     SOURCE
+                     ============================================= -->
+
+                <div class="legal-source">
+
+                    <strong>
+                        Source:
+                    </strong>
+
+                    {{ k.source_filename }}
+
+
+                    {% if k.page_number %}
+
+                        &nbsp; | &nbsp;
+
+                        <strong>
+                            Page / Sheet:
+                        </strong>
+
+                        {{ k.page_number }}
+
+                    {% endif %}
+
+                </div>
+
+
+            </div>
+
+            {% endfor %}
+
+
+        {% else %}
+
+
+            <div class="legal-item">
+
+                <div class="no-knowledge">
+
+                    <strong>
+                        No approved Knowledge Base material was
+                        retrieved for this analysis.
+                    </strong>
+
+                    <div style="margin-top:6px;">
+
+                        The analysis must not represent general,
+                        draft or unapproved knowledge as an
+                        authoritative legal basis.
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+        {% endif %}
+
+    </div>
+
+
+    <!-- =====================================================
+         HUMAN CONTROL
+         ===================================================== -->
+
+    <div class="control-notice">
+
+        <strong>
+            Human validation required
+        </strong>
+
+        <div style="margin-top:6px;">
+
+            Retrieval of an approved legal provision does not
+            constitute a confirmed tax finding.
+
+            AI-generated findings remain subject to human
+            auditor review, validation, rejection or request
+            for further evidence.
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+
+<!-- =========================================================
+     FINDINGS
+     ========================================================= -->
+
+<div class="card vta-card">
+
+    <h3>
+        Findings
+    </h3>
+
+    <div class="findings-table-wrapper">
+
+        <table class="table">
+
+            <tr>
+
+                <th>
+                    Finding
+                </th>
+
+                <th>
+                    Description
+                </th>
+
+                <th>
+                    Variance
+                </th>
+
+                <th>
+                    Status
+                </th>
+
+                <th>
+                </th>
+
+            </tr>
+
+
+            {% for f in findings %}
+
+            <tr>
+
+                <td>
+                    {{ f.finding_ref }}
+                </td>
+
+                <td>
+                    {{ f.description }}
+                </td>
+
+                <td>
+
+                    UGX
+                    {{ '{:,.0f}'.format(f.variance or 0) }}
+
+                    <br>
+
+                    <span class="muted">
+                        ({{ '{:.2f}'.format(f.variance_pct or 0) }}%)
+                    </span>
+
+                </td>
+
+                <td>
+
+                    {% if f.status == 'AI Generated' %}
+
+                        <span class="status-ai">
+                            AI Generated
+                        </span>
+
+                    {% elif f.status == 'Human Validated' %}
+
+                        <span class="status-human">
+                            Human Validated
+                        </span>
+
+                    {% else %}
+
+                        <span class="status-other">
+                            {{ f.status }}
+                        </span>
+
+                    {% endif %}
+
+                </td>
+
+                <td>
+
+                    <a
+                        class="btn secondary"
+                        href="{{ url_for('finding', fid=f.id) }}"
+                    >
+                        Review
+                    </a>
+
+                </td>
+
+            </tr>
+
+            {% else %}
+
+            <tr>
+
+                <td colspan="5">
+                    No findings.
+                </td>
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     COMMUNICATIONS
+     ========================================================= -->
+
+{% if communications %}
+
+<div class="card vta-card">
+
+    <h3>
+        Communications
+    </h3>
+
+    <table class="table">
+
+        <tr>
+
+            <th>
+                Recipient
+            </th>
+
+            <th>
+                Subject
+            </th>
+
+            <th>
+                Status
+            </th>
+
+        </tr>
+
+
+        {% for x in communications %}
+
+        <tr>
+
+            <td>
+                {{ x.recipient }}
+            </td>
+
+            <td>
+                {{ x.subject }}
+            </td>
+
+            <td>
+                {{ x.status }}
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+{% endif %}
+
+
+<!-- =========================================================
+     TAXPAYER RESPONSE
+     ========================================================= -->
+
+{% if responses %}
+
+<div class="card vta-card">
+
+    <h3>
+        Taxpayer Response
+    </h3>
+
+
+    {% for r in responses %}
+
+    <div class="notice">
+
+        <b>
+            {{ r.submitted_at }}
+        </b>
+
+        <br>
+
+        {{ r.response_text }}
+
+    </div>
+
+    {% endfor %}
+
+
+    {% if evidence %}
+
+    <h4>
+        Evidence
+    </h4>
+
+
+    {% for e in evidence %}
+
+    <div class="notice">
+
+        <a
+            href="{{ url_for('evidence', name=e.stored_filename) }}"
+        >
+            {{ e.original_filename }}
+        </a>
+
+    </div>
+
+    {% endfor %}
+
+    {% endif %}
+
+</div>
+
+{% endif %}
+
+
+<!-- =========================================================
+     AI RESPONSE ANALYSIS
+     ========================================================= -->
+
+{% if response_analyses %}
+
+<div class="card vta-card">
+
+    <h3>
+        AI Response Analysis
+    </h3>
+
+
+    {% for a in response_analyses %}
+
+    <div class="notice">
+
+        <b>
+            Assessment:
+        </b>
+
+        {{ a.overall_assessment }}
+
+        <br><br>
+
+        <b>
+            Supported:
+        </b>
+
+        {{ a.findings_supported }}
+
+        <br><br>
+
+        <b>
+            Missing evidence:
+        </b>
+
+        {{ a.missing_evidence }}
+
+        <br><br>
+
+        <b>
+            Recommended action:
+        </b>
+
+        {{ a.recommended_action }}
+
+    </div>
+
+    {% endfor %}
+
+</div>
+
+{% endif %}
+
+
+<!-- =========================================================
+     SECOND HUMAN VALIDATION
+     ========================================================= -->
+
+<div
+    class="card vta-card"
+    id="second-validation"
+>
+
+    <h3>
+        Second Human Validation
+    </h3>
+
+
+    {% if response_analyses %}
+
+    <form
+        method="post"
+        action="{{ url_for('second_validation', cid=case.id) }}"
+    >
+
+        <label>
+            Finding
+        </label>
+
+        <select name="finding_id">
+
+            {% for f in findings if f.status == 'Human Validated' %}
+
+            <option value="{{ f.id }}">
+
+                {{ f.finding_ref }}
+
+            </option>
+
+            {% endfor %}
+
+        </select>
+
+
+        <label>
+            Decision
+        </label>
+
+        <select name="decision">
+
+            <option>
+                RESOLVED
+            </option>
+
+            <option>
+                PARTIAL
+            </option>
+
+            <option>
+                NOT RESOLVED
+            </option>
+
+            <option>
+                MORE EVIDENCE
+            </option>
+
+            <option>
+                FURTHER ACTION
+            </option>
+
+        </select>
+
+
+        <label>
+            Reason
+        </label>
+
+        <textarea
+            name="reason"
+            required
+        ></textarea>
+
+
+        <button class="btn">
+            Record Second Validation
+        </button>
+
+    </form>
+
+
+    {% else %}
+
+    <div class="notice">
+
+        Complete AI Response Analysis first.
+
+    </div>
+
+    {% endif %}
+
+</div>
+
+
+<!-- =========================================================
+     VALIDATION HISTORY
+     ========================================================= -->
+
+{% if validations %}
+
+<div class="card vta-card">
+
+    <h3>
+        Validation History
+    </h3>
+
+    <table class="table">
+
+        <tr>
+
+            <th>
+                Decision
+            </th>
+
+            <th>
+                Reason
+            </th>
+
+            <th>
+                By
+            </th>
+
+        </tr>
+
+
+        {% for v in validations %}
+
+        <tr>
+
+            <td>
+                {{ v.decision }}
+            </td>
+
+            <td>
+                {{ v.reason }}
+            </td>
+
+            <td>
+                {{ v.decided_by }}
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+{% endif %}
+
+
+<!-- =========================================================
+     FURTHER ACTION
+     ========================================================= -->
+
+<div
+    class="card vta-card"
+    id="further-action"
+>
+
+    <h3>
+        Further Action
+    </h3>
+
+
+    {% if validations %}
+
+    <form
+        method="post"
+        action="{{ url_for('further_action', cid=case.id) }}"
+    >
+
+        <label>
+            Action type
+        </label>
+
+        <select name="action_type">
+
+            <option>
+                Further evidence
+            </option>
+
+            <option>
+                Further taxpayer question
+            </option>
+
+            <option>
+                Additional AI analysis
+            </option>
+
+            <option>
+                Third-party comparison
+            </option>
+
+            <option>
+                Recalculation
+            </option>
+
+            <option>
+                Field audit referral
+            </option>
+
+            <option>
+                Investigation referral
+            </option>
+
+            <option>
+                Specialist review
+            </option>
+
+        </select>
+
+
+        <label>
+            Instruction
+        </label>
+
+        <textarea
+            name="instruction"
+            required
+        ></textarea>
+
+
+        <button class="btn">
+            Create Further Action
+        </button>
+
+    </form>
+
+    {% endif %}
+
+
+    {% for a in actions %}
+
+    <div class="notice">
+
+        <b>
+            {{ a.action_type }}
+        </b>
+
+        —
+        {{ a.status }}
+
+        <br>
+
+        {{ a.instruction }}
+
+
+        {% if a.status == 'Open' %}
+
+        <form
+            method="post"
+            action="{{ url_for(
+                'complete_further_action',
+                cid=case.id,
+                aid=a.id
+            ) }}"
+            style="margin-top:8px"
+        >
+
+            <button class="btn secondary">
+                Mark Completed
+            </button>
+
+        </form>
+
+        {% endif %}
+
+    </div>
+
+    {% endfor %}
+
+</div>
+
+
+<!-- =========================================================
+     AUDIT OUTCOME & CLOSURE
+     ========================================================= -->
+
+<div class="card vta-card">
+
+    <h3>
+        Audit Outcome & Closure
+    </h3>
+
+
+    {% if not open_actions
+          and validations
+          and not unresolved_findings %}
+
+    <form
+        method="post"
+        action="{{ url_for('outcome', cid=case.id) }}"
+    >
+
+        <label>
+            Outcome
+        </label>
+
+        <select name="outcome_type">
+
+            <option>
+                Cleared
+            </option>
+
+            <option>
+                Compliance action
+            </option>
+
+            <option>
+                Adjusted tax position
+            </option>
+
+            <option>
+                Authorised assessment
+            </option>
+
+            <option>
+                Further virtual audit
+            </option>
+
+            <option>
+                Field audit
+            </option>
+
+            <option>
+                Investigation / specialist
+            </option>
+
+            <option>
+                Other
+            </option>
+
+        </select>
+
+
+        <label>
+            Rationale
+        </label>
+
+        <textarea
+            name="rationale"
+            required
+        ></textarea>
+
+
+        <button class="btn">
+            Record Outcome & Close Case
+        </button>
+
+    </form>
+
+
+    {% else %}
+
+    <div class="notice">
+
+        Closure is blocked until required human validations,
+        findings and further actions are complete.
+
+    </div>
+
+    {% endif %}
+
+
+    {% if outcome %}
+
+    <div class="notice success">
+
+        <b>
+            Closed:
+        </b>
+
+        {{ outcome.outcome_type }}
+
+        <br>
+
+        {{ outcome.rationale }}
+
+    </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
