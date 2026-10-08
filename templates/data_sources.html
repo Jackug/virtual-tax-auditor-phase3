@@ -1,2044 +1,1255 @@
 {% extends 'base.html' %}
-
 {% block content %}
-
 <style>
-  .page-header {
-    margin-bottom: 18px;
-  }
-
-  .page-header h2 {
-    margin-bottom: 6px;
-  }
-
-  .section {
-    margin-top: 18px;
-  }
-
-  .section-title {
-    margin-bottom: 10px;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-  }
-
-  .form-grid .full {
-    grid-column: 1 / -1;
-  }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 14px;
-  }
-
-  .btn {
-    display: inline-block;
-    padding: 9px 14px;
-    border: 0;
-    border-radius: 5px;
-    background: #17365d;
-    color: white;
-    text-decoration: none;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-  }
-
-  .btn:hover {
-    opacity: .9;
-  }
-
-  .btn-secondary {
-    background: #66727d;
-  }
-
-  .btn-success {
-    background: #287a46;
-  }
-
-  .btn-danger {
-    background: #a52a2a;
-  }
-
-  .btn-warning {
-    background: #9a6a00;
-  }
-
-  .btn-info {
-    background: #286c8f;
-  }
-
-  .status {
-    display: inline-block;
-    padding: 4px 9px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .status-approved {
-    background: #dff1e4;
-    color: #216438;
-  }
-
-  .status-draft,
-  .status-pending {
-    background: #fff0d2;
-    color: #765300;
-  }
-
-  .status-rejected {
-    background: #f8dada;
-    color: #8b2222;
-  }
-
-  .status-revision {
-    background: #e8e8f8;
-    color: #4d4d88;
-  }
-
-  .status-superseded {
-    background: #e5e8eb;
-    color: #59636c;
-  }
-
-  .status-critical {
-    background: #f8dada;
-    color: #8b2222;
-  }
-
-  .status-high {
-    background: #ffe1d0;
-    color: #8a3d16;
-  }
-
-  .status-medium {
-    background: #fff0d2;
-    color: #765300;
-  }
-
-  .status-low {
-    background: #dff1e4;
-    color: #216438;
-  }
-
-  .notice {
-    margin-bottom: 15px;
-    padding: 12px;
-    border-radius: 6px;
-    background: #f3f7fb;
-    border: 1px solid #d9e3ec;
-  }
-
-  .notice-warning {
-    background: #fff8e8;
-    border-color: #ead7a2;
-  }
-
-  .notice-danger {
-    background: #fff0f0;
-    border-color: #e4b4b4;
-  }
-
-  .notice-success {
-    background: #eef9f1;
-    border-color: #b9d8c1;
-  }
-
-  .small {
-    font-size: 11px;
-  }
-
-  .muted {
-    line-height: 1.5;
-  }
-
-  .empty {
-    padding: 20px;
-    text-align: center;
-    color: #687682;
-    border: 1px dashed #cbd5df;
-    background: #fafbfc;
-    border-radius: 6px;
-  }
-
-  .table-wrap {
-    overflow-x: auto;
-  }
-
-  .table td {
-    max-width: 320px;
-    word-break: break-word;
-    vertical-align: top;
-  }
-
-  .required {
-    color: #a52a2a;
-  }
-
-  .metric-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-top: 14px;
-  }
-
-  .metric-card {
-    border: 1px solid #dce3e9;
-    border-radius: 7px;
-    padding: 14px;
-    background: #fff;
-  }
-
-  .metric-value {
-    font-size: 23px;
-    font-weight: 700;
-    margin-top: 4px;
-  }
-
-  .metric-label {
-    font-size: 11px;
-    color: #687682;
-  }
-
-  .quality-score {
-    font-size: 30px;
-    font-weight: 700;
-  }
-
-  .quality-excellent {
-    color: #287a46;
-  }
-
-  .quality-good {
-    color: #4f7d3b;
-  }
-
-  .quality-review {
-    color: #9a6a00;
-  }
-
-  .quality-poor {
-    color: #a52a2a;
-  }
-
-  .profile-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-  }
-
-  .profile-card {
-    border: 1px solid #dce3e9;
-    border-radius: 7px;
-    padding: 14px;
-    background: #fff;
-  }
-
-  .profile-card h4 {
-    margin: 0 0 8px 0;
-  }
-
-  .bar {
-    width: 100%;
-    height: 8px;
-    border-radius: 5px;
-    background: #e9edf1;
-    overflow: hidden;
-    margin-top: 6px;
-  }
-
-  .bar-fill {
-    height: 100%;
-    background: #17365d;
-  }
-
-  .exception-card {
-    border: 1px solid #dce3e9;
-    border-radius: 7px;
-    padding: 14px;
-    margin-bottom: 10px;
-    background: #fff;
-  }
-
-  .exception-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .exception-title {
-    font-weight: 700;
-  }
-
-  .exception-values {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 10px;
-  }
-
-  .value-box {
-    background: #f7f9fb;
-    border: 1px solid #e1e7ec;
-    border-radius: 5px;
-    padding: 9px;
-  }
-
-  .value-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    color: #687682;
-    margin-bottom: 4px;
-  }
-
-  .value-content {
-    word-break: break-word;
-    font-family: monospace;
-    font-size: 11px;
-  }
-
-  details {
-    margin-top: 10px;
-  }
-
-  summary {
-    cursor: pointer;
-    font-weight: 600;
-  }
-
-  .control-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-  }
-
-  .control-card {
-    border: 1px solid #dce3e9;
-    border-radius: 7px;
-    padding: 14px;
-    background: #fff;
-  }
-
-  .control-number {
-    font-size: 11px;
-    font-weight: 700;
-    color: #17365d;
-    margin-bottom: 5px;
-  }
-
-  .inline-form {
-    display: inline;
-  }
-
-  .cleaning-status {
-    padding: 10px 12px;
-    border-radius: 6px;
-    margin-top: 10px;
-  }
-
-  .cleaning-ready {
-    background: #eef9f1;
-    border: 1px solid #b9d8c1;
-    color: #216438;
-  }
-
-  .cleaning-blocked {
-    background: #fff0f0;
-    border: 1px solid #e4b4b4;
-    color: #8b2222;
-  }
-
-  .cleaning-review {
-    background: #fff8e8;
-    border: 1px solid #ead7a2;
-    color: #765300;
-  }
-
-  @media(max-width: 1000px) {
-    .metric-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    .control-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media(max-width: 800px) {
-    .form-grid,
-    .profile-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .form-grid .full {
-      grid-column: auto;
-    }
-
-    .metric-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .exception-values {
-      grid-template-columns: 1fr;
-    }
-  }
+.page-header{margin-bottom:18px}.section{margin-top:18px}.section-title{margin-bottom:10px}
+.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.form-grid .full{grid-column:1/-1}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.btn{display:inline-block;padding:8px 12px;border:0;border-radius:5px;background:#17365d;color:#fff;text-decoration:none;cursor:pointer;font:inherit;font-size:12px}.btn:hover{opacity:.9}.btn-secondary{background:#66727d}.btn-success{background:#287a46}.btn-danger{background:#a52a2a}.btn-warning{background:#9a6a00}.btn-info{background:#286c8f}
+.status{display:inline-block;padding:4px 9px;border-radius:12px;font-size:11px;font-weight:700}.status-approved{background:#dff1e4;color:#216438}.status-draft,.status-pending{background:#fff0d2;color:#765300}.status-rejected{background:#f8dada;color:#8b2222}.status-revision{background:#e8e8f8;color:#4d4d88}.status-superseded{background:#e5e8eb;color:#59636c}.status-critical{background:#f8dada;color:#8b2222}.status-high{background:#ffe1d0;color:#8a3d16}.status-medium{background:#fff0d2;color:#765300}.status-low{background:#dff1e4;color:#216438}
+.notice{padding:11px;border-radius:6px;background:#f3f7fb;border:1px solid #d9e3ec;margin-bottom:12px}.notice-warning{background:#fff8e8;border-color:#ead7a2}.notice-danger{background:#fff0f0;border-color:#e4b4b4}.notice-success{background:#eef9f1;border-color:#b9d8c1}.small{font-size:11px}.muted{line-height:1.5}.empty{padding:20px;text-align:center;color:#687682;border:1px dashed #cbd5df;background:#fafbfc;border-radius:6px}.table-wrap{overflow-x:auto}.table td{max-width:300px;word-break:break-word;vertical-align:top}.required{color:#a52a2a}
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:12px 0}.metric{border:1px solid #d9e0e7;border-radius:6px;padding:12px;background:#fafbfc}.metric .v{font-size:20px;font-weight:700}.metric .l{font-size:10px;text-transform:uppercase;color:#687682;margin-top:3px}
+.quality-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.quality-box{border:1px solid #d9e0e7;border-radius:6px;padding:10px}.quality-box b{font-size:13px}.quality-box span{display:block;font-size:10px;color:#687682;margin-top:4px}
+.dq-panel{margin-top:12px;padding:14px;border:1px solid #d9e0e7;border-radius:7px;background:#fff}.exception{border:1px solid #d9e0e7;border-radius:6px;padding:10px;margin:8px 0;background:#fafbfc}.exception-critical{border-left:5px solid #a52a2a}.exception-high{border-left:5px solid #9a6a00}.exception-medium{border-left:5px solid #66727d}.exception-low{border-left:5px solid #287a46}.exception-grid{display:grid;grid-template-columns:120px 1fr 1fr;gap:8px;font-size:12px}.exception-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.inline{display:inline}.inline input{padding:6px;border:1px solid #cbd5df;border-radius:4px;font-size:11px}
+.step-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}.step-card{display:block;border:1px solid #d9e0e7;border-radius:7px;padding:14px;background:#fff;text-decoration:none;color:inherit}.step-card:hover{border-color:#17365d;background:#f7faff}.step-num{font-size:10px;font-weight:700;color:#17365d;text-transform:uppercase}.step-card h4{margin:5px 0}.step-card p{font-size:11px;color:#687682;margin:0 0 10px;line-height:1.45}
+@media(max-width:900px){.metrics,.quality-grid,.step-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:800px){.form-grid,.step-grid{grid-template-columns:1fr}.form-grid .full{grid-column:auto}.exception-grid{grid-template-columns:1fr}}
 </style>
 
-
-<!-- ============================================================
-     PAGE HEADER
-============================================================ -->
-
 <div class="card page-header">
-
-  <div class="label">DATA & EVIDENCE</div>
-
+  <div class="label">DATA & EVIDENCE · STEP 2C</div>
   <h2>Data Sources / Taxpayer Evidence Base</h2>
-
-  <p class="muted">
-    Register, profile, validate, clean, review and approve the data sources
-    that may be used by the Virtual Tax Auditor.
-  </p>
-
-  <div class="notice" style="margin-top:12px;">
-
-    <b>Step 2C Control Principle:</b>
-
-    Uploading a data source does not make it available to the VTA engine.
-
-    The original source is retained unchanged. The system profiles the source,
-    identifies quality issues, proposes safe transformations, records
-    exceptions and requires controlled human review before a cleaned version
-    can become available for Taxpayer 360, Risk Assessment or AI Audit Analysis.
-
-  </div>
-
+  <p class="muted">Register, profile, quality-check, clean, review and approve the data sources that may be used by the Virtual Tax Auditor.</p>
+  <div class="notice" style="margin-top:12px"><b>Control principle:</b> the original uploaded source is immutable. Profiling does not alter it. Cleaning produces a controlled version, exceptions require human resolution, and only an approved clean version may become available for VTA use.</div>
 </div>
 
-
-<!-- ============================================================
-     REGISTER NEW DATA SOURCE
-============================================================ -->
-
 <div class="card section">
-
   <h3 class="section-title">Register New Data Source</h3>
-
-  <form
-    method="POST"
-    action="{{ url_for('data_source_register') }}"
-    enctype="multipart/form-data"
-  >
-
+  <form method="POST" action="{{ url_for('data_source_register') }}" enctype="multipart/form-data">
     <div class="form-grid">
-
       <div>
-
-        <label for="source_name">
-          Source Name <span class="required">*</span>
-        </label>
-
-        <input
-          type="text"
-          id="source_name"
-          name="source_name"
-          placeholder="e.g. DT Payments"
-          required
-        >
-
+        <label>Source Name <span class="required">*</span></label>
+        <input type="text" name="source_name" placeholder="e.g. DT Payments" required>
       </div>
 
-
       <div>
-
-        <label for="source_type">
-          Source Type <span class="required">*</span>
-        </label>
-
-        <select
-          id="source_type"
-          name="source_type"
-          required
-        >
-
-          <option value="">
-            -- Select Source Type --
-          </option>
-
-          {% for source_type in source_types %}
-
-          <option value="{{ source_type }}">
-            {{ source_type }}
-          </option>
-
+        <label>Source Type <span class="required">*</span></label>
+        <select name="source_type" required>
+          <option value="">-- Select Source Type --</option>
+          {% for x in source_types %}
+          <option value="{{ x }}">{{ x }}</option>
           {% endfor %}
-
         </select>
-
       </div>
 
-
       <div>
-
-        <label for="tax_type">
-          Tax Type
-        </label>
-
-        <select
-          id="tax_type"
-          name="tax_type"
-        >
-
-          <option value="">
-            -- Select Tax Type --
-          </option>
-
-          {% for tax_type in tax_types %}
-
-          <option value="{{ tax_type }}">
-            {{ tax_type }}
-          </option>
-
+        <label>Tax Type</label>
+        <select name="tax_type">
+          <option value="">-- Select Tax Type --</option>
+          {% for x in tax_types %}
+          <option value="{{ x }}">{{ x }}</option>
           {% endfor %}
-
         </select>
-
       </div>
-
 
       <div>
-
-        <label for="reporting_period">
-          Reporting Period
-        </label>
-
-        <input
-          type="text"
-          id="reporting_period"
-          name="reporting_period"
-          placeholder="e.g. FY 2025/26"
-        >
-
+        <label>Reporting Period</label>
+        <input type="text" name="reporting_period" placeholder="e.g. FY 2025/26">
       </div>
-
 
       <div>
-
-        <label for="owner_department">
-          Source Owner / Department
-        </label>
-
-        <input
-          type="text"
-          id="owner_department"
-          name="owner_department"
-          placeholder="e.g. Domestic Taxes"
-        >
-
+        <label>Source Owner / Department</label>
+        <input type="text" name="owner_department" placeholder="e.g. Domestic Taxes">
       </div>
-
 
       <div>
-
-        <label for="source_description">
-          Description
-        </label>
-
-        <input
-          type="text"
-          id="source_description"
-          name="description"
-          placeholder="Brief description of the source"
-        >
-
+        <label>Description</label>
+        <input type="text" name="description" placeholder="Brief description of the source">
       </div>
-
 
       <div class="full">
-
-        <label for="data_file">
-          Data File <span class="required">*</span>
-        </label>
-
-        <input
-          type="file"
-          id="data_file"
-          name="data_file"
-          accept=".csv,.xls,.xlsx"
-          required
-        >
-
-        <div class="muted small" style="margin-top:6px;">
-
-          Supported formats: CSV, XLS and XLSX.
-
-          The system will inspect the source before it becomes eligible
-          for approval.
-
-          The original uploaded file is retained unchanged.
-
+        <label>Data File <span class="required">*</span></label>
+        <input type="file" name="data_file" accept=".csv,.xls,.xlsx" required>
+        <div class="muted small" style="margin-top:6px">
+          Supported: CSV, XLS, XLSX. Upload triggers profiling; it does not modify the original file.
         </div>
-
       </div>
-
     </div>
-
 
     <div class="actions">
-
-      <button
-        type="submit"
-        class="btn"
-      >
-        Upload & Profile
-      </button>
-
+      <button type="submit" class="btn">Upload & Profile</button>
     </div>
-
   </form>
-
 </div>
 
-
-<!-- ============================================================
-     DATA QUALITY / PROFILING RESULTS
-============================================================ -->
-
-{% if quality_profiles is defined and quality_profiles %}
-
 <div class="card section">
-
-  <h3 class="section-title">
-    Data Quality & Profiling
-  </h3>
-
-  <p class="muted">
-    The following results show the structural and basic data-quality
-    assessment performed on registered data sources. Profiling does not
-    modify the original source.
-  </p>
-
-
-  {% for profile in quality_profiles %}
-
-  <div class="profile-card" style="margin-top:14px;">
-
-    <div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;">
-
-      <div>
-
-        <h4>
-          {{ profile.source_name }}
-        </h4>
-
-        <div class="muted small">
-
-          {{ profile.source_ref }}
-
-          {% if profile.version_number %}
-            · Version {{ profile.version_number }}
-          {% endif %}
-
-          {% if profile.original_filename %}
-            · {{ profile.original_filename }}
-          {% endif %}
-
-        </div>
-
-      </div>
-
-
-      {% if profile.quality_band == 'Excellent' %}
-
-      <span class="status status-approved">
-        Excellent
-      </span>
-
-      {% elif profile.quality_band == 'Good' %}
-
-      <span class="status status-low">
-        Good
-      </span>
-
-      {% elif profile.quality_band == 'Needs Review' %}
-
-      <span class="status status-medium">
-        Needs Review
-      </span>
-
-      {% else %}
-
-      <span class="status status-critical">
-        Poor
-      </span>
-
-      {% endif %}
-
-    </div>
-
-
-    <div class="metric-grid">
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Quality Score
-        </div>
-
-        <div class="quality-score
-          {% if profile.quality_score >= 90 %}
-            quality-excellent
-          {% elif profile.quality_score >= 75 %}
-            quality-good
-          {% elif profile.quality_score >= 50 %}
-            quality-review
-          {% else %}
-            quality-poor
-          {% endif %}
-        ">
-
-          {{ "%.1f"|format(profile.quality_score or 0) }}
-
-        </div>
-
-      </div>
-
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Records
-        </div>
-
-        <div class="metric-value">
-
-          {% if profile.record_count is not none %}
-            {{ "{:,}".format(profile.record_count) }}
-          {% else %}
-            —
-          {% endif %}
-
-        </div>
-
-      </div>
-
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Columns
-        </div>
-
-        <div class="metric-value">
-
-          {{ profile.column_count or 0 }}
-
-        </div>
-
-      </div>
-
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Issues
-        </div>
-
-        <div class="metric-value">
-
-          {{ profile.issue_count or 0 }}
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    <div class="metric-grid">
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Critical
-        </div>
-
-        <div class="metric-value">
-
-          {{ profile.critical_count or 0 }}
-
-        </div>
-
-      </div>
-
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          High
-        </div>
-
-        <div class="metric-value">
-
-          {{ profile.high_count or 0 }}
-
-        </div>
-
-      </div>
-
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Medium
-        </div>
-
-        <div class="metric-value">
-
-          {{ profile.medium_count or 0 }}
-
-        </div>
-
-      </div>
-
-
-      <div class="metric-card">
-
-        <div class="metric-label">
-          Low / Informational
-        </div>
-
-        <div class="metric-value">
-
-          {{ profile.low_count or 0 }}
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    {% if profile.columns %}
-
-    <details>
-
-      <summary>
-        View Column Profile
-      </summary>
-
-      <div class="table-wrap" style="margin-top:10px;">
-
-        <table class="table">
-
-          <thead>
-
-            <tr>
-              <th>Column</th>
-              <th>Detected Type</th>
-              <th>Non-null</th>
-              <th>Missing</th>
-              <th>Missing %</th>
-              <th>Unique</th>
-            </tr>
-
-          </thead>
-
-          <tbody>
-
-            {% for col in profile.columns %}
-
-            <tr>
-
-              <td>
-                <b>{{ col.name }}</b>
-              </td>
-
-              <td>
-                {{ col.detected_type or 'Unknown' }}
-              </td>
-
-              <td>
-                {{ col.non_null_count or 0 }}
-              </td>
-
-              <td>
-                {{ col.missing_count or 0 }}
-              </td>
-
-              <td>
-
-                {% if col.missing_pct is not none %}
-                  {{ "%.2f"|format(col.missing_pct) }}%
-                {% else %}
-                  —
-                {% endif %}
-
-              </td>
-
-              <td>
-                {{ col.unique_count or 0 }}
-              </td>
-
-            </tr>
-
-            {% endfor %}
-
-          </tbody>
-
-        </table>
-
-      </div>
-
-    </details>
-
-    {% endif %}
-
-
-    {% if profile.warnings %}
-
-    <details>
-
-      <summary>
-        View Data Quality Warnings
-      </summary>
-
-      <div style="margin-top:10px;">
-
-        {% for warning in profile.warnings %}
-
-        <div class="notice notice-warning">
-          {{ warning }}
-        </div>
-
-        {% endfor %}
-
-      </div>
-
-    </details>
-
-    {% endif %}
-
-
-    {% if profile.errors %}
-
-    <details>
-
-      <summary>
-        View Validation Errors
-      </summary>
-
-      <div style="margin-top:10px;">
-
-        {% for error in profile.errors %}
-
-        <div class="notice notice-danger">
-          {{ error }}
-        </div>
-
-        {% endfor %}
-
-      </div>
-
-    </details>
-
-    {% endif %}
-
-
-    {% if profile.id %}
-
-    <div class="actions">
-
-      <a
-        class="btn btn-secondary"
-        href="{{ url_for('data_source_versions', source_id=profile.source_id) }}"
-      >
-        View Source Versions
-      </a>
-
-    </div>
-
-    {% endif %}
-
-  </div>
-
-  {% endfor %}
-
-</div>
-
-{% endif %}
-
-
-<!-- ============================================================
-     CLEANING EXCEPTIONS
-============================================================ -->
-
-{% if cleaning_exceptions is defined %}
-
-<div class="card section">
-
-  <h3 class="section-title">
-    Step 2C — Data Quality Exceptions
-  </h3>
-
-  <p class="muted">
-    Exceptions that cannot safely be resolved without a controlled decision
-    are retained here. The original value is never silently overwritten.
-  </p>
-
-
-  {% if cleaning_exceptions %}
-
-  {% for exception in cleaning_exceptions %}
-
-  <div class="exception-card">
-
-    <div class="exception-header">
-
-      <div>
-
-        <div class="exception-title">
-
-          {{ exception.description }}
-
-        </div>
-
-        <div class="muted small" style="margin-top:4px;">
-
-          Source:
-          {{ exception.source_ref or '—' }}
-
-          {% if exception.column_name %}
-            · Column: {{ exception.column_name }}
-          {% endif %}
-
-          {% if exception.row_reference %}
-            · Row: {{ exception.row_reference }}
-          {% endif %}
-
-        </div>
-
-      </div>
-
-
-      {% if exception.severity == 'Critical' %}
-
-      <span class="status status-critical">
-        Critical
-      </span>
-
-      {% elif exception.severity == 'High' %}
-
-      <span class="status status-high">
-        High
-      </span>
-
-      {% elif exception.severity == 'Medium' %}
-
-      <span class="status status-medium">
-        Medium
-      </span>
-
-      {% else %}
-
-      <span class="status status-low">
-        Low
-      </span>
-
-      {% endif %}
-
-    </div>
-
-
-    <div class="exception-values">
-
-      <div class="value-box">
-
-        <div class="value-label">
-          Original Value
-        </div>
-
-        <div class="value-content">
-
-          {{ exception.original_value or '—' }}
-
-        </div>
-
-      </div>
-
-
-      <div class="value-box">
-
-        <div class="value-label">
-          Proposed Value
-        </div>
-
-        <div class="value-content">
-
-          {{ exception.proposed_value or 'No automatic correction proposed' }}
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    {% if exception.status %}
-
-    <div style="margin-top:10px;">
-
-      <b>Status:</b>
-
-      {% if exception.status in ['Resolved','Accepted','Approved'] %}
-
-      <span class="status status-approved">
-        {{ exception.status }}
-      </span>
-
-      {% elif exception.status in ['Rejected','Blocked'] %}
-
-      <span class="status status-rejected">
-        {{ exception.status }}
-      </span>
-
-      {% else %}
-
-      <span class="status status-pending">
-        {{ exception.status }}
-      </span>
-
-      {% endif %}
-
-    </div>
-
-    {% endif %}
-
-
-    {% if exception.status not in ['Resolved','Accepted','Rejected','Approved'] %}
-
-    <form
-      method="POST"
-      action="{{ url_for('data_quality_exception_resolve', exception_id=exception.id) }}"
-      style="margin-top:12px;"
-    >
-
-      <div class="form-grid">
-
-        <div>
-
-          <label>
-            Resolution
-          </label>
-
-          <select
-            name="resolution"
-            required
-          >
-
-            <option value="">
-              -- Select Resolution --
-            </option>
-
-            <option value="Accept Correction">
-              Accept Correction
-            </option>
-
-            <option value="Reject Correction">
-              Reject Correction / Retain Original
-            </option>
-
-            <option value="Mark as Valid">
-              Mark as Valid
-            </option>
-
-            <option value="Override">
-              Override with Corrected Value
-            </option>
-
-          </select>
-
-        </div>
-
-
-        <div>
-
-          <label>
-            Final Value
-          </label>
-
-          <input
-            type="text"
-            name="final_value"
-            placeholder="Required for Override"
-          >
-
-        </div>
-
-
-        <div class="full">
-
-          <label>
-            Review Comment
-          </label>
-
-          <textarea
-            name="comments"
-            rows="3"
-            placeholder="Explain the decision or provide supporting information."
-            required
-          ></textarea>
-
-        </div>
-
-      </div>
-
-
-      <div class="actions">
-
-        <button
-          type="submit"
-          class="btn btn-success"
-        >
-          Resolve Exception
-        </button>
-
-      </div>
-
-    </form>
-
-    {% endif %}
-
-  </div>
-
-  {% endfor %}
-
-  {% else %}
-
-  <div class="empty">
-
-    <b>No unresolved data-quality exceptions.</b>
-
-    <div class="muted" style="margin-top:6px;">
-
-      No human-review exception currently requires action.
-
-    </div>
-
-  </div>
-
-  {% endif %}
-
-</div>
-
-{% endif %}
-
-
-<!-- ============================================================
-     CLEANING / READINESS
-============================================================ -->
-
-{% if cleaning_status is defined %}
-
-<div class="card section">
-
-  <h3 class="section-title">
-    Clean Data Readiness
-  </h3>
-
-
-  {% if cleaning_status == 'Ready' %}
-
-  <div class="cleaning-status cleaning-ready">
-
-    <b>Ready for Clean Version Approval</b>
-
-    <div class="small" style="margin-top:4px;">
-
-      All required data-quality conditions have been satisfied.
-
-    </div>
-
-  </div>
-
-  {% elif cleaning_status == 'Blocked' %}
-
-  <div class="cleaning-status cleaning-blocked">
-
-    <b>Cleaning Blocked</b>
-
-    <div class="small" style="margin-top:4px;">
-
-      Critical or unresolved data-quality issues require action before
-      the cleaned data can proceed.
-
-    </div>
-
-  </div>
-
-  {% else %}
-
-  <div class="cleaning-status cleaning-review">
-
-    <b>Cleaning Requires Review</b>
-
-    <div class="small" style="margin-top:4px;">
-
-      Review and resolve the outstanding data-quality exceptions before
-      generating or approving the cleaned version.
-
-    </div>
-
-  </div>
-
-  {% endif %}
-
-
-  {% if cleaning_summary is defined %}
-
-  <div class="metric-grid">
-
-    <div class="metric-card">
-
-      <div class="metric-label">
-        Original Records
-      </div>
-
-      <div class="metric-value">
-
-        {{ "{:,}".format(cleaning_summary.original_records or 0) }}
-
-      </div>
-
-    </div>
-
-
-    <div class="metric-card">
-
-      <div class="metric-label">
-        Records Reviewed
-      </div>
-
-      <div class="metric-value">
-
-        {{ "{:,}".format(cleaning_summary.records_reviewed or 0) }}
-
-      </div>
-
-    </div>
-
-
-    <div class="metric-card">
-
-      <div class="metric-label">
-        Automatic Changes
-      </div>
-
-      <div class="metric-value">
-
-        {{ "{:,}".format(cleaning_summary.automatic_changes or 0) }}
-
-      </div>
-
-    </div>
-
-
-    <div class="metric-card">
-
-      <div class="metric-label">
-        Unresolved Exceptions
-      </div>
-
-      <div class="metric-value">
-
-        {{ "{:,}".format(cleaning_summary.unresolved or 0) }}
-
-      </div>
-
-    </div>
-
-  </div>
-
-  {% endif %}
-
-
-  {% if cleaning_status == 'Ready' and source_for_cleaning is defined and source_for_cleaning %}
-
-  <form
-    method="POST"
-    action="{{ url_for('data_source_generate_clean_version', source_id=source_for_cleaning.id) }}"
-    style="margin-top:15px;"
-  >
-
-    <div class="notice">
-
-      <b>Controlled Clean Version</b>
-
-      <div class="small" style="margin-top:5px;">
-
-        Generating the clean version will create a new controlled data
-        artifact linked to the original source. The original file will
-        remain unchanged.
-
-      </div>
-
-    </div>
-
-
-    <div class="actions">
-
-      <button
-        type="submit"
-        class="btn btn-success"
-      >
-        Generate Clean Version
-      </button>
-
-    </div>
-
-  </form>
-
-  {% endif %}
-
-</div>
-
-{% endif %}
-
-
-<!-- ============================================================
-     APPROVAL QUEUE
-============================================================ -->
-
-<div class="card section">
-
-  <h3 class="section-title">
-    Data Source Approval Queue
-  </h3>
-
-  <p class="muted">
-
-    These sources have been uploaded and profiled but are not yet approved
-    for use by the Virtual Tax Auditor.
-
-  </p>
-
+  <h3 class="section-title">Data Source Approval Queue</h3>
 
   {% if pending %}
 
   <div class="table-wrap">
-
     <table class="table">
 
       <thead>
-
         <tr>
-
           <th>Source</th>
-          <th>Reference</th>
           <th>Version</th>
-          <th>File</th>
           <th>Records</th>
-          <th>Validation</th>
           <th>Quality</th>
+          <th>Exceptions</th>
           <th>Status</th>
-          <th>Uploaded By</th>
-          <th>Uploaded</th>
           <th>Action</th>
-
         </tr>
-
       </thead>
-
 
       <tbody>
 
-        {% for source in pending %}
+      {% for source in pending %}
 
         <tr>
 
           <td>
-
-            <b>
-              {{ source.source_name }}
-            </b>
-
-            {% if source.source_type %}
-
+            <b>{{ source.source_name }}</b>
             <div class="muted small">
-              {{ source.source_type }}
+              {{ source.source_ref }} · {{ source.original_filename }}
             </div>
-
-            {% endif %}
-
           </td>
-
-
-          <td>
-            {{ source.source_ref }}
-          </td>
-
 
           <td>
             v{{ source.version_number }}
           </td>
 
-
           <td>
-            {{ source.original_filename }}
+            {{ "{:,}".format(source.record_count or 0) }}
           </td>
 
-
           <td>
-
-            {% if source.record_count is defined and source.record_count is not none %}
-
-              {{ "{:,}".format(source.record_count) }}
-
+            {% if source.quality_score is not none %}
+              <b>{{ source.quality_score }}%</b>
+              <div class="small">{{ source.quality_band }}</div>
             {% else %}
-
-              —
-
+              <span class="status status-pending">Not Profiled</span>
             {% endif %}
-
           </td>
 
-
           <td>
-
-            {% if source.validation_status == 'Passed' %}
-
-            <span class="status status-approved">
-              Passed
-            </span>
-
-            {% elif source.validation_status in ['Warnings','Warning'] %}
-
-            <span class="status status-pending">
-              Warning
-            </span>
-
-            {% elif source.validation_status == 'Failed' %}
-
-            <span class="status status-rejected">
-              Failed
-            </span>
-
-            {% else %}
-
-            <span class="status status-pending">
-              {{ source.validation_status or 'Pending' }}
-            </span>
-
-            {% endif %}
-
-          </td>
-
-
-          <td>
-
-            {% if source.quality_band == 'Excellent' %}
-
-            <span class="status status-approved">
-              Excellent
-            </span>
-
-            {% elif source.quality_band == 'Good' %}
-
-            <span class="status status-low">
-              Good
-            </span>
-
-            {% elif source.quality_band == 'Needs Review' %}
-
-            <span class="status status-medium">
-              Review
-            </span>
-
-            {% elif source.quality_band == 'Poor' %}
-
-            <span class="status status-critical">
-              Poor
-            </span>
-
-            {% else %}
-
-            —
-
-            {% endif %}
-
-          </td>
-
-
-          <td>
-
-            {% set s = source.version_status or source.status or 'Draft' %}
-
-
-            {% if s == 'Approved' %}
-
-            <span class="status status-approved">
-              Approved
-            </span>
-
-            {% elif s == 'Rejected' %}
-
-            <span class="status status-rejected">
-              Rejected
-            </span>
-
-            {% elif s == 'Needs Revision' %}
-
-            <span class="status status-revision">
-              Needs Revision
-            </span>
-
-            {% elif s == 'Superseded' %}
-
-            <span class="status status-superseded">
-              Superseded
-            </span>
-
-            {% else %}
-
-            <span class="status status-draft">
-              {{ s }}
-            </span>
-
-            {% endif %}
-
-          </td>
-
-
-          <td>
-            {{ source.uploaded_by or '—' }}
-          </td>
-
-
-          <td>
-            {{ source.uploaded_at or '—' }}
-          </td>
-
-
-          <td>
-
-            {% if source.id is defined %}
-
-            <div class="actions">
-
-              <a
-                class="btn btn-secondary"
-                href="{{ url_for('data_source_versions', source_id=source.id) }}"
-              >
-                Review
-              </a>
-
+            <b>{{ source.unresolved_count }}</b> unresolved
+            <div class="small">
+              {{ source.exception_count }} total
             </div>
+          </td>
 
-            {% endif %}
+          <td>
+            <span class="status status-draft">
+              {{ source.version_status or 'Draft' }}
+            </span>
+          </td>
 
+          <td>
+            <a
+              class="btn btn-secondary"
+              href="#source-{{ source.id }}"
+            >
+              Open Control Centre
+            </a>
           </td>
 
         </tr>
 
-        {% endfor %}
+      {% endfor %}
 
       </tbody>
-
     </table>
-
   </div>
 
   {% else %}
 
   <div class="empty">
-
-    <b>No data sources are currently awaiting approval.</b>
-
-    <div class="muted" style="margin-top:6px;">
-
-      Newly uploaded sources will appear here after profiling.
-
-    </div>
-
+    No data sources are currently awaiting approval.
   </div>
 
   {% endif %}
-
 </div>
-
-
-<!-- ============================================================
-     REGISTERED DATA SOURCES
-============================================================ -->
 
 <div class="card section">
 
   <h3 class="section-title">
-    Registered Data Sources
+    Registered Data Sources & Step 2C Control Centre
   </h3>
-
-  <p class="muted">
-
-    All registered data sources and their current approval status.
-
-    Previous versions remain retained for auditability.
-
-  </p>
-
 
   {% if rows %}
 
-  <div class="table-wrap">
+    {% for source in rows %}
 
-    <table class="table">
+      {% set d=details[source.id] %}
+      {% set s=source.version_status or source.status or 'Draft' %}
 
-      <thead>
+      <div
+        class="dq-panel"
+        id="source-{{ source.id }}"
+      >
 
-        <tr>
+        <div
+          style="
+            display:flex;
+            justify-content:space-between;
+            gap:10px;
+            flex-wrap:wrap;
+            align-items:center
+          "
+        >
 
-          <th>Source</th>
-          <th>Reference</th>
-          <th>Type</th>
-          <th>Tax Type</th>
-          <th>Period</th>
-          <th>Version</th>
-          <th>Records</th>
-          <th>Quality</th>
-          <th>Status</th>
-          <th>Current Use</th>
-          <th>Action</th>
+          <div>
 
-        </tr>
-
-      </thead>
-
-
-      <tbody>
-
-        {% for source in rows %}
-
-        <tr>
-
-          <td>
-
-            <b>
+            <h3 style="margin:0">
               {{ source.source_name }}
-            </b>
-
-            {% if source.description %}
+            </h3>
 
             <div class="muted small">
-              {{ source.description }}
+              {{ source.source_ref }}
+              · v{{ source.version_number }}
+              · {{ source.original_filename }}
             </div>
+
+          </div>
+
+          <div>
+
+            {% if s=='Approved' %}
+
+              <span class="status status-approved">
+                Approved
+              </span>
+
+            {% elif s=='Rejected' %}
+
+              <span class="status status-rejected">
+                Rejected
+              </span>
+
+            {% elif s=='Needs Revision' %}
+
+              <span class="status status-revision">
+                Needs Revision
+              </span>
+
+            {% elif s=='Superseded' %}
+
+              <span class="status status-superseded">
+                Superseded
+              </span>
+
+            {% else %}
+
+              <span class="status status-draft">
+                {{ s }}
+              </span>
 
             {% endif %}
 
-          </td>
+          </div>
+
+        </div>
 
 
-          <td>
-            {{ source.source_ref }}
-          </td>
+        <div class="metrics">
+
+          <div class="metric">
+
+            <div class="v">
+
+              {% if source.quality_score is not none %}
+                {{ source.quality_score }}%
+              {% else %}
+                —
+              {% endif %}
+
+            </div>
+
+            <div class="l">
+              Quality Score
+            </div>
+
+          </div>
 
 
-          <td>
-            {{ source.source_type or '—' }}
-          </td>
+          <div class="metric">
+
+            <div class="v">
+              {{ source.quality_band or 'Not Profiled' }}
+            </div>
+
+            <div class="l">
+              Quality Band
+            </div>
+
+          </div>
 
 
-          <td>
-            {{ source.tax_type or 'General' }}
-          </td>
+          <div class="metric">
+
+            <div class="v">
+              {{ source.critical_count }}
+            </div>
+
+            <div class="l">
+              Critical Open
+            </div>
+
+          </div>
 
 
-          <td>
-            {{ source.reporting_period or '—' }}
-          </td>
+          <div class="metric">
+
+            <div class="v">
+              {{ source.high_count }}
+            </div>
+
+            <div class="l">
+              High Open
+            </div>
+
+          </div>
 
 
-          <td>
-            v{{ source.version_number or 1 }}
-          </td>
+          <div class="metric">
+
+            <div class="v">
+              {{ source.unresolved_count }}
+            </div>
+
+            <div class="l">
+              Unresolved
+            </div>
+
+          </div>
+
+        </div>
 
 
-          <td>
+        <!-- =====================================================
+             STEP 2C CONTROL BUTTONS
+        ====================================================== -->
 
-            {% if source.record_count is defined and source.record_count is not none %}
+        <div class="step-grid">
 
-              {{ "{:,}".format(source.record_count) }}
 
-            {% else %}
+          <!-- 2C-1 -->
+
+          <a
+            class="step-card"
+            href="{{ url_for('data_source_profile',source_id=source.id) }}"
+          >
+
+            <div class="step-num">
+              2C-1 · Data Profiling
+            </div>
+
+            <h4>
+              Open Profile →
+            </h4>
+
+            <p>
+              Inspect columns, types, missing values, duplicates,
+              TIN quality, date quality and numeric quality.
+            </p>
+
+            <span class="btn btn-info">
+              Run / Refresh Profile
+            </span>
+
+          </a>
+
+
+          <!-- 2C-2 -->
+
+          <a
+            class="step-card"
+            href="#exceptions-{{ source.id }}"
+          >
+
+            <div class="step-num">
+              2C-2 · Issue Classification
+            </div>
+
+            <h4>
+              View Issues →
+            </h4>
+
+            <p>
+              See Critical, High, Medium and Low exceptions and
+              distinguish blocking issues from safe transformations.
+            </p>
+
+            <span class="btn btn-warning">
+              Open Issues
+            </span>
+
+          </a>
+
+
+          <!-- 2C-3 -->
+
+          <a
+            class="step-card"
+            href="#cleaning-{{ source.id }}"
+          >
+
+            <div class="step-num">
+              2C-3 · Cleaning Proposal
+            </div>
+
+            <h4>
+              Review Cleaning →
+            </h4>
+
+            <p>
+              After exceptions are resolved, generate a controlled
+              clean derivative without modifying the original.
+            </p>
+
+            <span class="btn btn-info">
+              Open Cleaning
+            </span>
+
+          </a>
+
+
+          <!-- 2C-4 -->
+
+          <a
+            class="step-card"
+            href="#exceptions-{{ source.id }}"
+          >
+
+            <div class="step-num">
+              2C-4 · Human Resolution
+            </div>
+
+            <h4>
+              Resolve Exceptions →
+            </h4>
+
+            <p>
+              Accept correction, reject/retain, mark valid or
+              override a value. Every decision is recorded.
+            </p>
+
+            <span class="btn btn-warning">
+              Resolve Exceptions
+            </span>
+
+          </a>
+
+
+          <!-- 2C-5 -->
+
+          <a
+            class="step-card"
+            href="#cleaning-{{ source.id }}"
+          >
+
+            <div class="step-num">
+              2C-5 · Clean Version
+            </div>
+
+            <h4>
+              Generate Clean Version →
+            </h4>
+
+            <p>
+              Create a versioned cleaned file linked to this exact
+              source version.
+            </p>
+
+            <span class="btn btn-success">
+              Generate / Review
+            </span>
+
+          </a>
+
+
+          <!-- 2C-6 -->
+
+          <a
+            class="step-card"
+            href="#approval-{{ source.id }}"
+          >
+
+            <div class="step-num">
+              2C-6 · Approval & Lineage
+            </div>
+
+            <h4>
+              Review & Approve →
+            </h4>
+
+            <p>
+              Approve the clean version and then approve the source
+              for controlled VTA use.
+            </p>
+
+            <span class="btn btn-success">
+              Open Approval
+            </span>
+
+          </a>
+
+        </div>
+
+
+        <div class="actions">
+
+          <a
+            class="btn btn-secondary"
+            href="{{ url_for('data_source_versions',source_id=source.id) }}"
+          >
+            Versions / Reviews
+          </a>
+
+          <a
+            class="btn btn-secondary"
+            href="{{ url_for('data_source_download',source_id=source.id) }}"
+          >
+            Download Original
+          </a>
+
+        </div>
+
+
+        <!-- =====================================================
+             2C-1 PROFILE
+        ====================================================== -->
+
+        {% if not d.profile %}
+
+          <div
+            class="notice notice-warning"
+            style="margin-top:12px"
+          >
+
+            <b>
+              No quality profile is stored for this version.
+            </b>
+
+            Click
+            <b>
+              Run / Refresh Profile
+            </b>
+            above.
+
+          </div>
+
+        {% else %}
+
+          <details
+            open
+            style="margin-top:14px"
+          >
+
+            <summary>
+
+              <b>
+                2C-1 Data Profile
+              </b>
 
               —
+              {{ source.record_count or 0 }}
+              records ·
+              {{ source.column_count or 0 }}
+              columns
 
-            {% endif %}
-
-          </td>
-
-
-          <td>
-
-            {% if source.quality_band == 'Excellent' %}
-
-            <span class="status status-approved">
-              Excellent
-            </span>
-
-            {% elif source.quality_band == 'Good' %}
-
-            <span class="status status-low">
-              Good
-            </span>
-
-            {% elif source.quality_band == 'Needs Review' %}
-
-            <span class="status status-medium">
-              Review
-            </span>
-
-            {% elif source.quality_band == 'Poor' %}
-
-            <span class="status status-critical">
-              Poor
-            </span>
-
-            {% else %}
-
-            —
-
-            {% endif %}
-
-          </td>
+            </summary>
 
 
-          <td>
+            <div
+              class="quality-grid"
+              style="margin-top:10px"
+            >
 
-            {% set s = source.version_status or source.status or 'Draft' %}
+              {% for cp in d.profile_column_profiles %}
 
+                <div class="quality-box">
 
-            {% if s == 'Approved' %}
+                  <b>
+                    {{ cp.column }}
+                  </b>
 
-            <span class="status status-approved">
-              Approved
-            </span>
+                  <span>
 
-            {% elif s == 'Rejected' %}
+                    {{ cp.detected_type }}
 
-            <span class="status status-rejected">
-              Rejected
-            </span>
+                    ·
 
-            {% elif s == 'Needs Revision' %}
+                    {{ cp.missing_pct }}%
+                    missing
 
-            <span class="status status-revision">
-              Needs Revision
-            </span>
+                    ·
 
-            {% elif s == 'Superseded' %}
+                    {{ cp.unique_count }}
+                    unique
 
-            <span class="status status-superseded">
-              Superseded
-            </span>
+                  </span>
 
-            {% else %}
+                </div>
 
-            <span class="status status-draft">
-              {{ s }}
-            </span>
-
-            {% endif %}
-
-          </td>
-
-
-          <td>
-
-            {% if s == 'Approved' %}
-
-            <span class="status status-approved">
-              Available to VTA
-            </span>
-
-            {% else %}
-
-            <span class="status status-draft">
-              Not Available
-            </span>
-
-            {% endif %}
-
-          </td>
-
-
-          <td>
-
-            {% if source.id is defined %}
-
-            <div class="actions">
-
-              <a
-                class="btn btn-secondary"
-                href="{{ url_for('data_source_versions', source_id=source.id) }}"
-              >
-                Versions
-              </a>
+              {% endfor %}
 
             </div>
 
+          </details>
+
+        {% endif %}
+
+
+        <!-- =====================================================
+             2C-2 / 2C-4 EXCEPTIONS
+        ====================================================== -->
+
+        <div
+          id="exceptions-{{ source.id }}"
+          class="dq-panel"
+          style="margin-top:14px"
+        >
+
+          <h4>
+            2C-2 / 2C-4 — Data Quality Exceptions
+          </h4>
+
+          <div class="muted small">
+
+            {{ source.exception_count }}
+            total ·
+            {{ source.unresolved_count }}
+            unresolved.
+
+            Original values are retained; no exception is silently
+            deleted.
+
+          </div>
+
+
+          {% if d.exceptions %}
+
+            {% for ex in d.exceptions %}
+
+              <div
+                class="exception exception-{{ ex.severity|lower }}"
+              >
+
+                <div class="exception-grid">
+
+
+                  <div>
+
+                    <b>
+                      {{ ex.severity }}
+                    </b>
+
+                    <div class="small">
+                      {{ ex.rule_code or 'DQ' }}
+                    </div>
+
+                  </div>
+
+
+                  <div>
+
+                    <b>
+                      {{ ex.issue_type }}
+                    </b>
+
+                    <div>
+                      {{ ex.description }}
+                    </div>
+
+                  </div>
+
+
+                  <div>
+
+                    <b>
+                      {{ ex.column_name or 'Dataset-level' }}
+                    </b>
+
+                    <div class="small">
+
+                      Row:
+                      {{ ex.row_reference or '—' }}
+
+                      <br>
+
+                      Original:
+                      {{ ex.original_value or '—' }}
+
+                      {% if ex.proposed_value %}
+
+                        <br>
+
+                        Proposed:
+                        {{ ex.proposed_value }}
+
+                      {% endif %}
+
+                    </div>
+
+                  </div>
+
+
+                </div>
+
+
+                <div
+                  class="small"
+                  style="margin-top:6px"
+                >
+
+                  <b>Status:</b>
+                  {{ ex.status }}
+
+                  {% if ex.resolution %}
+                    · {{ ex.resolution }}
+                  {% endif %}
+
+                  {% if ex.resolved_by %}
+                    · {{ ex.resolved_by }}
+                    · {{ ex.resolved_at }}
+                  {% endif %}
+
+                </div>
+
+
+                {% if ex.status=='Open' %}
+
+                  <div class="exception-actions">
+
+
+                    <form
+                      class="inline"
+                      method="POST"
+                      action="{{ url_for(
+                        'data_source_exception_resolve',
+                        source_id=source.id,
+                        exception_id=ex.id
+                      ) }}"
+                    >
+
+                      <input
+                        type="hidden"
+                        name="action"
+                        value="Accept Correction"
+                      >
+
+                      <button
+                        class="btn btn-success"
+                        type="submit"
+                      >
+                        Accept Correction
+                      </button>
+
+                    </form>
+
+
+                    <form
+                      class="inline"
+                      method="POST"
+                      action="{{ url_for(
+                        'data_source_exception_resolve',
+                        source_id=source.id,
+                        exception_id=ex.id
+                      ) }}"
+                    >
+
+                      <input
+                        type="hidden"
+                        name="action"
+                        value="Reject"
+                      >
+
+                      <button
+                        class="btn btn-secondary"
+                        type="submit"
+                      >
+                        Reject / Retain
+                      </button>
+
+                    </form>
+
+
+                    <form
+                      class="inline"
+                      method="POST"
+                      action="{{ url_for(
+                        'data_source_exception_resolve',
+                        source_id=source.id,
+                        exception_id=ex.id
+                      ) }}"
+                    >
+
+                      <input
+                        type="hidden"
+                        name="action"
+                        value="Mark as Valid"
+                      >
+
+                      <button
+                        class="btn btn-warning"
+                        type="submit"
+                      >
+                        Mark as Valid
+                      </button>
+
+                    </form>
+
+
+                    <form
+                      class="inline"
+                      method="POST"
+                      action="{{ url_for(
+                        'data_source_exception_resolve',
+                        source_id=source.id,
+                        exception_id=ex.id
+                      ) }}"
+                    >
+
+                      <input
+                        name="final_value"
+                        placeholder="Override value"
+                      >
+
+                      <input
+                        type="hidden"
+                        name="action"
+                        value="Override"
+                      >
+
+                      <button
+                        class="btn"
+                        type="submit"
+                      >
+                        Override
+                      </button>
+
+                    </form>
+
+
+                  </div>
+
+                {% endif %}
+
+              </div>
+
+            {% endfor %}
+
+
+          {% else %}
+
+            <div class="empty">
+              No exceptions recorded for this version.
+            </div>
+
+          {% endif %}
+
+        </div>
+
+
+        <!-- =====================================================
+             2C-3 / 2C-5 CLEANING
+        ====================================================== -->
+
+        <div
+          id="cleaning-{{ source.id }}"
+          class="dq-panel"
+        >
+
+          <h4>
+            2C-3 / 2C-5 — Controlled Cleaning
+          </h4>
+
+
+          {% if source.unresolved_count>0 %}
+
+            <div class="notice notice-warning">
+
+              <b>
+                Cleaning is blocked.
+              </b>
+
+              Resolve the
+              {{ source.unresolved_count }}
+              outstanding exception(s) first.
+
+            </div>
+
+          {% else %}
+
+
+            {% if d.cleaned %}
+
+              <div
+                class="
+                  notice
+                  {% if d.cleaned.status=='Approved' %}
+                    notice-success
+                  {% elif d.cleaned.status=='Rejected' %}
+                    notice-danger
+                  {% else %}
+                    notice-warning
+                  {% endif %}
+                "
+              >
+
+                <b>
+                  Clean Version
+                  {{ d.cleaned.cleaned_version }}:
+                </b>
+
+                {{ d.cleaned.cleaned_filename }}
+
+                ·
+
+                {{ d.cleaned.transformation_count }}
+                transformations
+
+                · status
+
+                <b>
+                  {{ d.cleaned.status }}
+                </b>.
+
+              </div>
+
+
+            {% else %}
+
+              <div class="notice">
+
+                All recorded exceptions are resolved.
+
+                The original source remains unchanged.
+
+                You may now generate the controlled clean version.
+
+              </div>
+
+
+              <form
+                method="POST"
+                action="{{ url_for(
+                  'data_source_generate_clean',
+                  source_id=source.id
+                ) }}"
+              >
+
+                <button
+                  class="btn btn-success"
+                  type="submit"
+                >
+                  Generate Controlled Clean Version
+                </button>
+
+              </form>
+
             {% endif %}
 
-          </td>
+          {% endif %}
 
-        </tr>
+        </div>
 
-        {% endfor %}
 
-      </tbody>
+        <!-- =====================================================
+             2C-6 APPROVAL & LINEAGE
+        ====================================================== -->
 
-    </table>
+        <div
+          id="approval-{{ source.id }}"
+          class="dq-panel"
+        >
 
-  </div>
+          <h4>
+            2C-6 — Approval & Lineage
+          </h4>
+
+
+          {% if d.cleaned and d.cleaned.status=='Pending Approval' %}
+
+            <div class="notice">
+
+              The clean derivative exists but is
+              <b>
+                not yet available to the VTA
+              </b>.
+
+            </div>
+
+
+            <form
+              method="POST"
+              action="{{ url_for(
+                'data_source_clean_approve',
+                source_id=source.id
+              ) }}"
+              class="form-grid"
+            >
+
+              <div>
+
+                <label>
+                  Reviewer comments
+                </label>
+
+                <input
+                  name="comments"
+                  placeholder="Explain the decision"
+                >
+
+              </div>
+
+
+              <div style="align-self:end">
+
+                <button
+                  class="btn btn-success"
+                  name="decision"
+                  value="Approved"
+                >
+                  Approve Clean Version
+                </button>
+
+
+                <button
+                  class="btn btn-danger"
+                  name="decision"
+                  value="Rejected"
+                >
+                  Reject Clean Version
+                </button>
+
+              </div>
+
+            </form>
+
+
+          {% elif d.cleaned and d.cleaned.status=='Approved' %}
+
+            <div class="notice notice-success">
+
+              <b>
+                Clean Version Approved.
+              </b>
+
+              Approved by
+              {{ d.cleaned.approved_by or '—' }}
+
+              on
+              {{ d.cleaned.approved_at or '—' }}.
+
+              The source can now proceed to controlled source approval.
+
+            </div>
+
+          {% endif %}
+
+
+          {% if s not in ('Approved','Superseded') %}
+
+            <form
+              method="POST"
+              action="{{ url_for(
+                'data_source_review',
+                source_id=source.id
+              ) }}"
+              class="form-grid"
+              style="margin-top:10px"
+            >
+
+              <div>
+
+                <label>
+                  Source review comments
+                </label>
+
+                <input
+                  name="comments"
+                  placeholder="Explain the source decision"
+                >
+
+              </div>
+
+
+              <div style="align-self:end">
+
+
+                {% if source.unresolved_count==0
+                      and d.cleaned
+                      and d.cleaned.status=='Approved' %}
+
+
+                  <button
+                    class="btn btn-success"
+                    name="decision"
+                    value="Approved"
+                  >
+                    Approve Source for VTA
+                  </button>
+
+
+                {% else %}
+
+
+                  <button
+                    class="btn btn-success"
+                    disabled
+                    title="Resolve exceptions and approve the clean version first"
+                  >
+                    Approve Source for VTA
+                  </button>
+
+
+                {% endif %}
+
+
+                <button
+                  class="btn btn-warning"
+                  name="decision"
+                  value="Needs Revision"
+                >
+                  Needs Revision
+                </button>
+
+
+                <button
+                  class="btn btn-danger"
+                  name="decision"
+                  value="Rejected"
+                >
+                  Reject
+                </button>
+
+
+              </div>
+
+            </form>
+
+
+          {% else %}
+
+            <div class="notice notice-success">
+
+              <b>
+                Source is Approved.
+              </b>
+
+              Current version is controlled and available to downstream
+              VTA workflows according to the application's approval controls.
+
+            </div>
+
+          {% endif %}
+
+        </div>
+
+      </div>
+
+    {% endfor %}
+
 
   {% else %}
 
-  <div class="empty">
+    <div class="empty">
 
-    <b>No registered data sources yet.</b>
-
-    <div class="muted" style="margin-top:6px;">
-
-      Use the registration form above to upload the first data source.
+      <b>
+        No registered data sources yet.
+      </b>
 
     </div>
-
-  </div>
 
   {% endif %}
 
 </div>
 
 
-<!-- ============================================================
-     STEP 2C CONTROL INFORMATION
-============================================================ -->
-
 <div class="card section">
 
   <h3 class="section-title">
-    Step 2C — Data Quality & Cleaning Controls
+    Step 2C Control Principles
   </h3>
 
 
-  <div class="control-grid">
+  <div class="quality-grid">
 
 
-    <div class="control-card">
+    <div class="quality-box">
 
-      <div class="control-number">
-        2C-1
-      </div>
+      <b>
+        2C-1 Profile
+      </b>
 
-      <b>Profile</b>
-
-      <div class="muted small" style="margin-top:5px;">
-
-        Inspect records, columns, data types, missing values, duplicates
-        and structural quality.
-
-      </div>
+      <span>
+        Measure structure, completeness, types and quality.
+      </span>
 
     </div>
 
 
-    <div class="control-card">
+    <div class="quality-box">
 
-      <div class="control-number">
-        2C-2
-      </div>
+      <b>
+        2C-2 Classify
+      </b>
 
-      <b>Classify Issues</b>
-
-      <div class="muted small" style="margin-top:5px;">
-
-        Separate safe transformations from issues requiring human review.
-
-      </div>
+      <span>
+        Separate critical issues from reviewable exceptions.
+      </span>
 
     </div>
 
 
-    <div class="control-card">
+    <div class="quality-box">
 
-      <div class="control-number">
-        2C-3
-      </div>
+      <b>
+        2C-3 Propose
+      </b>
 
-      <b>Propose Cleaning</b>
-
-      <div class="muted small" style="margin-top:5px;">
-
-        Generate controlled proposed corrections without modifying the
-        original source.
-
-      </div>
+      <span>
+        Generate controlled cleaning without changing the original.
+      </span>
 
     </div>
 
 
-    <div class="control-card">
+    <div class="quality-box">
 
-      <div class="control-number">
-        2C-4
-      </div>
+      <b>
+        2C-4 Resolve
+      </b>
 
-      <b>Resolve Exceptions</b>
-
-      <div class="muted small" style="margin-top:5px;">
-
-        Human reviewers accept, reject, override or validate exceptions.
-
-      </div>
+      <span>
+        Human decision is recorded for each exception.
+      </span>
 
     </div>
 
 
-    <div class="control-card">
+    <div class="quality-box">
 
-      <div class="control-number">
-        2C-5
-      </div>
+      <b>
+        2C-5 Version
+      </b>
 
-      <b>Clean Version</b>
-
-      <div class="muted small" style="margin-top:5px;">
-
-        Generate a controlled cleaned version linked to the original source.
-
-      </div>
+      <span>
+        Cleaning creates a traceable derivative.
+      </span>
 
     </div>
 
 
-    <div class="control-card">
+    <div class="quality-box">
 
-      <div class="control-number">
-        2C-6
-      </div>
+      <b>
+        2C-6 Approve
+      </b>
 
-      <b>Approval & Lineage</b>
-
-      <div class="muted small" style="margin-top:5px;">
-
-        Only an approved, traceable version becomes eligible for VTA use.
-
-      </div>
+      <span>
+        Only approved data is eligible for VTA use.
+      </span>
 
     </div>
 
@@ -2047,34 +1258,6 @@
 
 </div>
 
-
-<!-- ============================================================
-     DATA SOURCE CONTROL PRINCIPLE
-============================================================ -->
-
-<div class="card section">
-
-  <div class="notice notice-success">
-
-    <b>Data Governance Principle</b>
-
-    <div class="muted small" style="margin-top:6px;">
-
-      The original uploaded dataset remains immutable. Every proposed
-      transformation, exception resolution, cleaned version, approval
-      decision and downstream use must remain traceable to the source
-      version from which it originated.
-
-    </div>
-
-  </div>
-
-</div>
-
-
-<!-- ============================================================
-     BACK TO DASHBOARD
-============================================================ -->
 
 <div style="margin-top:20px">
 
@@ -2102,6 +1285,5 @@
   </a>
 
 </div>
-
 
 {% endblock %}
