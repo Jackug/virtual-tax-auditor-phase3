@@ -1,2297 +1,3135 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit Risk Rule' if rule else 'Create Risk Rule' }}{% endblock %}
+{% block title %}{{ 'Edit Risk Rule' if rule else 'Create Business Risk' }}{% endblock %}
 {% block content %}
 <style>
-.rr-wrap{max-width:1400px;margin:0 auto;padding:24px}.rr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:18px}
-.rr-head h1{margin:0;color:#102f55;font-size:28px}.rr-muted{color:#64748b;font-size:13px}
-.rr-grid{display:grid;grid-template-columns:250px minmax(520px,1fr) 330px;gap:16px;align-items:start}
-.rr-card{background:#fff;border:1px solid #d8e0ea;border-radius:10px;box-shadow:0 2px 8px rgba(15,35,60,.05);padding:16px}
-.rr-card h3{margin:0 0 12px;color:#12345b;font-size:15px}.rr-label{display:block;font-weight:700;font-size:12px;color:#334155;margin:0 0 5px}
-.rr-input,.rr-select,.rr-text{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:6px;padding:9px 10px;font-size:13px;background:#fff}.rr-text{min-height:76px;resize:vertical}
-.rr-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rr-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.rr-field{margin-bottom:12px}
+.br-wrap{max-width:1450px;margin:0 auto;padding:22px}
+.br-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:18px}
+.br-title{margin:0;color:#12345b;font-size:27px}
+.muted{color:#64748b;font-size:12px;line-height:1.5}
+.card{background:#fff;border:1px solid #dbe3ec;border-radius:10px;padding:17px;margin-bottom:14px;box-shadow:0 2px 8px rgba(15,35,60,.04)}
+.card h3{margin:0 0 8px;color:#12345b;font-size:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
+.field{margin-bottom:11px}
+.label{display:block;font-size:12px;font-weight:800;color:#334155;margin-bottom:5px}
+.input,.select,.textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px;padding:9px 10px;font-size:13px;background:#fff}
+.textarea{min-height:75px;resize:vertical}
+.btn{border:0;border-radius:7px;padding:9px 14px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block;font-size:12px}
+.primary{background:#173f66;color:#fff}
+.secondary{background:#fff;color:#173f66;border:1px solid #b9c8d7}
+.danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+.stagebar{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:14px}
+.stage{padding:9px;border:1px solid #dbe3ec;border-radius:8px;background:#f8fafc;font-size:11px;font-weight:800;color:#64748b;text-align:center}
+.stage.active{background:#e7f0f8;color:#123f66;border-color:#8eb0cc}
+.stage.done{background:#ecfdf3;color:#166534;border-color:#a7e1bc}
+.stage-num{font-size:10px;display:block;margin-bottom:2px}
+.source-row{border:1px solid #dbe3ec;border-radius:8px;padding:12px;margin:8px 0;background:#fbfdff}
+.source-head{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.source-title{font-weight:800;color:#173f66;font-size:13px}
+.mapping{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.map-ok{font-size:10px;color:#166534;font-weight:800}
+.map-warn{font-size:10px;color:#92400e;font-weight:800}
+.logic-grid{display:grid;grid-template-columns:180px 1fr 330px;gap:14px}
+.vocab{display:flex;flex-wrap:wrap;gap:6px}
+.vocab button{border:1px solid #c7d6e4;background:#f8fbfe;color:#17466f;border-radius:6px;padding:7px 9px;font-size:11px;font-weight:800;cursor:pointer}
+.steps{min-height:450px}
+.step{border:1px solid #d5dee9;border-left:4px solid #245985;border-radius:8px;background:#fff;margin-bottom:8px;padding:11px 40px 11px 12px;position:relative;cursor:pointer}
+.step.selected{background:#eff6ff;border-color:#8db4d2}
+.tag{display:inline-block;background:#e7f0f8;color:#17466f;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:900;margin-bottom:5px}
+.step-summary{font-size:12px;color:#1f2937;white-space:pre-wrap}
+.tools{position:absolute;right:7px;top:7px;display:flex;gap:3px}
+.mini{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:3px 6px;cursor:pointer}
+.editor{border:1px solid #dbe3ec;border-radius:8px;padding:12px;background:#fbfdff;min-height:420px}
+.note{background:#edf5ff;border:1px solid #c8dbef;border-radius:7px;padding:11px;font-size:12px;line-height:1.5}
+.warning{background:#fff7e6;border:1px solid #f0d28b;border-radius:7px;padding:11px;font-size:12px;line-height:1.5}
+.identity-warning{margin-top:8px}
+.calc-row,.cond-row{border:1px solid #dbe3ec;border-radius:7px;padding:10px;margin:7px 0;background:#fff}
+.actions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.json-preview{background:#102d4a;color:#fff;border-radius:7px;padding:12px;font:11px Consolas,monospace;white-space:pre-wrap;max-height:260px;overflow:auto}
+.hidden{display:none!important}
 
-.logic-search-wrap{position:relative;width:100%}
-.logic-search-box{display:flex;width:100%;border:1px solid #cbd5e1;border-radius:6px;background:#fff;overflow:hidden}
-.logic-search-input{flex:1;min-width:0;border:0;outline:0;padding:9px 10px;font-size:13px;background:#fff}
-.logic-search-input:focus{box-shadow:inset 0 0 0 1px #2563eb}
-.logic-search-toggle{width:38px;border:0;border-left:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;color:#475569}
-.logic-search-toggle:hover{background:#e2e8f0}
-.logic-vocabulary-dropdown{display:none;position:absolute;z-index:1000;left:0;right:0;top:42px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 8px 20px rgba(15,35,60,.14)}
-.logic-vocabulary-dropdown.open{display:block}
-.logic-option{padding:9px 10px;font-size:12px;font-weight:700;color:#173b65;cursor:pointer;border-bottom:1px solid #f1f5f9}
-.logic-option:last-child{border-bottom:0}
-.logic-option:hover{background:#eef5fb}
-.logic-option.selected{background:#dbeafe}
-.logic-option-empty{padding:10px;color:#64748b;font-size:12px}
-.selected-logic-display{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding:8px 9px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px}
-.selected-logic-label{font-size:11px;color:#64748b}
-.selected-logic-label.has-selection{color:#173b65;font-weight:700}
-.logic-add-btn{white-space:nowrap}
-.logic-add-btn:disabled{opacity:.5;cursor:not-allowed}
-
-.canvas{min-height:650px}.step{position:relative;border:1px solid #d5dee9;border-left:4px solid #245985;border-radius:8px;background:#fff;margin-bottom:10px;padding:12px 42px 12px 14px}.step .tag{display:inline-block;background:#e9f1f8;color:#17466f;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:800;margin-bottom:7px}.step .summary{font-size:13px;color:#1f2937;white-space:pre-wrap}.step .tools{position:absolute;right:8px;top:8px;display:flex;gap:4px}.iconbtn{border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:4px 6px;cursor:pointer;color:#475569}.add-step{width:100%;border:1px dashed #8aa8c4;background:#f8fbfe;color:#1c527e;padding:10px;border-radius:7px;font-weight:700;cursor:pointer}
-.empty{padding:45px 15px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc}.preview-box{background:#0f2945;color:#e8f1f8;border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:11px;white-space:pre-wrap;max-height:340px;overflow:auto}
-.source-chip{display:flex;justify-content:space-between;gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;font-size:11px}.badge{border-radius:999px;padding:3px 8px;font-size:10px;font-weight:800}.b-approved{background:#dcfce7;color:#166534}.b-draft{background:#fef3c7;color:#92400e}
-.legal-list{max-height:180px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:8px}.legal-item{display:flex;gap:8px;padding:5px 0;font-size:11px}
-.cond{border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafcff}.cond-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.rr-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#1f537f;color:#fff}.btn-secondary{background:#fff;color:#27496b;border:1px solid #b9c7d6}.btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
-@media(max-width:1050px){.rr-grid{grid-template-columns:1fr}.rr-row3,.rr-row{grid-template-columns:1fr}}
+@media(max-width:1050px){
+    .logic-grid{grid-template-columns:1fr}
+    .stagebar{grid-template-columns:repeat(3,1fr)}
+    .grid3,.grid2,.mapping{grid-template-columns:1fr}
+}
 </style>
 
-<div class="rr-wrap">
-  <div class="rr-head">
+<div class="br-wrap">
+
+  <div class="br-head">
     <div>
-      <div class="rr-muted">Business Rules / Risk Rule Library</div>
-      <h1>{{ 'Edit Risk Rule' if rule else 'Create Risk Rule' }}</h1>
-      <div class="rr-muted">Construct the business definition, executable logic, data relationships and controls used by the Virtual Tax Auditor Risk Engine.</div>
+      <div class="muted">Business Risk Engine / Risk Rule Library</div>
+      <h1 class="br-title">{{ 'Edit Business Risk' if rule else 'Build Business Risk' }}</h1>
+      <div class="muted">
+        Build the rule as structured business logic. The system will interpret,
+        test and retain the exact executable rule.
+      </div>
     </div>
-    <a class="btn btn-secondary" href="{{ url_for('business_rules') }}">← Back to Library</a>
+
+    <a class="btn secondary" href="{{ url_for('business_rules') }}">
+      ← Back to Library
+    </a>
   </div>
 
-  <form method="post" id="riskRuleForm">
+  <div class="stagebar">
+    {% for n,title in [
+      (1,'Risk Definition'),
+      (2,'Data Sources'),
+      (3,'Relationships'),
+      (4,'Detection Logic'),
+      (5,'Test & Top 5'),
+      (6,'Explanation')
+    ] %}
+    <div class="stage {% if n==1 %}active{% endif %}" id="stagebar{{n}}">
+      <span class="stage-num">STAGE {{n}}</span>
+      {{title}}
+    </div>
+    {% endfor %}
+  </div>
+
+  <form
+    method="post"
+    action="{{ url_for('risk_rule_new') if not rule else url_for('risk_rule_edit',rule_id=rule['id']) }}"
+    id="riskRuleForm"
+  >
+
     <input type="hidden" name="rule_plan" id="rule_plan">
 
-    <div class="rr-card" style="margin-bottom:16px">
-      <h3>1. Business Risk Definition</h3>
+    <input
+      type="hidden"
+      name="risk_description"
+      id="risk_description"
+      value="{{ rule['name'] if rule else '' }}"
+    >
 
-      <div class="rr-row">
-        <div class="rr-field">
-          <label class="rr-label">Rule Name *</label>
-          <input class="rr-input" name="rule_name" required
-                 value="{{ rule['name'] if rule else '' }}"
-                 placeholder="e.g. Sales Understatement Risk">
+    <input type="hidden" name="applicable_period" id="applicablePeriod" value="">
+    <input type="hidden" name="period_description" id="periodDescription" value="">
+    <input type="hidden" name="except_description" id="exceptDescription" value="">
+    <input type="hidden" name="base_score" value="0">
+    <input type="hidden" name="exposure_weight" value="0">
+    <input type="hidden" name="frequency_weight" value="0">
+    <input type="hidden" name="ranking_description" id="rankingDescription" value="">
+    <input type="hidden" name="exposure_formula" id="exposureFormula" value="">
+
+    <!-- =========================================================
+         STAGE 1
+         ========================================================= -->
+
+    <section class="card stage-panel" id="stage1">
+
+      <h3>Stage 1 — Risk Definition</h3>
+
+      <div class="muted" style="margin-bottom:12px">
+        Stage 1 intentionally contains only the three business identifiers of the risk.
+      </div>
+
+      <div class="grid3">
+
+        <div class="field">
+          <label class="label">Risk Name *</label>
+          <input
+            class="input"
+            name="rule_name"
+            required
+            value="{{ rule['name'] if rule else '' }}"
+          >
         </div>
 
-        <div class="rr-field">
-          <label class="rr-label">Risk Category *</label>
-          <select class="rr-select" name="risk_category" required>
-            <option value="">Select Risk Category</option>
+        <div class="field">
+          <label class="label">Risk Category *</label>
+
+          <select class="select" name="risk_category" required>
+            <option value="">Select</option>
+
             {% for x in categories %}
-            <option value="{{ x }}" {% if rule and rule['risk_category']==x %}selected{% endif %}>
-              {{ x }}
+            <option
+              value="{{x}}"
+              {% if rule and rule['risk_category']==x %}selected{% endif %}
+            >
+              {{x}}
             </option>
             {% endfor %}
+
           </select>
         </div>
-      </div>
 
-      <div class="rr-row3">
-        <div class="rr-field">
-          <label class="rr-label">Tax Type</label>
-          <select class="rr-select" name="tax_type">
+        <div class="field">
+          <label class="label">Tax Type *</label>
+
+          <select class="select" name="tax_type" required>
+
             {% for x in tax_types %}
-            <option value="{{ x }}" {% if rule and rule['tax_type']==x %}selected{% endif %}>
-              {{ x }}
+            <option
+              value="{{x}}"
+              {% if rule and rule['tax_type']==x %}selected{% endif %}
+            >
+              {{x}}
             </option>
             {% endfor %}
+
           </select>
         </div>
 
-        <div class="rr-field">
-          <label class="rr-label">Taxpayer Scope</label>
-          <input class="rr-input" name="taxpayer_scope"
-                 value="{{ rule['taxpayer_scope'] if rule else '' }}"
-                 placeholder="e.g. Companies and Partnerships">
-        </div>
-
-        <div class="rr-field">
-          <label class="rr-label">Applicable Period</label>
-          <input class="rr-input" name="applicable_period"
-                 value="{{ rule['applicable_period'] if rule else '' }}"
-                 placeholder="e.g. FY 2025/26">
-        </div>
       </div>
 
-      <div class="rr-field">
-        <label class="rr-label">Business Risk Description</label>
-        <textarea class="rr-text" name="risk_description"
-                  placeholder="Describe the risk the analyst wants the system to identify."></textarea>
-      </div>
-    </div>
+      <div class="actions">
 
-    <div class="rr-grid">
-
-      <!-- 2. LOGIC VOCABULARY -->
-      <div class="rr-card">
-        <h3>2. Logic Vocabulary</h3>
-
-        <div class="rr-muted" style="margin-bottom:10px">
-          Search for a logic component, select it, then add it to the executable sequence.
-        </div>
-
-        <div class="logic-search-wrap">
-
-          <div class="logic-search-box">
-            <input
-              type="text"
-              id="logicSearch"
-              class="logic-search-input"
-              placeholder="Search logic vocabulary..."
-              autocomplete="off"
-              oninput="filterLogicVocabulary()"
-              onclick="openLogicVocabulary()"
-            >
-
-            <button
-              type="button"
-              class="logic-search-toggle"
-              onclick="toggleLogicVocabulary()"
-              aria-label="Show logic vocabulary"
-            >
-              ▼
-            </button>
-          </div>
-
-          <div
-            id="logicVocabularyDropdown"
-            class="logic-vocabulary-dropdown"
-          ></div>
-
-          <div class="selected-logic-display">
-            <span
-              id="selectedLogicLabel"
-              class="selected-logic-label"
-            >
-              No logic operator selected
-            </span>
-
-            <button
-              type="button"
-              id="addLogicButton"
-              class="btn btn-primary logic-add-btn"
-              onclick="addSelectedLogicStep()"
-              disabled
-            >
-              + Add Logic Step
-            </button>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- 3. EXECUTABLE LOGIC -->
-      <div class="rr-card canvas">
-        <h3>3. Executable Logic Sequence</h3>
-
-        <div class="rr-muted" style="margin-bottom:12px">
-          The sequence below is the structured rule the system will execute.
-          It is the authoritative logic—not the natural-language description.
-        </div>
-
-        <div id="canvas"></div>
+        <span class="muted">
+          Next: choose the approved datasets that will participate in the risk.
+        </span>
 
         <button
           type="button"
-          class="add-step"
-          onclick="addStep('WHERE')"
+          class="btn primary"
+          onclick="goStage(2)"
         >
-          + Add Logic Step
+          Continue to Data Sources →
         </button>
+
       </div>
 
-      <!-- 4. SELECTED STEP -->
-      <div class="rr-card">
-        <h3>4. Selected Step</h3>
-        <div id="editor" class="rr-muted">
-          Select a logic block or add one to configure it.
+    </section>
+
+
+    <!-- =========================================================
+         STAGE 2
+         ========================================================= -->
+
+    <section class="card stage-panel hidden" id="stage2">
+
+      <h3>Stage 2 — Data Sources & Taxpayer Identity</h3>
+
+      <div class="note">
+        Every participating dataset must have both
+        <b>TIN</b> and <b>Taxpayer Name</b>.
+        The system attempts to detect them automatically.
+        If either cannot be identified, you must select the correct
+        column before continuing.
+      </div>
+
+      <div id="sourceList" style="margin-top:10px">
+
+        {% for s in data_sources %}
+
+        <div
+          class="source-row"
+          data-source-id="{{s['id']}}"
+        >
+
+          <div class="source-head">
+
+            <label>
+
+              <input
+                type="checkbox"
+                class="source-check"
+                value="{{s['id']}}"
+                onchange="renderMappings()"
+              >
+
+              <span class="source-title">
+                {{s['name']}}
+              </span>
+
+              <span class="muted">
+                v{{s['version']}} · {{s['record_count'] or 0}} records
+              </span>
+
+            </label>
+
+            <span class="muted">
+              {{s['type']}}
+            </span>
+
+          </div>
+
+          <div
+            class="mapping hidden"
+            id="mapping-{{s['id']}}"
+          >
+
+            <div class="field">
+
+              <label class="label">
+                TIN Column *
+              </label>
+
+              <select
+                class="select tin-select"
+                data-source="{{s['id']}}"
+              ></select>
+
+              <div
+                class="map-status"
+                id="tin-status-{{s['id']}}"
+              ></div>
+
+            </div>
+
+            <div class="field">
+
+              <label class="label">
+                Taxpayer Name Column *
+              </label>
+
+              <select
+                class="select name-select"
+                data-source="{{s['id']}}"
+              ></select>
+
+              <div
+                class="map-status"
+                id="name-status-{{s['id']}}"
+              ></div>
+
+            </div>
+
+          </div>
+
         </div>
-      </div>
 
-    </div>
+        {% else %}
 
-    <!-- 5. PREVIEW -->
-    <div class="rr-card" style="margin-top:16px">
-      <h3>5. Rule Interpretation Preview</h3>
+        <div class="warning">
+          No approved data sources are available.
+          Approve a data source before building a risk.
+        </div>
 
-      <div class="rr-muted">
-        Before the rule is submitted, the system will generate the
-        natural-language interpretation from the structured plan.
-        The interpretation must explain what the engine will actually execute.
+        {% endfor %}
+
       </div>
 
       <div
-        id="planPreview"
-        class="preview-box"
-        style="margin-top:10px"
-      >
-        No logic has been configured.
+        id="identityWarning"
+        class="warning identity-warning hidden"
+      ></div>
+
+      <div class="actions">
+
+        <button
+          type="button"
+          class="btn secondary"
+          onclick="goStage(1)"
+        >
+          ← Back
+        </button>
+
+        <button
+          type="button"
+          class="btn primary"
+          onclick="validateStage2()"
+        >
+          Continue to Relationships →
+        </button>
+
       </div>
-    </div>
 
-    <!-- 6. LEGAL BASIS -->
-    <div class="rr-card" style="margin-top:16px">
-      <h3>6. Legal Backing — Knowledge Base</h3>
+    </section>
 
-      <div class="rr-muted" style="margin-bottom:10px">
-        Only approved Knowledge Base documents may be attached as legal backing.
+
+    <!-- =========================================================
+         STAGE 3
+         ========================================================= -->
+
+    <section class="card stage-panel hidden" id="stage3">
+
+      <h3>Stage 3 — Data Relationships & Preparation</h3>
+
+      <div class="muted">
+        Define how the selected datasets relate before detection logic is applied.
+        The engine checks join keys, missing identities, unmatched taxpayers and
+        many-to-many multiplication.
       </div>
 
-      <div class="legal-list">
-        {% if legal_basis %}
-          {% for x in legal_basis %}
-          <label class="legal-item">
-            <input
-              type="checkbox"
-              name="legal_basis"
-              value="{{ x['document_id'] }}"
-              {% if x['document_id'] in selected_basis %}checked{% endif %}
-            >
-
-            <span>
-              <b>{{ x['document_ref'] }}</b> —
-              {{ x['title'] }}
-              <span class="rr-muted">
-                (v{{ x['version_number'] }})
-              </span>
-            </span>
-          </label>
-          {% endfor %}
-        {% else %}
-          <div class="rr-muted">
-            No approved Knowledge Base documents are currently available.
-          </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <!-- 7. INFORMATION REQUESTS -->
-    <div class="rr-card" style="margin-top:16px">
-      <h3>7. Information Requests</h3>
-
-      <div id="requests"></div>
+      <div id="joins"></div>
 
       <button
         type="button"
-        class="btn btn-secondary"
-        onclick="addRequest()"
+        class="btn secondary"
+        onclick="addJoin()"
       >
-        + Add Information Request
+        + Add Data Relationship / JOIN
       </button>
-    </div>
 
-    <!-- 8. EXPOSURE -->
-    <div class="rr-card" style="margin-top:16px">
-      <h3>8. Revenue Exposure</h3>
+      <div
+        class="grid3"
+        style="margin-top:14px"
+      >
 
-      <div class="rr-row3">
+        <div class="field">
 
-        <div class="rr-field">
-          <label class="rr-label">Exposure Type</label>
-          <select class="rr-select" name="exposure_type">
-            {% for x in exposure_types %}
-            <option value="{{ x }}">{{ x }}</option>
-            {% endfor %}
+          <label class="label">
+            Analysis Period Field
+          </label>
+
+          <select
+            class="select"
+            id="periodField"
+          >
+            <option value="">
+              No explicit period field
+            </option>
           </select>
+
         </div>
 
-        <div class="rr-field">
-          <label class="rr-label">Exposure Field</label>
+        <div class="field">
+
+          <label class="label">
+            FROM Period
+          </label>
+
           <input
-            class="rr-input"
-            name="exposure_field"
-            placeholder="Exact calculated/source field if applicable"
+            class="input"
+            id="periodFrom"
+            placeholder="e.g. 2025/26"
           >
+
         </div>
 
-        <div class="rr-field">
-          <label class="rr-label">Minimum Exposure (UGX)</label>
+        <div class="field">
+
+          <label class="label">
+            TO Period
+          </label>
+
           <input
-            class="rr-input"
-            name="minimum_exposure"
-            placeholder="e.g. 10000000"
+            class="input"
+            id="periodTo"
+            placeholder="e.g. 2026/27"
           >
+
         </div>
 
       </div>
 
-      <div class="rr-field">
-        <label class="rr-label">Exposure Formula</label>
-        <textarea
-          class="rr-text"
-          name="exposure_formula"
-          placeholder="e.g. Sales Variance × VAT Rate"
-        ></textarea>
-      </div>
-    </div>
-
-    <!-- 9. RANKING -->
-    <div class="rr-card" style="margin-top:16px">
-      <h3>9. Risk Ranking</h3>
-
-      <div class="rr-row3">
-
-        <div class="rr-field">
-          <label class="rr-label">Base Score</label>
-          <input
-            class="rr-input"
-            name="base_score"
-            value="0"
-          >
-        </div>
-
-        <div class="rr-field">
-          <label class="rr-label">Exposure Weight</label>
-          <input
-            class="rr-input"
-            name="exposure_weight"
-            value="0"
-          >
-        </div>
-
-        <div class="rr-field">
-          <label class="rr-label">Frequency Weight</label>
-          <input
-            class="rr-input"
-            name="frequency_weight"
-            value="0"
-          >
-        </div>
-
-      </div>
-
-      <div class="rr-field">
-        <label class="rr-label">Ranking Description</label>
-        <textarea
-          class="rr-text"
-          name="ranking_description"
-          placeholder="Explain how the resulting risk should be ranked."
-        ></textarea>
-      </div>
-    </div>
-
-    <!-- ACTIONS -->
-    <div class="rr-actions">
-      <a
-        class="btn btn-secondary"
-        href="{{ url_for('business_rules') }}"
+      <div
+        class="grid2"
+        style="margin-top:4px"
       >
-        Cancel
-      </a>
 
-      <button
-        class="btn btn-primary"
-        type="submit"
-        onclick="return prepareSubmit()"
+        <div class="field">
+
+          <label class="label">
+            Time Relationship
+          </label>
+
+          <select
+            class="select"
+            id="timeRelationship"
+          >
+
+            <option value="none">
+              No historical comparison
+            </option>
+
+            <option value="previous_month">
+              Previous Month
+            </option>
+
+            <option value="previous_year">
+              Previous Year
+            </option>
+
+            <option value="average_previous_3_months">
+              Average Previous 3 Months
+            </option>
+
+            <option value="average_previous_12_months">
+              Average Previous 12 Months
+            </option>
+
+          </select>
+
+        </div>
+
+        <div class="field">
+
+          <label class="label">
+            Identity Validation
+          </label>
+
+          <div
+            class="note"
+            id="identitySummary"
+          >
+            Identity mappings from Stage 2 will be used as the taxpayer identity controls.
+          </div>
+
+        </div>
+
+      </div>
+
+      <div class="note">
+
+        For a join such as Income Tax to VAT, define the identity relationship
+        explicitly (for example TIN = TIN) and add Financial Year or Month
+        as an additional relationship where required.
+
+      </div>
+
+      <div
+        id="prepChecks"
+        style="margin-top:10px"
+      ></div>
+
+      <div class="actions">
+
+        <button
+          type="button"
+          class="btn secondary"
+          onclick="goStage(2)"
+        >
+          ← Back
+        </button>
+
+        <button
+          type="button"
+          class="btn primary"
+          onclick="validateStage3()"
+        >
+          Continue to Detection Logic →
+        </button>
+
+      </div>
+
+    </section>
+
+
+    <!-- =========================================================
+         STAGE 4
+         ========================================================= -->
+
+    <section class="card stage-panel hidden" id="stage4">
+
+      <h3>Stage 4 — Business Risk Detection Logic</h3>
+
+      <div class="note">
+
+        This is the main function of the Business Risk Engine.
+        Build the exact executable logic using controlled fields,
+        calculations, conditions and historical operators.
+        Do not write SQL or Python.
+
+      </div>
+
+      <div
+        class="logic-grid"
+        style="margin-top:12px"
       >
-        Generate System Interpretation →
-      </button>
-    </div>
+
+        <div
+          class="card"
+          style="margin:0;padding:12px"
+        >
+
+          <h3>Logic Blocks</h3>
+
+          <div
+            class="muted"
+            style="margin-bottom:8px"
+          >
+            Add blocks in the order the engine should understand them.
+          </div>
+
+          <div
+            class="vocab"
+            id="vocab"
+          ></div>
+
+        </div>
+
+
+        <div
+          class="card"
+          style="margin:0;padding:12px"
+        >
+
+          <h3>Executable Sequence</h3>
+
+          <div
+            id="steps"
+            class="steps"
+          ></div>
+
+          <button
+            type="button"
+            class="btn secondary"
+            onclick="addStep('WHERE')"
+          >
+            + Add WHERE
+          </button>
+
+        </div>
+
+
+        <div
+          class="card"
+          style="margin:0;padding:12px"
+        >
+
+          <h3>Configure Selected Block</h3>
+
+          <div
+            id="editor"
+            class="editor"
+          >
+
+            <div class="muted">
+              Select a block to configure it.
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div
+        class="card"
+        style="margin-top:14px"
+      >
+
+        <h3>Risk Exposure</h3>
+
+        <div class="grid3">
+
+          <div class="field">
+
+            <label class="label">
+              Exposure Type
+            </label>
+
+            <select
+              class="select"
+              name="exposure_type"
+              id="exposureType"
+            >
+
+              {% for x in exposure_types %}
+
+              <option value="{{x}}">
+                {{x}}
+              </option>
+
+              {% endfor %}
+
+            </select>
+
+          </div>
+
+          <div class="field">
+
+            <label class="label">
+              Exposure Field / Calculation
+            </label>
+
+            <input
+              class="input"
+              id="exposureField"
+              placeholder="e.g. Sales Variance"
+            >
+
+          </div>
+
+          <div class="field">
+
+            <label class="label">
+              Minimum Exposure
+            </label>
+
+            <input
+              class="input"
+              id="minimumExposure"
+              placeholder="0"
+            >
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="card">
+
+        <h3>Legal Backing</h3>
+
+        <div
+          class="muted"
+          style="margin-bottom:8px"
+        >
+          Only approved Knowledge Base documents may support the rule.
+        </div>
+
+        <div
+          style="max-height:170px;overflow:auto"
+        >
+
+          {% for x in legal_basis %}
+
+          <label
+            style="display:block;font-size:11px;margin:6px 0"
+          >
+
+            <input
+              type="checkbox"
+              name="legal_basis"
+              value="{{x['document_id']}}"
+              {% if x['document_id'] in selected_basis %}checked{% endif %}
+            >
+
+            <b>{{x['document_ref']}}</b>
+            —
+            {{x['title']}}
+            (v{{x['version_number']}})
+
+          </label>
+
+          {% else %}
+
+          <div class="muted">
+            No approved Knowledge Base legal documents available.
+          </div>
+
+          {% endfor %}
+
+        </div>
+
+      </div>
+
+
+      <div class="card">
+
+        <h3>Information Requests</h3>
+
+        <div id="requests"></div>
+
+        <button
+          type="button"
+          class="btn secondary"
+          onclick="addRequest()"
+        >
+          + Add Information Request
+        </button>
+
+      </div>
+
+
+      <div class="actions">
+
+        <button
+          type="button"
+          class="btn secondary"
+          onclick="goStage(3)"
+        >
+          ← Back
+        </button>
+
+        <button
+          type="submit"
+          class="btn primary"
+          id="submitRule"
+        >
+          Generate Interpretation & Test Rule →
+        </button>
+
+      </div>
+
+      <div
+        class="muted"
+        style="margin-top:8px"
+      >
+        Submission saves the structured rule, generates the system interpretation,
+        executes it against approved data and opens Stages 5–6 for human review.
+        It does not activate the rule or populate production Risk Universe until approval.
+      </div>
+
+    </section>
 
   </form>
+
 </div>
+
 
 <script>
 
-const SOURCES = {{ data_sources|map(attribute='__dict__')|list|tojson if false else '[]' }};
-
-const SOURCE_DATA = [
+const SOURCE_DATA=[
 {% for s in data_sources %}
-  {
-    id:{{ s['id']|int }},
-    name:{{ s['name']|tojson }},
-    version:{{ s['version']|tojson }},
-    columns:{{ s['columns']|tojson }}
-  },
+{
+    id:{{s['id']|int}},
+    name:{{s['name']|tojson}},
+    version:{{s['version']|tojson}},
+    columns:{{s['columns']|tojson}}
+},
 {% endfor %}
 ];
 
-const OPS = {{ logic_operators|tojson }};
-const CALCS = {{ calc_operations|tojson }};
-const CLAUSES = {{ clauses|tojson }};
+const OPS={{logic_operators|tojson}};
+const CALCS={{calc_operations|tojson}};
 
-let plan = {
-  base_source:null,
-  sources:[],
-  joins:[],
-  filters:[],
-  calculations:[],
-  conditions:[],
-  period:{},
-  result:{},
-  exposure:{},
-  ranking:{},
-  stop:{},
-  else_description:'',
-  except_description:''
+const existing={{
+    (rule['detection_logic_json'] if rule else '{}')
+    |default('{}')
+    |safe
+}};
+
+let plan={
+    base_source:null,
+    sources:[],
+    identity_mappings:[],
+    joins:[],
+    filters:[],
+    calculations:[],
+    conditions:[],
+    period:{},
+    result:{},
+    exposure:{},
+    ranking:{},
+    stop:{},
+    else_description:'',
+    except_description:'',
+    steps:[]
 };
 
-let selected = -1;
-
-
-/* =========================================================
-   GENERAL ESCAPE
-   ========================================================= */
-
-function esc(v){
-  return String(v??'').replace(
-    /[&<>"']/g,
-    m=>({
-      '&':'&amp;',
-      '<':'&lt;',
-      '>':'&gt;',
-      '"':'&quot;',
-      "'":'&#039;'
-    }[m])
-  );
-}
-
-
-/* =========================================================
-   SEARCHABLE LOGIC VOCABULARY
-   ========================================================= */
-
-const LOGIC_VOCABULARY = [
-  'FROM',
-  'JOIN',
-  'WHEN',
-  'TO',
-  'WHERE',
-  'IN',
-  'NOT IN',
-  'BETWEEN',
-  'GROUP BY',
-  'CALCULATE',
-  'IF',
-  'AND',
-  'OR',
-  'WHILE',
-  'EXCEPT',
-  'STOP',
-  'CONTINUE',
-  'THEN',
-  'ELSE'
-];
-
-let selectedLogicOperator = null;
-
-
-function renderLogicVocabulary(items=LOGIC_VOCABULARY){
-
-  const dropdown =
-    document.getElementById('logicVocabularyDropdown');
-
-  if(!dropdown) return;
-
-  if(!items.length){
-
-    dropdown.innerHTML =
-      '<div class="logic-option-empty">No matching logic operators found.</div>';
-
-    return;
-  }
-
-  dropdown.innerHTML = items.map(op => `
-    <div
-      class="logic-option ${selectedLogicOperator===op?'selected':''}"
-      onclick="selectLogicOperator('${op.replace(/'/g,"\\'")}')"
-    >
-      ${esc(op)}
-    </div>
-  `).join('');
-}
-
-
-function openLogicVocabulary(){
-
-  filterLogicVocabulary();
-
-  document
-    .getElementById('logicVocabularyDropdown')
-    ?.classList.add('open');
-}
-
-
-function closeLogicVocabulary(){
-
-  document
-    .getElementById('logicVocabularyDropdown')
-    ?.classList.remove('open');
-}
-
-
-function toggleLogicVocabulary(){
-
-  const d =
-    document.getElementById('logicVocabularyDropdown');
-
-  if(!d) return;
-
-  d.classList.contains('open')
-    ? closeLogicVocabulary()
-    : openLogicVocabulary();
-}
-
-
-function filterLogicVocabulary(){
-
-  const input =
-    document.getElementById('logicSearch');
-
-  if(!input) return;
-
-  const q =
-    input.value.trim().toLowerCase();
-
-  const filtered =
-    LOGIC_VOCABULARY.filter(
-      op => op.toLowerCase().includes(q)
-    );
-
-  renderLogicVocabulary(filtered);
-
-  document
-    .getElementById('logicVocabularyDropdown')
-    ?.classList.add('open');
-}
-
-
-function selectLogicOperator(operator){
-
-  selectedLogicOperator = operator;
-
-  const input =
-    document.getElementById('logicSearch');
-
-  const label =
-    document.getElementById('selectedLogicLabel');
-
-  const button =
-    document.getElementById('addLogicButton');
-
-  if(input){
-    input.value = operator;
-  }
-
-  if(label){
-    label.textContent = `Selected: ${operator}`;
-    label.classList.add('has-selection');
-  }
-
-  if(button){
-    button.disabled = false;
-  }
-
-  renderLogicVocabulary();
-}
-
-
-function addSelectedLogicStep(){
-
-  if(!selectedLogicOperator){
-    return;
-  }
-
-  addStep(selectedLogicOperator);
-
-  selectedLogicOperator = null;
-
-  const input =
-    document.getElementById('logicSearch');
-
-  const label =
-    document.getElementById('selectedLogicLabel');
-
-  const button =
-    document.getElementById('addLogicButton');
-
-  if(input){
-    input.value = '';
-  }
-
-  if(label){
-    label.textContent =
-      'No logic operator selected';
-
-    label.classList.remove('has-selection');
-  }
-
-  if(button){
-    button.disabled = true;
-  }
-
-  renderLogicVocabulary();
-
-  closeLogicVocabulary();
-}
-
-
-document.addEventListener('click',function(event){
-
-  const wrap =
-    document.querySelector('.logic-search-wrap');
-
-  if(wrap && !wrap.contains(event.target)){
-    closeLogicVocabulary();
-  }
-
-});
-
-
-/* =========================================================
-   SOURCE / FIELD HELPERS
-   ========================================================= */
-
-function src(id){
-  return SOURCE_DATA.find(x=>x.id==id);
-}
-
-
-function fieldOptions(id, selectedVal=''){
-
-  const s = src(id);
-
-  if(!s){
-    return '<option value="">Select field</option>';
-  }
-
-  return `
-    <option value="">Select field</option>
-    ${
-      s.columns.map(c=>`
-        <option
-          value="${esc(c)}"
-          ${c===selectedVal?'selected':''}
-        >
-          ${esc(c)}
-        </option>
-      `).join('')
-    }
-  `;
-}
-
-
-function sourceOptions(selectedVal=''){
-
-  return `
-    <option value="">Select source</option>
-    ${
-      SOURCE_DATA.map(s=>`
-        <option
-          value="${s.id}"
-          ${s.id==selectedVal?'selected':''}
-        >
-          ${esc(s.name)} (v${esc(s.version)})
-        </option>
-      `).join('')
-    }
-  `;
-}
-
-
-function refHtml(prefix,obj={}){
-
-  const type =
-    obj.type || 'field';
-
-  return `
-    <div class="rr-field">
-
-      <label class="rr-label">
-        ${prefix} Type
-      </label>
-
-      <select
-        class="rr-select ref-type"
-        onchange="renderEditor()"
-      >
-
-        <option
-          value="field"
-          ${type==='field'?'selected':''}
-        >
-          Source Field
-        </option>
-
-        <option
-          value="calculation"
-          ${type==='calculation'?'selected':''}
-        >
-          Calculated Field
-        </option>
-
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      ${
-        type==='calculation'
-
-        ?
-
-        `
-        <label class="rr-label">
-          ${prefix} Calculation
-        </label>
-
-        <select class="rr-select ref-calc">
-
-          <option value="">
-            Select calculation
-          </option>
-
-          ${
-            plan.calculations.map(c=>`
-              <option
-                value="${esc(c.name)}"
-                ${c.name===obj.name?'selected':''}
-              >
-                ${esc(c.name)}
-              </option>
-            `).join('')
-          }
-
-        </select>
-        `
-
-        :
-
-        `
-        <label class="rr-label">
-          ${prefix} Source
-        </label>
-
-        <select
-          class="rr-select ref-source"
-          onchange="renderEditor()"
-        >
-          ${sourceOptions(obj.source_id)}
-        </select>
-
-        <label
-          class="rr-label"
-          style="margin-top:8px"
-        >
-          ${prefix} Field
-        </label>
-
-        <select class="rr-select ref-field">
-          ${fieldOptions(obj.source_id,obj.field||'')}
-        </select>
-        `
-      }
-
-    </div>
-  `;
-}
-
-
-/* =========================================================
-   STEP SUMMARY
-   ========================================================= */
-
-function summary(step){
-
-  let x =
-    step.config || {};
-
-  if(step.op==='FROM')
-    return `Primary source: ${src(x.source_id)?.name||'Not selected'}`;
-
-  if(step.op==='JOIN')
-    return `${(x.join_type||'INNER').toUpperCase()} JOIN ${src(x.right_source_id)?.name||'source'} ON ${src(x.left_source_id)?.name||'source'}.${x.left_field||'field'} = ${src(x.right_source_id)?.name||'source'}.${x.right_field||'field'}`;
-
-  if(step.op==='CALCULATE')
-    return `${x.name||'Calculated field'} = ${x.expression_text||x.operation||'configure calculation'}`;
-
-  if([
-    'WHERE',
+let selected=-1;
+
+const VOCAB=[
+    'FROM',
+    'JOIN',
     'WHEN',
+    'TO',
+    'WHERE',
+    'IN',
+    'NOT IN',
+    'BETWEEN',
+    'GROUP BY',
+    'CALCULATE',
     'IF',
     'AND',
     'OR',
     'WHILE',
-    'EXCEPT'
-  ].includes(step.op))
-    return `${x.left_text||'condition'} ${x.operator||''} ${x.right_text||x.value||''}`.trim();
+    'EXCEPT',
+    'STOP',
+    'CONTINUE',
+    'THEN',
+    'ELSE'
+];
 
-  if(step.op==='GROUP BY')
-    return `Group by ${(x.fields||[]).join(', ')||'select fields'}`;
+const HISTORICAL_LABELS=[
+    'Previous Month',
+    'Previous Year',
+    'Average Previous 3 Months',
+    'Average Previous 12 Months',
+    'Growth %',
+    'Decline %',
+    'Frequency',
+    'Persistence'
+];
 
-  if(step.op==='STOP')
-    return `STOP ${x.scope||'record'} when ${x.description||'condition not configured'}`;
 
-  if(step.op==='THEN')
-    return x.description||'Create risk / result';
+function esc(v){
 
-  if(step.op==='ELSE')
-    return x.description||'Alternative action';
+    return String(v??'').replace(
+        /[&<>"']/g,
+        m=>({
+            '&':'&amp;',
+            '<':'&lt;',
+            '>':'&gt;',
+            '"':'&quot;',
+            "'":'&#039;'
+        }[m])
+    );
 
-  if(step.op==='TO')
-    return `${x.to||'end period'}`;
-
-  if(step.op==='CONTINUE')
-    return x.description||'Continue evaluation';
-
-  return JSON.stringify(x);
 }
 
 
-/* =========================================================
-   LOGIC STEP MANAGEMENT
-   ========================================================= */
+function goStage(n){
+
+    document
+        .querySelectorAll('.stage-panel')
+        .forEach(x=>x.classList.add('hidden'));
+
+    document
+        .getElementById('stage'+n)
+        .classList.remove('hidden');
+
+    document
+        .querySelectorAll('.stage')
+        .forEach((x,i)=>
+            x.classList.toggle('active',i===n-1)
+        );
+
+    window.scrollTo({
+        top:0,
+        behavior:'smooth'
+    });
+
+    if(n===2){
+        renderMappings();
+    }
+
+    if(n===3){
+        renderJoins();
+        renderPeriodFields();
+    }
+
+    if(n===4){
+        renderVocab();
+        renderSteps();
+    }
+
+}
+
+
+function src(id){
+
+    return SOURCE_DATA.find(x=>x.id==id);
+
+}
+
+
+function optsSource(sel=''){
+
+    return '<option value="">Select source</option>'+
+        SOURCE_DATA.map(s=>
+            `<option
+                value="${s.id}"
+                ${s.id==sel?'selected':''}
+            >
+                ${esc(s.name)} (v${esc(s.version)})
+            </option>`
+        ).join('');
+
+}
+
+
+function optsField(id,sel=''){
+
+    const s=src(id);
+
+    if(!s){
+        return '<option value="">Select field</option>';
+    }
+
+    return '<option value="">Select field</option>'+
+        s.columns.map(c=>
+            `<option
+                value="${esc(c)}"
+                ${c===sel?'selected':''}
+            >
+                ${esc(c)}
+            </option>`
+        ).join('');
+
+}
+
+
+function norm(x){
+
+    return String(x||'')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g,'');
+
+}
+
+
+function detect(cols,type){
+
+    const aliases =
+        type==='tin'
+        ?
+        [
+            'tin',
+            'taxpayertin',
+            'taxpayeridentificationnumber',
+            'taxpayeridentificationno',
+            'taxidentificationnumber',
+            'taxidentificationno',
+            'tinno',
+            'taxpayern'
+        ]
+        :
+        [
+            'taxpayername',
+            'taxpayer',
+            'name',
+            'taxpayerlegalname',
+            'registeredname',
+            'businessname',
+            'companyname',
+            'entityname'
+        ];
+
+    return cols.find(
+        c=>aliases.includes(norm(c))
+    )||'';
+
+}
+
+
+function renderMappings(){
+
+    document
+        .querySelectorAll('.source-check')
+        .forEach(ch=>{
+
+            const id=Number(ch.value);
+
+            const box=document.getElementById(
+                'mapping-'+id
+            );
+
+            if(!box)return;
+
+            box.classList.toggle(
+                'hidden',
+                !ch.checked
+            );
+
+            if(ch.checked){
+
+                const s=src(id);
+
+                const tin=
+                    box.querySelector('.tin-select');
+
+                const nm=
+                    box.querySelector('.name-select');
+
+                const detectedTin=
+                    detect(s.columns,'tin');
+
+                const detectedName=
+                    detect(s.columns,'name');
+
+                tin.innerHTML=
+                    optsField(
+                        id,
+                        detectedTin
+                    );
+
+                nm.innerHTML=
+                    optsField(
+                        id,
+                        detectedName
+                    );
+
+                setMapStatus(
+                    id,
+                    'tin',
+                    tin.value,
+                    detectedTin
+                );
+
+                setMapStatus(
+                    id,
+                    'name',
+                    nm.value,
+                    detectedName
+                );
+
+                tin.onchange=()=>
+                    setMapStatus(
+                        id,
+                        'tin',
+                        tin.value,
+                        detectedTin
+                    );
+
+                nm.onchange=()=>
+                    setMapStatus(
+                        id,
+                        'name',
+                        nm.value,
+                        detectedName
+                    );
+
+            }
+
+        });
+
+}
+
+
+function setMapStatus(id,type,val,auto){
+
+    const el=document.getElementById(
+        type+'-status-'+id
+    );
+
+    if(!el)return;
+
+    el.className=
+        val
+        ?'map-ok'
+        :'map-warn';
+
+    el.textContent=
+        val
+        ?
+        (
+            val===auto
+            ?
+            'Auto-detected; analyst may change it.'
+            :
+            'Analyst-selected mapping.'
+        )
+        :
+        'Required — select a column.';
+
+}
+
+
+function selectedSources(){
+
+    return [
+        ...document.querySelectorAll(
+            '.source-check:checked'
+        )
+    ].map(x=>Number(x.value));
+
+}
+
+
+function validateStage2(){
+
+    const ids=selectedSources();
+
+    const w=
+        document.getElementById(
+            'identityWarning'
+        );
+
+    let errors=[];
+
+    if(!ids.length){
+
+        errors.push(
+            'Select at least one approved dataset.'
+        );
+
+    }
+
+    const maps=[];
+
+    ids.forEach(id=>{
+
+        const row=
+            document.querySelector(
+                `.source-row[data-source-id="${id}"]`
+            );
+
+        const tin=
+            row.querySelector('.tin-select')?.value||'';
+
+        const nm=
+            row.querySelector('.name-select')?.value||'';
+
+        if(!tin){
+
+            errors.push(
+                `${src(id).name}: select the TIN column.`
+            );
+
+        }
+
+        if(!nm){
+
+            errors.push(
+                `${src(id).name}: select the Taxpayer Name column.`
+            );
+
+        }
+
+        maps.push({
+            source_id:id,
+            tin_field:tin,
+            name_field:nm,
+            tin_auto_detected:
+                tin===detect(src(id).columns,'tin'),
+            name_auto_detected:
+                nm===detect(src(id).columns,'name')
+        });
+
+    });
+
+    plan.identity_mappings=maps;
+
+    w.innerHTML=
+        errors.length
+        ?
+        '<b>Stage 2 cannot continue.</b><br>'+
+        errors.join('<br>')
+        :
+        'Identity mappings complete. Every selected dataset has a TIN and Taxpayer Name mapping.';
+
+    w.classList.toggle(
+        'hidden',
+        !errors.length
+    );
+
+    if(errors.length){
+
+        return false;
+
+    }
+
+    plan.sources=
+        ids.map(id=>{
+
+            const s=src(id);
+
+            return {
+                id:s.id,
+                name:s.name,
+                version:s.version,
+                columns:s.columns,
+                ref:''
+            };
+
+        });
+
+    if(!plan.base_source){
+
+        plan.base_source={
+            source_id:ids[0],
+            name:src(ids[0]).name
+        };
+
+    }
+
+    goStage(3);
+
+    return true;
+
+}
+
+
+function addJoin(){
+
+    plan.joins.push({
+
+        join_type:'INNER',
+
+        left_source_id:
+            plan.base_source?.source_id||
+            selectedSources()[0]||
+            '',
+
+        left_field:'',
+
+        right_source_id:
+            selectedSources().find(
+                x=>x!==Number(
+                    plan.base_source?.source_id
+                )
+            )||'',
+
+        right_field:'',
+
+        additional_conditions:[]
+
+    });
+
+    renderJoins();
+
+}
+
+
+function renderJoins(){
+
+    const box=document.getElementById('joins');
+
+    if(!box)return;
+
+    if(!plan.joins.length){
+
+        box.innerHTML=
+            '<div class="warning" style="margin:10px 0">'+
+            'No cross-dataset relationship has been defined. '+
+            'If only one dataset is used, this is acceptable.'+
+            '</div>';
+
+        return;
+
+    }
+
+    box.innerHTML=
+        plan.joins.map((j,i)=>`
+
+        <div class="calc-row">
+
+            <div class="grid3">
+
+                <div class="field">
+
+                    <label class="label">
+                        Join Type
+                    </label>
+
+                    <select
+                        class="select"
+                        onchange="jset(${i},'join_type',this.value)"
+                    >
+
+                        ${
+                            ['INNER','LEFT','RIGHT','OUTER']
+                            .map(x=>
+                                `<option
+                                    ${x===j.join_type?'selected':''}
+                                >
+                                    ${x}
+                                </option>`
+                            ).join('')
+                        }
+
+                    </select>
+
+                </div>
+
+
+                <div class="field">
+
+                    <label class="label">
+                        Left Source
+                    </label>
+
+                    <select
+                        class="select"
+                        onchange="jset(${i},'left_source_id',this.value)"
+                    >
+                        ${optsSource(j.left_source_id)}
+                    </select>
+
+                </div>
+
+
+                <div class="field">
+
+                    <label class="label">
+                        Left Field
+                    </label>
+
+                    <select
+                        class="select"
+                        onchange="jset(${i},'left_field',this.value)"
+                    >
+                        ${optsField(
+                            j.left_source_id,
+                            j.left_field
+                        )}
+                    </select>
+
+                </div>
+
+            </div>
+
+
+            <div class="grid3">
+
+                <div class="field">
+
+                    <label class="label">
+                        Right Source
+                    </label>
+
+                    <select
+                        class="select"
+                        onchange="jset(${i},'right_source_id',this.value)"
+                    >
+                        ${optsSource(j.right_source_id)}
+                    </select>
+
+                </div>
+
+
+                <div class="field">
+
+                    <label class="label">
+                        Right Field
+                    </label>
+
+                    <select
+                        class="select"
+                        onchange="jset(${i},'right_field',this.value)"
+                    >
+                        ${optsField(
+                            j.right_source_id,
+                            j.right_field
+                        )}
+                    </select>
+
+                </div>
+
+
+                <div class="field">
+
+                    <label class="label">
+                        Many-to-many
+                    </label>
+
+                    <label class="label">
+
+                        <input
+                            type="checkbox"
+                            onchange="jset(
+                                ${i},
+                                'allow_many_to_many',
+                                this.checked
+                            )"
+                            ${j.allow_many_to_many?'checked':''}
+                        >
+
+                        Explicitly allow
+
+                    </label>
+
+                </div>
+
+            </div>
+
+
+            <button
+                type="button"
+                class="btn danger"
+                onclick="plan.joins.splice(${i},1);renderJoins()"
+            >
+                Remove relationship
+            </button>
+
+        </div>
+
+        `).join('');
+
+}
+
+
+function jset(i,k,v){
+
+    plan.joins[i][k]=v;
+
+    renderJoins();
+
+}
+
+
+function renderPeriodFields(){
+
+    const el=
+        document.getElementById(
+            'periodField'
+        );
+
+    if(!el)return;
+
+    const all=[];
+
+    plan.sources.forEach(s=>
+        s.columns.forEach(c=>{
+
+            if(!all.includes(c)){
+                all.push(c);
+            }
+
+        })
+    );
+
+    el.innerHTML=
+        '<option value="">No explicit period field</option>'+
+        all.map(c=>
+            `<option value="${esc(c)}">
+                ${esc(c)}
+            </option>`
+        ).join('');
+
+}
+
+
+function validateStage3(){
+
+    renderPeriodFields();
+
+    if(!plan.sources.length){
+
+        alert(
+            'Select data sources in Stage 2.'
+        );
+
+        return false;
+
+    }
+
+    for(const j of plan.joins){
+
+        if(
+            !j.left_source_id||
+            !j.left_field||
+            !j.right_source_id||
+            !j.right_field
+        ){
+
+            alert(
+                'Complete every JOIN source and field before continuing.'
+            );
+
+            return false;
+
+        }
+
+    }
+
+    plan.period={
+        field:
+            document.getElementById(
+                'periodField'
+            ).value,
+
+        from:
+            document.getElementById(
+                'periodFrom'
+            ).value,
+
+        to:
+            document.getElementById(
+                'periodTo'
+            ).value,
+
+        time_relationship:
+            document.getElementById(
+                'timeRelationship'
+            ).value
+    };
+
+    document.getElementById(
+        'applicablePeriod'
+    ).value=
+        [
+            plan.period.from,
+            plan.period.to
+        ]
+        .filter(Boolean)
+        .join(' to ');
+
+    document.getElementById(
+        'periodDescription'
+    ).value=
+        plan.period.field
+        ?
+        `Compare using ${plan.period.field}${
+            plan.period.time_relationship &&
+            plan.period.time_relationship!=='none'
+            ?
+            ' with '+
+            plan.period.time_relationship
+                .replaceAll('_',' ')
+            :
+            ''
+        }.`
+        :
+        '';
+
+    goStage(4);
+
+    return true;
+
+}
+
+
+function renderVocab(){
+
+    document.getElementById(
+        'vocab'
+    ).innerHTML=
+        VOCAB.map(x=>
+            `<button
+                type="button"
+                onclick="addStep('${x}')"
+            >
+                ${x}
+            </button>`
+        ).join('');
+
+}
+
 
 function addStep(op){
 
-  plan.steps =
-    plan.steps || [];
+    plan.steps.push({
+        op,
+        config:{}
+    });
 
-  const s = {
-    op,
-    config:{}
-  };
+    selected=
+        plan.steps.length-1;
 
-  if(op==='FROM' && !plan.base_source){
-    s.config = {
-      source_id:''
-    };
-  }
+    renderSteps();
 
-  plan.steps.push(s);
-
-  selected =
-    plan.steps.length-1;
-
-  render();
 }
 
 
 function removeStep(i){
 
-  plan.steps.splice(i,1);
+    plan.steps.splice(i,1);
 
-  selected =
-    Math.min(
-      selected,
-      plan.steps.length-1
-    );
+    selected=
+        Math.min(
+            selected,
+            plan.steps.length-1
+        );
 
-  syncDerived();
+    syncPlan();
 
-  render();
+    renderSteps();
+
 }
 
 
 function moveStep(i,d){
 
-  let j =
-    i+d;
+    const j=i+d;
 
-  if(
-    j<0 ||
-    j>=plan.steps.length
-  ){
-    return;
-  }
+    if(
+        j<0||
+        j>=plan.steps.length
+    ){
+        return;
+    }
 
-  [
-    plan.steps[i],
-    plan.steps[j]
-  ] = [
-    plan.steps[j],
-    plan.steps[i]
-  ];
+    [
+        plan.steps[i],
+        plan.steps[j]
+    ]=[
+        plan.steps[j],
+        plan.steps[i]
+    ];
 
-  selected = j;
+    selected=j;
 
-  syncDerived();
+    syncPlan();
 
-  render();
+    renderSteps();
+
 }
 
 
-/* =========================================================
-   MAIN RENDER
-   ========================================================= */
+function renderSteps(){
 
-function render(){
+    const box=
+        document.getElementById(
+            'steps'
+        );
 
-  const c =
-    document.getElementById('canvas');
+    if(!plan.steps.length){
 
-  if(!plan.steps || !plan.steps.length){
+        box.innerHTML=
+            '<div class="warning">'+
+            'Start with FROM, then JOIN/WHEN/WHERE/CALCULATE/IF and finish with THEN.'+
+            '</div>';
 
-    c.innerHTML = `
-      <div class="empty">
-        No logic blocks yet.
-        <br><br>
-        Start with <b>FROM</b>, then add
-        JOIN, WHEN, WHERE, GROUP BY,
-        CALCULATE, IF, EXCEPT and THEN as required.
-      </div>
-    `;
+    }
+    else{
 
-  }else{
+        box.innerHTML=
+            plan.steps.map((s,i)=>`
 
-    c.innerHTML =
-      plan.steps.map((s,i)=>`
-
-        <div
-          class="step"
-          onclick="selectStep(${i})"
-        >
-
-          <span class="tag">
-            ${esc(s.op)}
-          </span>
-
-          <div class="summary">
-            ${esc(summary(s))}
-          </div>
-
-          <div class="tools">
-
-            <button
-              type="button"
-              class="iconbtn"
-              onclick="event.stopPropagation();moveStep(${i},-1)"
+            <div
+                class="step ${selected===i?'selected':''}"
+                onclick="selectStep(${i})"
             >
-              ↑
-            </button>
 
-            <button
-              type="button"
-              class="iconbtn"
-              onclick="event.stopPropagation();moveStep(${i},1)"
-            >
-              ↓
-            </button>
+                <span class="tag">
+                    ${s.op}
+                </span>
 
-            <button
-              type="button"
-              class="iconbtn"
-              onclick="event.stopPropagation();removeStep(${i})"
-            >
-              ×
-            </button>
+                <div class="step-summary">
+                    ${esc(stepSummary(s))}
+                </div>
 
-          </div>
+                <div class="tools">
 
-        </div>
+                    <button
+                        type="button"
+                        class="mini"
+                        onclick="event.stopPropagation();moveStep(${i},-1)"
+                    >
+                        ↑
+                    </button>
 
-      `).join('');
-  }
+                    <button
+                        type="button"
+                        class="mini"
+                        onclick="event.stopPropagation();moveStep(${i},1)"
+                    >
+                        ↓
+                    </button>
 
-  document
-    .getElementById('planPreview')
-    .textContent =
-      JSON.stringify(
-        buildPlan(),
-        null,
-        2
-      );
+                    <button
+                        type="button"
+                        class="mini"
+                        onclick="event.stopPropagation();removeStep(${i})"
+                    >
+                        ×
+                    </button>
 
-  if(selected>=0){
-    renderEditor();
-  }else{
-    document.getElementById('editor').innerHTML =
-      '<div class="rr-muted">Select a logic block.</div>';
-  }
+                </div>
+
+            </div>
+
+            `).join('');
+
+    }
+
+    if(selected>=0){
+
+        renderEditor();
+
+    }
+
+    syncPlan();
+
 }
 
 
 function selectStep(i){
 
-  selected = i;
+    selected=i;
 
-  renderEditor();
-}
+    renderSteps();
 
-
-/* =========================================================
-   STEP EDITOR
-   ========================================================= */
-
-function renderEditor(){
-
-  if(
-    selected<0 ||
-    !plan.steps?.[selected]
-  ){
-    return;
-  }
-
-  const s =
-    plan.steps[selected];
-
-  const x =
-    s.config || {};
-
-  const e =
-    document.getElementById('editor');
-
-  let h = `
-    <div
-      class="rr-muted"
-      style="margin-bottom:12px"
-    >
-      <b>${esc(s.op)}</b> block
-    </div>
-  `;
-
-  if(s.op==='FROM'){
-
-    h += `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Primary Approved Data Source
-        </label>
-
-        <select
-          class="rr-select"
-          onchange="setx('source_id',this.value);syncDerived();render()"
-        >
-          ${sourceOptions(x.source_id)}
-        </select>
-
-      </div>
-    `;
-
-  }else if(s.op==='JOIN'){
-
-    h += joinEditor(x);
-
-  }else if(s.op==='CALCULATE'){
-
-    h += calcEditor(x);
-
-  }else if([
-    'WHERE',
-    'WHEN',
-    'IF',
-    'AND',
-    'OR',
-    'WHILE',
-    'EXCEPT'
-  ].includes(s.op)){
-
-    h += conditionEditor(x,s.op);
-
-  }else if(s.op==='GROUP BY'){
-
-    h += groupEditor(x);
-
-  }else if(s.op==='TO'){
-
-    h += `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          TO
-        </label>
-
-        <input
-          class="rr-input"
-          value="${esc(x.to||'')}"
-          oninput="setx('to',this.value)"
-        >
-
-      </div>
-    `;
-
-  }else if(s.op==='STOP'){
-
-    h += `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Stop Scope
-        </label>
-
-        <select
-          class="rr-select"
-          onchange="setx('scope',this.value)"
-        >
-          <option>record</option>
-          <option>taxpayer</option>
-          <option>source</option>
-          <option>rule</option>
-        </select>
-
-      </div>
-
-      <div class="rr-field">
-
-        <label class="rr-label">
-          STOP Condition / Reason
-        </label>
-
-        <textarea
-          class="rr-text"
-          oninput="setx('description',this.value)"
-        >${esc(x.description||'')}</textarea>
-
-      </div>
-    `;
-
-  }else if(
-    s.op==='THEN' ||
-    s.op==='ELSE' ||
-    s.op==='CONTINUE'
-  ){
-
-    h += `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Action / Description
-        </label>
-
-        <textarea
-          class="rr-text"
-          oninput="setx('description',this.value)"
-        >${esc(x.description||'')}</textarea>
-
-      </div>
-    `;
-
-  }else{
-
-    h += `
-      <div class="rr-muted">
-        Configure this logic block.
-      </div>
-    `;
-  }
-
-  e.innerHTML = h;
 }
 
 
 function setx(k,v){
 
-  plan.steps[selected].config[k] =
-    v;
+    if(selected<0)return;
 
-  syncDerived();
+    plan.steps[selected].config[k]=v;
 
-  document
-    .getElementById('planPreview')
-    .textContent =
-      JSON.stringify(
-        buildPlan(),
-        null,
-        2
-      );
+    syncPlan();
+
+    renderSteps();
+
 }
 
 
-/* =========================================================
-   JOIN EDITOR
-   ========================================================= */
+function stepSummary(s){
 
-function joinEditor(x){
+    const x=s.config||{};
 
-  return `
-    <div class="rr-field">
+    if(s.op==='FROM')
+        return `Primary source: ${src(x.source_id)?.name||'Not selected'}`;
 
-      <label class="rr-label">
-        Join Type
-      </label>
+    if(s.op==='JOIN')
+        return `${x.join_type||'INNER'} JOIN ${src(x.right_source_id)?.name||'source'} ON ${x.left_field||'field'} = ${x.right_field||'field'}`;
 
-      <select
-        class="rr-select"
-        onchange="setx('join_type',this.value)"
-      >
-        <option ${x.join_type==='INNER'?'selected':''}>
-          INNER
-        </option>
+    if(s.op==='CALCULATE')
+        return `${x.name||'Calculated field'} = ${x.operation||'operation'} ${x.expression_text||''}`;
 
-        <option ${x.join_type==='LEFT'?'selected':''}>
-          LEFT
-        </option>
+    if(
+        [
+            'WHERE',
+            'WHEN',
+            'IF',
+            'AND',
+            'OR',
+            'WHILE',
+            'EXCEPT'
+        ].includes(s.op)
+    )
+        return `${x.left_text||'condition'} ${x.operator||''} ${x.right_text||x.value||''}`;
 
-        <option ${x.join_type==='RIGHT'?'selected':''}>
-          RIGHT
-        </option>
+    if(s.op==='GROUP BY')
+        return `Group by ${(x.fields||[]).join(', ')||'fields'}`;
 
-        <option ${x.join_type==='OUTER'?'selected':''}>
-          OUTER
-        </option>
-      </select>
+    if(s.op==='STOP')
+        return `Stop ${x.scope||'record'} when ${x.description||'condition'}`;
 
-    </div>
+    return x.description||x.to||'Configure block';
 
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Left Source
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('left_source_id',this.value);renderEditor()"
-      >
-        ${sourceOptions(x.left_source_id)}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Left Field
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('left_field',this.value)"
-      >
-        ${fieldOptions(x.left_source_id,x.left_field)}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Right Source
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('right_source_id',this.value);renderEditor()"
-      >
-        ${sourceOptions(x.right_source_id)}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Right Field
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('right_field',this.value)"
-      >
-        ${fieldOptions(x.right_source_id,x.right_field)}
-      </select>
-
-    </div>
-
-    <label class="rr-label">
-
-      <input
-        type="checkbox"
-        ${x.allow_many_to_many?'checked':''}
-        onchange="setx('allow_many_to_many',this.checked)"
-      >
-
-      Allow many-to-many join (explicit)
-
-    </label>
-  `;
 }
 
 
-/* =========================================================
-   CALCULATION EDITOR
-   ========================================================= */
+function refSelect(type,name,obj){
 
-function calcEditor(x){
+    return `
+        <div class="field">
 
-  return `
-    <div class="rr-field">
+            <label class="label">
+                ${name} Type
+            </label>
 
-      <label class="rr-label">
-        Calculated Field Name
-      </label>
-
-      <input
-        class="rr-input"
-        value="${esc(x.name||'')}"
-        oninput="setx('name',this.value)"
-      >
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Operation
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('operation',this.value);renderEditor()"
-      >
-
-        <option value="">
-          Select operation
-        </option>
-
-        ${
-          CALCS.map(v=>`
-            <option
-              value="${esc(v)}"
-              ${v===x.operation?'selected':''}
+            <select
+                class="select"
+                onchange="setx('${type}_type',this.value);renderEditor()"
             >
-              ${esc(v)}
-            </option>
-          `).join('')
-        }
 
-      </select>
+                <option
+                    value="field"
+                    ${obj.type!=='calculation'?'selected':''}
+                >
+                    Source Field
+                </option>
 
-    </div>
+                <option
+                    value="calculation"
+                    ${obj.type==='calculation'?'selected':''}
+                >
+                    Calculated Field
+                </option>
 
-    <div class="rr-field">
+            </select>
 
-      <label class="rr-label">
-        Left Source
-      </label>
+        </div>
+    `;
 
-      <select
-        class="rr-select"
-        onchange="setx('left_source_id',this.value);renderEditor()"
-      >
-        ${sourceOptions(x.left?.source_id||x.left_source_id)}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Left Field
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('left_field',this.value)"
-      >
-        ${fieldOptions(
-          x.left?.source_id||x.left_source_id,
-          x.left?.field||x.left_field
-        )}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Right Source
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('right_source_id',this.value);renderEditor()"
-      >
-        ${sourceOptions(x.right?.source_id||x.right_source_id)}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Right Field
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('right_field',this.value)"
-      >
-        ${fieldOptions(
-          x.right?.source_id||x.right_source_id,
-          x.right?.field||x.right_field
-        )}
-      </select>
-
-    </div>
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Expression Text
-      </label>
-
-      <input
-        class="rr-input"
-        value="${esc(x.expression_text||'')}"
-        placeholder="e.g. VAT Sales - Income Tax Sales"
-        oninput="setx('expression_text',this.value)"
-      >
-
-    </div>
-  `;
 }
 
 
-/* =========================================================
-   CONDITION EDITOR
-   ========================================================= */
+function fieldRef(prefix,obj={}){
 
-function conditionEditor(x,op){
+    const calc=
+        obj.type==='calculation';
 
-  const leftCalc =
-    (x.left_type||'field') === 'calculation';
+    return refSelect(
+        prefix,
+        prefix==='left'?'Left':'Right',
+        obj
+    )+
 
-  const rightField =
-    x.right_type === 'field';
-
-  const rightCalc =
-    rightField &&
-    (x.right_ref_type||'field') === 'calculation';
-
-  const calcOptions =
-    '<option value="">Select calculation</option>' +
-    (plan.calculations||[])
-      .map(c=>`
-        <option
-          value="${esc(c.name)}"
-          ${c.name===x.left_name?'selected':''}
-        >
-          ${esc(c.name)}
-        </option>
-      `)
-      .join('');
-
-  const rightCalcOptions =
-    '<option value="">Select calculation</option>' +
-    (plan.calculations||[])
-      .map(c=>`
-        <option
-          value="${esc(c.name)}"
-          ${c.name===x.right_name?'selected':''}
-        >
-          ${esc(c.name)}
-        </option>
-      `)
-      .join('');
-
-  return `
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Left Type
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('left_type',this.value);renderEditor()"
-      >
-
-        <option
-          value="field"
-          ${!leftCalc?'selected':''}
-        >
-          Source Field
-        </option>
-
-        <option
-          value="calculation"
-          ${leftCalc?'selected':''}
-        >
-          Calculated Field
-        </option>
-
-      </select>
-
-    </div>
-
-    ${
-      leftCalc
-
-      ?
-
-      `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Left Calculation
-        </label>
-
-        <select
-          class="rr-select"
-          onchange="setx('left_name',this.value)"
-        >
-          ${calcOptions}
-        </select>
-
-      </div>
-      `
-
-      :
-
-      `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Left Source
-        </label>
-
-        <select
-          class="rr-select"
-          onchange="setx('left_source_id',this.value);renderEditor()"
-        >
-          ${sourceOptions(x.left_source_id)}
-        </select>
-
-      </div>
-
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Left Field
-        </label>
-
-        <select
-          class="rr-select"
-          onchange="setx('left_field',this.value)"
-        >
-          ${fieldOptions(
-            x.left_source_id,
-            x.left_field
-          )}
-        </select>
-
-      </div>
-      `
-    }
-
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Operator
-      </label>
-
-      <select
-        class="rr-select"
-        onchange="setx('operator',this.value);renderEditor()"
-      >
-
-        ${
-          OPS.map(v=>`
-            <option
-              value="${esc(v)}"
-              ${v===x.operator?'selected':''}
-            >
-              ${esc(v)}
-            </option>
-          `).join('')
-        }
-
-      </select>
-
-    </div>
-
-    ${
-      ['EXISTS','NOT EXISTS'].includes(x.operator)
-
-      ?
-
-      ''
-
-      :
-
-      `
-      <div class="rr-field">
-
-        <label class="rr-label">
-          Right Type
-        </label>
-
-        <select
-          class="rr-select"
-          onchange="setx('right_type',this.value);renderEditor()"
-        >
-
-          <option
-            value="value"
-            ${!rightField?'selected':''}
-          >
-            Value
-          </option>
-
-          <option
-            value="field"
-            ${rightField?'selected':''}
-          >
-            Field / Calculation
-          </option>
-
-        </select>
-
-      </div>
-
-      ${
-        rightField
+    (
+        calc
 
         ?
 
         `
-        <div class="rr-field">
+        <div class="field">
 
-          <label class="rr-label">
-            Right Reference Type
-          </label>
+            <label class="label">
+                ${prefix==='left'?'Left':'Right'} Calculation
+            </label>
 
-          <select
-            class="rr-select"
-            onchange="setx('right_ref_type',this.value);renderEditor()"
-          >
-
-            <option
-              value="field"
-              ${!rightCalc?'selected':''}
+            <select
+                class="select"
+                onchange="setx('${prefix}_name',this.value)"
             >
-              Source Field
-            </option>
 
-            <option
-              value="calculation"
-              ${rightCalc?'selected':''}
-            >
-              Calculated Field
-            </option>
+                <option value="">
+                    Select calculation
+                </option>
 
-          </select>
+                ${
+                    plan.calculations.map(c=>
+                        `<option
+                            value="${esc(c.name)}"
+                            ${c.name===obj.name?'selected':''}
+                        >
+                            ${esc(c.name)}
+                        </option>`
+                    ).join('')
+                }
+
+            </select>
 
         </div>
-
-        ${
-          rightCalc
-
-          ?
-
-          `
-          <div class="rr-field">
-
-            <label class="rr-label">
-              Right Calculation
-            </label>
-
-            <select
-              class="rr-select"
-              onchange="setx('right_name',this.value)"
-            >
-              ${rightCalcOptions}
-            </select>
-
-          </div>
-          `
-
-          :
-
-          `
-          <div class="rr-field">
-
-            <label class="rr-label">
-              Right Source
-            </label>
-
-            <select
-              class="rr-select"
-              onchange="setx('right_source_id',this.value);renderEditor()"
-            >
-              ${sourceOptions(x.right_source_id)}
-            </select>
-
-          </div>
-
-          <div class="rr-field">
-
-            <label class="rr-label">
-              Right Field
-            </label>
-
-            <select
-              class="rr-select"
-              onchange="setx('right_field',this.value)"
-            >
-              ${fieldOptions(
-                x.right_source_id,
-                x.right_field
-              )}
-            </select>
-
-          </div>
-          `
-        }
         `
 
         :
 
         `
-        <div class="rr-field">
+        <div class="field">
 
-          <label class="rr-label">
-            Value
-          </label>
+            <label class="label">
+                ${prefix==='left'?'Left':'Right'} Source
+            </label>
 
-          <input
-            class="rr-input"
-            value="${esc(x.value||'')}"
-            oninput="setx('value',this.value)"
-            placeholder="For IN/NOT IN use comma-separated values"
-          >
+            <select
+                class="select"
+                onchange="setx('${prefix}_source_id',this.value);renderEditor()"
+            >
+                ${optsSource(obj.source_id)}
+            </select>
+
+        </div>
+
+        <div class="field">
+
+            <label class="label">
+                ${prefix==='left'?'Left':'Right'} Field
+            </label>
+
+            <select
+                class="select"
+                onchange="setx('${prefix}_field',this.value)"
+            >
+                ${optsField(
+                    obj.source_id,
+                    obj.field
+                )}
+            </select>
 
         </div>
         `
-      }
-      `
-    }
 
-    <div class="rr-field">
-
-      <label class="rr-label">
-        Business Text / Explanation
-      </label>
-
-      <input
-        class="rr-input"
-        value="${esc(x.description||'')}"
-        oninput="setx('description',this.value)"
-      >
-
-    </div>
-  `;
-}
-
-
-/* =========================================================
-   GROUP BY
-   ========================================================= */
-
-function groupEditor(x){
-
-  return `
-    <div class="rr-muted">
-      Select the fields that define the analysis grain.
-    </div>
-
-    <div
-      id="groupFields"
-      style="margin-top:10px"
-    >
-      ${
-        (x.fields||[])
-          .map((f,i)=>`
-            <div class="cond">
-
-              <select
-                class="rr-select"
-                onchange="setGroup(${i},this.value)"
-              >
-                ${allFieldOptions(f)}
-              </select>
-
-            </div>
-          `).join('')
-      }
-    </div>
-
-    <button
-      type="button"
-      class="btn btn-secondary"
-      onclick="addGroup()"
-    >
-      + Add Group Field
-    </button>
-  `;
-}
-
-
-function allFieldOptions(sel){
-
-  let out =
-    '<option value="">Select source.field</option>';
-
-  SOURCE_DATA.forEach(s=>{
-
-    s.columns.forEach(c=>{
-
-      let v =
-        JSON.stringify({
-          source_id:s.id,
-          field:c
-        });
-
-      out += `
-        <option
-          value='${esc(v)}'
-          ${sel===v?'selected':''}
-        >
-          ${esc(s.name)}.${esc(c)}
-        </option>
-      `;
-    });
-
-  });
-
-  return out;
-}
-
-
-function addGroup(){
-
-  let x =
-    plan.steps[selected].config;
-
-  x.fields =
-    x.fields || [];
-
-  x.fields.push('');
-
-  renderEditor();
-}
-
-
-function setGroup(i,v){
-
-  plan.steps[selected]
-    .config
-    .fields[i] = v;
-
-  syncDerived();
-}
-
-
-/* =========================================================
-   BUILD PLAN
-   ========================================================= */
-
-function buildPlan(){
-
-  syncDerived();
-
-  const p =
-    JSON.parse(
-      JSON.stringify(plan)
     );
 
-  delete p.steps;
-
-  p.sources =
-    SOURCE_DATA
-      .filter(
-        s=>p._sourceIds?.includes(s.id)
-      )
-      .map(
-        s=>({
-          id:s.id,
-          name:s.name,
-          version:s.version,
-          columns:s.columns
-        })
-      );
-
-  delete p._sourceIds;
-
-  return p;
 }
 
 
-/* =========================================================
-   SYNCHRONISE DERIVED PLAN COMPONENTS
-   ========================================================= */
+function renderEditor(){
 
-function syncDerived(){
+    if(selected<0)return;
 
-  const ids =
-    new Set();
+    const s=plan.steps[selected];
 
-  let base =
-    null;
+    const x=s.config||{};
 
-  (plan.steps||[])
-    .forEach(s=>{
+    const e=
+        document.getElementById(
+            'editor'
+        );
 
-      let x =
-        s.config || {};
+    let h=`
+        <div
+            class="muted"
+            style="margin-bottom:10px"
+        >
+            <b>${s.op}</b> block
+        </div>
+    `;
 
-      if(s.op==='FROM'){
 
-        base =
-          x.source_id
-            ? Number(x.source_id)
-            : base;
-      }
+    if(s.op==='FROM'){
 
-      [
-        'source_id',
-        'left_source_id',
-        'right_source_id'
-      ].forEach(k=>{
+        h+=`
+            <div class="field">
 
-        if(x[k]){
-          ids.add(
-            Number(x[k])
-          );
+                <label class="label">
+                    Primary Approved Data Source
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('source_id',this.value)"
+                >
+                    ${optsSource(x.source_id)}
+                </select>
+
+            </div>
+        `;
+
+    }
+
+
+    else if(s.op==='JOIN'){
+
+        h+=`
+
+            <div class="field">
+
+                <label class="label">
+                    Join Type
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('join_type',this.value)"
+                >
+
+                    ${
+                        ['INNER','LEFT','RIGHT','OUTER']
+                        .map(v=>
+                            `<option
+                                ${v===x.join_type?'selected':''}
+                            >
+                                ${v}
+                            </option>`
+                        ).join('')
+                    }
+
+                </select>
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Left Source
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('left_source_id',this.value);renderEditor()"
+                >
+                    ${optsSource(x.left_source_id)}
+                </select>
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Left Field
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('left_field',this.value)"
+                >
+                    ${optsField(
+                        x.left_source_id,
+                        x.left_field
+                    )}
+                </select>
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Right Source
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('right_source_id',this.value);renderEditor()"
+                >
+                    ${optsSource(x.right_source_id)}
+                </select>
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Right Field
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('right_field',this.value)"
+                >
+                    ${optsField(
+                        x.right_source_id,
+                        x.right_field
+                    )}
+                </select>
+
+            </div>
+
+
+            <label class="label">
+
+                <input
+                    type="checkbox"
+                    onchange="setx('allow_many_to_many',this.checked)"
+                    ${x.allow_many_to_many?'checked':''}
+                >
+
+                Allow many-to-many explicitly
+
+            </label>
+        `;
+
+    }
+
+
+    else if(s.op==='CALCULATE'){
+
+        h+=`
+
+            <div class="field">
+
+                <label class="label">
+                    Calculated Field Name
+                </label>
+
+                <input
+                    class="input"
+                    value="${esc(x.name||'')}"
+                    oninput="setx('name',this.value)"
+                >
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Calculation
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('operation',this.value);renderEditor()"
+                >
+
+                    <option value="">
+                        Select
+                    </option>
+
+                    ${
+                        CALCS.map(v=>
+                            `<option
+                                ${v===x.operation?'selected':''}
+                            >
+                                ${v}
+                            </option>`
+                        ).join('')
+                    }
+
+                </select>
+
+            </div>
+
+            ${fieldRef(
+                'left',
+                x.left||{
+                    type:'field',
+                    source_id:x.left_source_id,
+                    field:x.left_field
+                }
+            )}
+
+            ${fieldRef(
+                'right',
+                x.right||{
+                    type:'field',
+                    source_id:x.right_source_id,
+                    field:x.right_field
+                }
+            )}
+
+            <div class="field">
+
+                <label class="label">
+                    Expression / Business Meaning
+                </label>
+
+                <input
+                    class="input"
+                    value="${esc(x.expression_text||'')}"
+                    placeholder="e.g. VAT Sales - Income Tax Sales"
+                    oninput="setx('expression_text',this.value)"
+                >
+
+            </div>
+        `;
+
+    }
+
+
+    else if(
+        [
+            'WHERE',
+            'WHEN',
+            'IF',
+            'AND',
+            'OR',
+            'WHILE',
+            'EXCEPT'
+        ].includes(s.op)
+    ){
+
+        h+=conditionEditor(x);
+
+    }
+
+
+    else if(s.op==='GROUP BY'){
+
+        h+=`
+            <div class="muted">
+                Grouping fields are defined through calculated aggregates.
+                Add a SUM/COUNT/AVERAGE calculation and select its
+                group-by fields in the execution plan.
+            </div>
+        `;
+
+    }
+
+
+    else if(s.op==='TO'){
+
+        h+=`
+
+            <div class="field">
+
+                <label class="label">
+                    TO
+                </label>
+
+                <input
+                    class="input"
+                    value="${esc(x.to||'')}"
+                    oninput="setx('to',this.value)"
+                >
+
+            </div>
+
+        `;
+
+    }
+
+
+    else if(s.op==='STOP'){
+
+        h+=`
+
+            <div class="field">
+
+                <label class="label">
+                    STOP Scope
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('scope',this.value)"
+                >
+
+                    <option>record</option>
+                    <option>taxpayer</option>
+                    <option>source</option>
+                    <option>rule</option>
+
+                </select>
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    STOP Reason / Condition
+                </label>
+
+                <textarea
+                    class="textarea"
+                    oninput="setx('description',this.value)"
+                >${esc(x.description||'')}</textarea>
+
+            </div>
+        `;
+
+    }
+
+
+    else if(
+        [
+            'THEN',
+            'ELSE',
+            'CONTINUE'
+        ].includes(s.op)
+    ){
+
+        h+=`
+
+            <div class="field">
+
+                <label class="label">
+                    Action / Description
+                </label>
+
+                <textarea
+                    class="textarea"
+                    oninput="setx('description',this.value)"
+                >${esc(x.description||'')}</textarea>
+
+            </div>
+        `;
+
+    }
+
+
+    e.innerHTML=h;
+
+}
+
+
+function conditionEditor(x){
+
+    const lt=
+        x.left_type||'field';
+
+    const rt=
+        x.right_type||'value';
+
+    return `
+
+        <div class="field">
+
+            <label class="label">
+                Left Type
+            </label>
+
+            <select
+                class="select"
+                onchange="setx('left_type',this.value);renderEditor()"
+            >
+
+                <option
+                    value="field"
+                    ${lt==='field'?'selected':''}
+                >
+                    Source Field
+                </option>
+
+                <option
+                    value="calculation"
+                    ${lt==='calculation'?'selected':''}
+                >
+                    Calculated Field
+                </option>
+
+            </select>
+
+        </div>
+
+        ${
+            lt==='calculation'
+
+            ?
+
+            `
+            <div class="field">
+
+                <label class="label">
+                    Left Calculation
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('left_name',this.value)"
+                >
+
+                    <option value="">
+                        Select
+                    </option>
+
+                    ${
+                        plan.calculations.map(c=>
+                            `<option
+                                ${c.name===x.left_name?'selected':''}
+                            >
+                                ${esc(c.name)}
+                            </option>`
+                        ).join('')
+                    }
+
+                </select>
+
+            </div>
+            `
+
+            :
+
+            `
+            <div class="field">
+
+                <label class="label">
+                    Left Source
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('left_source_id',this.value);renderEditor()"
+                >
+                    ${optsSource(x.left_source_id)}
+                </select>
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Left Field
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('left_field',this.value)"
+                >
+                    ${optsField(
+                        x.left_source_id,
+                        x.left_field
+                    )}
+                </select>
+
+            </div>
+            `
         }
 
-      });
+
+        <div class="field">
+
+            <label class="label">
+                Condition
+            </label>
+
+            <select
+                class="select"
+                onchange="setx('operator',this.value);renderEditor()"
+            >
+
+                ${
+                    OPS.map(v=>
+                        `<option
+                            ${v===x.operator?'selected':''}
+                        >
+                            ${v}
+                        </option>`
+                    ).join('')
+                }
+
+            </select>
+
+        </div>
+
+
+        ${
+            ['EXISTS','NOT EXISTS'].includes(x.operator)
+
+            ?
+
+            ''
+
+            :
+
+            `
+
+            <div class="field">
+
+                <label class="label">
+                    Right Type
+                </label>
+
+                <select
+                    class="select"
+                    onchange="setx('right_type',this.value);renderEditor()"
+                >
+
+                    <option
+                        value="value"
+                        ${rt!=='field'?'selected':''}
+                    >
+                        Value
+                    </option>
+
+                    <option
+                        value="field"
+                        ${rt==='field'?'selected':''}
+                    >
+                        Field / Calculation
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            ${
+                rt==='field'
+
+                ?
+
+                fieldRef(
+                    'right',
+                    x.right||{
+                        type:
+                            x.right_ref_type||
+                            'field',
+                        source_id:
+                            x.right_source_id,
+                        field:
+                            x.right_field,
+                        name:
+                            x.right_name
+                    }
+                )
+
+                :
+
+                `
+                <div class="field">
+
+                    <label class="label">
+                        Value
+                    </label>
+
+                    <input
+                        class="input"
+                        value="${esc(x.value||'')}"
+                        oninput="setx('value',this.value)"
+                        placeholder="For IN/NOT IN use comma-separated values"
+                    >
+
+                </div>
+                `
+            }
+
+
+            <div class="field">
+
+                <label class="label">
+                    Business Explanation
+                </label>
+
+                <input
+                    class="input"
+                    value="${esc(x.description||'')}"
+                    oninput="setx('description',this.value)"
+                >
+
+            </div>
+
+            `
+        }
+
+    `;
+
+}
+
+
+function syncPlan(){
+
+    let ids=
+        new Set(
+            selectedSources()
+        );
+
+    plan.steps.forEach(s=>{
+
+        const x=s.config||{};
+
+        [
+            'source_id',
+            'left_source_id',
+            'right_source_id'
+        ].forEach(k=>{
+
+            if(x[k]){
+                ids.add(
+                    Number(x[k])
+                );
+            }
+
+        });
 
     });
 
-  plan.base_source =
-    base
-      ? {
-          source_id:Number(base)
-        }
-      : null;
+    if(plan.base_source?.source_id){
 
-  plan._sourceIds =
-    [...ids];
+        ids.add(
+            Number(
+                plan.base_source.source_id
+            )
+        );
 
-  plan.joins =
-    (plan.steps||[])
-      .filter(
-        s=>s.op==='JOIN'
-      )
-      .map(
-        s=>Object.assign(
-          {join_type:'INNER'},
-          s.config||{}
+    }
+
+    plan.sources=
+        SOURCE_DATA
+        .filter(s=>ids.has(s.id))
+        .map(s=>({
+            id:s.id,
+            name:s.name,
+            version:s.version,
+            columns:s.columns,
+            ref:''
+        }));
+
+    const from=
+        plan.steps.find(
+            s=>s.op==='FROM'
+        );
+
+    if(
+        from?.config?.source_id
+    ){
+
+        plan.base_source={
+            source_id:
+                Number(
+                    from.config.source_id
+                ),
+
+            name:
+                src(
+                    from.config.source_id
+                )?.name||''
+        };
+
+    }
+
+    plan.joins=
+        plan.steps
+        .filter(
+            s=>s.op==='JOIN'
         )
-      );
+        .map(
+            s=>Object.assign(
+                {
+                    join_type:'INNER'
+                },
+                s.config
+            )
+        );
 
-  plan.filters =
-    (plan.steps||[])
-      .filter(
-        s=>[
-          'WHERE',
-          'WHEN',
-          'WHILE',
-          'EXCEPT'
-        ].includes(s.op)
-      )
-      .map(
-        s=>conditionObj(s)
-      );
+    plan.filters=
+        plan.steps
+        .filter(
+            s=>
+                [
+                    'WHERE',
+                    'WHEN',
+                    'WHILE',
+                    'EXCEPT'
+                ].includes(s.op)
+        )
+        .map(conditionObj);
 
-  plan.conditions =
-    (plan.steps||[])
-      .filter(
-        s=>[
-          'IF',
-          'AND',
-          'OR'
-        ].includes(s.op)
-      )
-      .map(
-        s=>conditionObj(s)
-      );
+    plan.conditions=
+        plan.steps
+        .filter(
+            s=>
+                [
+                    'IF',
+                    'AND',
+                    'OR'
+                ].includes(s.op)
+        )
+        .map(conditionObj);
 
-  plan.calculations =
-    (plan.steps||[])
-      .filter(
-        s=>s.op==='CALCULATE'
-      )
-      .map(
-        s=>calcObj(s)
-      );
+    plan.calculations=
+        plan.steps
+        .filter(
+            s=>s.op==='CALCULATE'
+        )
+        .map(calcObj);
 
-  const stop =
-    (plan.steps||[])
-      .find(
-        s=>s.op==='STOP'
-      );
+    const stop=
+        plan.steps.find(
+            s=>s.op==='STOP'
+        );
 
-  plan.stop =
-    stop
-      ? stop.config
-      : {};
+    plan.stop=
+        stop?.config||{};
 
-  const els =
-    (plan.steps||[])
-      .find(
-        s=>s.op==='ELSE'
-      );
+    const el=
+        plan.steps.find(
+            s=>s.op==='ELSE'
+        );
 
-  plan.else_description =
-    els?.config?.description || '';
+    plan.else_description=
+        el?.config?.description||'';
 
-  const ex =
-    (plan.steps||[])
-      .find(
-        s=>s.op==='EXCEPT'
-      );
+    const ex=
+        plan.steps.find(
+            s=>s.op==='EXCEPT'
+        );
 
-  plan.except_description =
-    ex?.config?.description || '';
+    plan.except_description=
+        ex?.config?.description||'';
+
 }
 
-
-/* =========================================================
-   CONDITION OBJECT
-   ========================================================= */
 
 function conditionObj(s){
 
-  const x =
-    s.config || {};
+    const x=s.config||{};
 
-  return {
-    clause:s.op,
+    return {
 
-    left:{
-      type:x.left_type||'field',
-      source_id:Number(x.left_source_id)||0,
-      field:x.left_field||'',
-      name:x.left_name||''
-    },
+        clause:s.op,
 
-    operator:
-      x.operator||'=',
+        left:{
+            type:
+                x.left_type||
+                'field',
 
-    right_type:
-      x.right_type||'value',
+            source_id:
+                Number(
+                    x.left_source_id
+                )||0,
 
-    right:
-      x.right_type==='field'
-        ? {
-            type:x.right_ref_type||'field',
-            source_id:Number(x.right_source_id)||0,
-            field:x.right_field||'',
-            name:x.right_name||''
-          }
-        : undefined,
+            field:
+                x.left_field||'',
 
-    value:
-      x.value||'',
+            name:
+                x.left_name||''
+        },
 
-    connector:
-      s.op==='OR'
-        ? 'OR'
-        : 'AND',
+        operator:
+            x.operator||'=',
 
-    description:
-      x.description||''
-  };
+        right_type:
+            x.right_type||'value',
+
+        right:
+            x.right_type==='field'
+            ?
+            {
+                type:
+                    x.right?.type||
+                    x.right_ref_type||
+                    'field',
+
+                source_id:
+                    Number(
+                        x.right?.source_id||
+                        x.right_source_id
+                    )||0,
+
+                field:
+                    x.right?.field||
+                    x.right_field||
+                    '',
+
+                name:
+                    x.right?.name||
+                    x.right_name||
+                    ''
+            }
+            :
+            undefined,
+
+        value:
+            x.value||'',
+
+        connector:
+            s.op==='OR'
+            ?
+            'OR'
+            :
+            'AND',
+
+        description:
+            x.description||''
+    };
+
 }
 
-
-/* =========================================================
-   CALCULATION OBJECT
-   ========================================================= */
 
 function calcObj(s){
 
-  const x =
-    s.config || {};
+    const x=s.config||{};
 
-  return {
-    name:x.name||'',
+    return {
 
-    operation:
-      x.operation||'',
+        name:
+            x.name||'',
 
-    left:{
-      type:'field',
-      source_id:Number(x.left_source_id)||0,
-      field:x.left_field||''
-    },
+        operation:
+            x.operation||'',
 
-    right:{
-      type:'field',
-      source_id:Number(x.right_source_id)||0,
-      field:x.right_field||''
-    },
+        left:
+            x.left||
+            {
+                type:'field',
+                source_id:
+                    Number(
+                        x.left_source_id
+                    )||0,
+                field:
+                    x.left_field||''
+            },
 
-    expression_text:
-      x.expression_text||''
-  };
+        right:
+            x.right||
+            {
+                type:'field',
+                source_id:
+                    Number(
+                        x.right_source_id
+                    )||0,
+                field:
+                    x.right_field||''
+            },
+
+        expression_text:
+            x.expression_text||''
+    };
+
 }
 
 
-/* =========================================================
-   INFORMATION REQUESTS
-   ========================================================= */
+function buildPlan(){
+
+    syncPlan();
+
+    const p=
+        JSON.parse(
+            JSON.stringify(plan)
+        );
+
+    delete p.steps;
+
+    p.exposure={
+
+        type:
+            document.getElementById(
+                'exposureType'
+            ).value,
+
+        field:
+            document.getElementById(
+                'exposureField'
+            ).value,
+
+        minimum:
+            document.getElementById(
+                'minimumExposure'
+            ).value,
+
+        formula:
+            document.getElementById(
+                'exposureField'
+            ).value
+
+    };
+
+    document.getElementById(
+        'exposureFormula'
+    ).value=
+        p.exposure.formula||'';
+
+    document.getElementById(
+        'exceptDescription'
+    ).value=
+        p.except_description||'';
+
+    return p;
+
+}
+
 
 function addRequest(){
 
-  const box =
-    document.getElementById('requests');
+    const box=
+        document.getElementById(
+            'requests'
+        );
 
-  const d =
-    document.createElement('div');
+    const d=
+        document.createElement(
+            'div'
+        );
 
-  d.className =
-    'cond';
+    d.className='calc-row';
 
-  d.innerHTML = `
-    <div class="rr-row">
+    d.innerHTML=`
 
-      <div>
+        <div class="grid2">
 
-        <label class="rr-label">
-          Request Title
+            <div class="field">
+
+                <label class="label">
+                    Request Title
+                </label>
+
+                <input
+                    class="input"
+                    name="request_title"
+                >
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Period
+                </label>
+
+                <input
+                    class="input"
+                    name="request_period"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="grid2">
+
+            <div class="field">
+
+                <label class="label">
+                    Purpose
+                </label>
+
+                <input
+                    class="input"
+                    name="request_purpose"
+                >
+
+            </div>
+
+
+            <div class="field">
+
+                <label class="label">
+                    Evidence Type
+                </label>
+
+                <input
+                    class="input"
+                    name="request_evidence"
+                >
+
+            </div>
+
+        </div>
+
+
+        <label class="label">
+
+            <input
+                type="checkbox"
+                name="request_mandatory"
+                value="1"
+                checked
+            >
+
+            Mandatory
+
         </label>
 
-        <input
-          class="rr-input"
-          name="request_title"
+
+        <button
+            type="button"
+            class="btn danger"
+            onclick="this.parentElement.remove()"
         >
+            Remove
+        </button>
 
-      </div>
+    `;
 
-      <div>
+    box.appendChild(d);
 
-        <label class="rr-label">
-          Period
-        </label>
-
-        <input
-          class="rr-input"
-          name="request_period"
-        >
-
-      </div>
-
-    </div>
-
-    <div class="rr-row">
-
-      <div>
-
-        <label class="rr-label">
-          Purpose
-        </label>
-
-        <input
-          class="rr-input"
-          name="request_purpose"
-        >
-
-      </div>
-
-      <div>
-
-        <label class="rr-label">
-          Evidence Type
-        </label>
-
-        <input
-          class="rr-input"
-          name="request_evidence"
-        >
-
-      </div>
-
-    </div>
-
-    <label class="rr-label">
-
-      <input
-        type="checkbox"
-        name="request_mandatory"
-        value="1"
-        checked
-      >
-
-      Mandatory
-
-    </label>
-
-    <button
-      type="button"
-      class="btn btn-danger"
-      onclick="this.parentElement.remove()"
-    >
-      Remove
-    </button>
-  `;
-
-  box.appendChild(d);
 }
 
-
-/* =========================================================
-   SUBMIT
-   ========================================================= */
 
 function prepareSubmit(){
 
-  syncDerived();
+    if(!validateStage2()){
 
-  if(!plan.base_source){
+        goStage(2);
 
-    alert(
-      'Add a FROM step and select the primary approved data source.'
-    );
+        return false;
 
-    return false;
-  }
+    }
 
-  if(
-    !(
-      plan.conditions?.length ||
-      plan.filters?.length ||
-      plan.calculations?.length
-    )
-  ){
+    if(!plan.sources.length){
 
-    alert(
-      'Build at least one executable condition or calculation.'
-    );
+        alert(
+            'Select at least one data source.'
+        );
 
-    return false;
-  }
+        goStage(2);
 
-  document.getElementById('rule_plan').value =
-    JSON.stringify(
-      buildPlan()
-    );
+        return false;
 
-  return true;
+    }
+
+    syncPlan();
+
+    if(!plan.base_source?.source_id){
+
+        alert(
+            'Add a FROM block and select the primary data source in Stage 4.'
+        );
+
+        goStage(4);
+
+        return false;
+
+    }
+
+    if(
+        !plan.conditions.length &&
+        !plan.filters.length &&
+        !plan.calculations.length
+    ){
+
+        alert(
+            'Build at least one calculation, filter or detection condition.'
+        );
+
+        goStage(4);
+
+        return false;
+
+    }
+
+    document.getElementById(
+        'risk_description'
+    ).value=
+        document.querySelector(
+            '[name="rule_name"]'
+        ).value;
+
+    document.getElementById(
+        'rule_plan'
+    ).value=
+        JSON.stringify(
+            buildPlan()
+        );
+
+    const b=
+        document.getElementById(
+            'submitRule'
+        );
+
+    b.disabled=true;
+
+    b.textContent=
+        'Generating interpretation and testing…';
+
+    return true;
+
 }
 
 
-/* =========================================================
-   INITIALISE
-   ========================================================= */
+document
+    .getElementById('riskRuleForm')
+    .addEventListener(
+        'submit',
+        function(e){
+
+            if(!prepareSubmit()){
+
+                e.preventDefault();
+
+            }
+
+        }
+    );
+
 
 (function init(){
 
-  try{
+    try{
 
-    const existing =
-      {{ (rule['detection_logic_json'] if rule else '{}')|default('{}')|safe }};
+        if(
+            existing&&
+            Object.keys(existing).length
+        ){
 
-    if(
-      existing &&
-      typeof existing==='object' &&
-      Object.keys(existing).length
-    ){
+            plan=
+                Object.assign(
+                    plan,
+                    existing
+                );
 
-      plan =
-        Object.assign(
-          plan,
-          existing
+            plan.steps=
+                plan.steps||[];
+
+            const ids=
+                (plan.sources||[])
+                .map(
+                    x=>Number(x.id)
+                );
+
+            document
+                .querySelectorAll(
+                    '.source-check'
+                )
+                .forEach(ch=>{
+
+                    ch.checked=
+                        ids.includes(
+                            Number(ch.value)
+                        );
+
+                });
+
+        }
+
+    }
+    catch(e){
+
+        console.error(
+            'Failed to load existing rule definition',
+            e
         );
 
-      plan.steps =
-        plan.steps || [];
     }
 
-  }catch(e){}
 
-  if(
-    !plan.steps?.length &&
-    plan.base_source?.source_id
-  ){
+    renderMappings();
 
-    plan.steps = [
-      {
-        op:'FROM',
-        config:{
-          source_id:
-            plan.base_source.source_id
-        }
-      }
-    ];
-  }
 
-  renderLogicVocabulary();
-  render();
+    const pm=
+        plan.period||{};
+
+
+    if(
+        document.getElementById(
+            'periodField'
+        )
+    ){
+
+        document.getElementById(
+            'periodField'
+        ).value=
+            pm.field||'';
+
+    }
+
+
+    if(
+        document.getElementById(
+            'periodFrom'
+        )
+    ){
+
+        document.getElementById(
+            'periodFrom'
+        ).value=
+            pm.from||'';
+
+    }
+
+
+    if(
+        document.getElementById(
+            'periodTo'
+        )
+    ){
+
+        document.getElementById(
+            'periodTo'
+        ).value=
+            pm.to||'';
+
+    }
+
+
+    if(
+        document.getElementById(
+            'timeRelationship'
+        )
+    ){
+
+        document.getElementById(
+            'timeRelationship'
+        ).value=
+            pm.time_relationship||'none';
+
+    }
+
+
+    renderVocab();
 
 })();
 
