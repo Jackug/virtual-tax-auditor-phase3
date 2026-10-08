@@ -1,1140 +1,2003 @@
 {% extends 'base.html' %}
+
+{% block title %}Transform Data{% endblock %}
+
 {% block content %}
+
 <style>
 .transform-header{margin-bottom:15px}
 .toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:10px;border:1px solid #d9e0e7;background:#f7f9fb;border-radius:7px}
 .toolbar button{border:1px solid #cbd5df;background:white;padding:7px 10px;border-radius:5px;cursor:pointer;font-size:11px}
 .toolbar button:hover{background:#eef4f9}
+
 .workspace{display:grid;grid-template-columns:310px 1fr;gap:12px;margin-top:12px}
+
 .sidebar{border:1px solid #d9e0e7;border-radius:7px;background:white;padding:12px}
 .sidebar h4{margin-top:0}
+
 .step{padding:9px;border-bottom:1px solid #edf0f2;font-size:11px}
 .step-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .step-number{font-weight:700;color:#17365d}
 .step-title{font-weight:700}
+
 .step-actions{display:flex;gap:4px;flex-shrink:0}
-.step-actions button{font-size:10px;padding:4px 7px;border:1px solid #cbd5df;border-radius:4px;background:white;cursor:pointer}
+.step-actions button{
+    font-size:10px;
+    padding:4px 7px;
+    border:1px solid #cbd5df;
+    border-radius:4px;
+    background:white;
+    cursor:pointer
+}
 .step-actions .delete-step{color:#a52a2a}
 .step-actions .edit-step{color:#17365d}
-.preview{border:1px solid #d9e0e7;border-radius:7px;background:white;overflow:hidden}
-.preview-header{padding:10px 12px;background:#f7f9fb;border-bottom:1px solid #d9e0e7}
-.table-wrap{overflow:auto;max-height:560px}
-.data-table{border-collapse:collapse;min-width:100%;font-size:11px;user-select:text}
-.data-table th{position:sticky;top:0;background:#e9eef3;padding:7px;border:1px solid #d4dbe1;text-align:left;white-space:nowrap}
-.data-table td{padding:6px 7px;border:1px solid #e1e5e8;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+
+.preview{
+    border:1px solid #d9e0e7;
+    border-radius:7px;
+    background:white;
+    overflow:hidden
+}
+
+.preview-header{
+    padding:10px 12px;
+    background:#f7f9fb;
+    border-bottom:1px solid #d9e0e7
+}
+
+.table-wrap{
+    overflow:auto;
+    max-height:560px
+}
+
+.data-table{
+    border-collapse:collapse;
+    min-width:100%;
+    font-size:11px;
+    user-select:text
+}
+
+.data-table th{
+    position:sticky;
+    top:0;
+    background:#e9eef3;
+    padding:7px;
+    border:1px solid #d4dbe1;
+    text-align:left;
+    white-space:nowrap
+}
+
+.data-table td{
+    padding:6px 7px;
+    border:1px solid #e1e5e8;
+    white-space:nowrap;
+    max-width:300px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    cursor:pointer
+}
+
 .data-table td:hover{background:#f2f7fb}
-.data-table tr.selected-row td{background:#fff2c9!important;outline:1px solid #d5a600}
-.row-number{background:#f5f6f7;color:#59636c;text-align:center;font-weight:700;cursor:pointer!important}
-.operation-panel{margin-top:12px;border:1px solid #d9e0e7;border-radius:7px;background:white;padding:14px}
-.operation-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.operation-grid .full{grid-column:1/-1}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.btn{border:0;border-radius:5px;padding:8px 13px;cursor:pointer;font-size:11px;background:#17365d;color:white;text-decoration:none}
-.btn-success{background:#287a46}.btn-warning{background:#9a6a00}.btn-secondary{background:#66727d}.btn-danger{background:#a52a2a}.btn-info{background:#286090}
-.info{padding:10px;background:#f3f7fb;border:1px solid #d9e3ec;border-radius:6px;font-size:11px}.badge{display:inline-block;padding:4px 8px;border-radius:10px;background:#e9eef3;font-size:10px}.muted{line-height:1.5}
-.copy-hint{font-size:10px;color:#59636c;margin-top:5px}
-.selected-row-info{padding:8px 10px;background:#fff9e6;border:1px solid #ecd99a;border-radius:5px;margin-top:8px;font-size:11px}
-.editing-banner{padding:9px 12px;background:#eef4f9;border:1px solid #cbdde9;border-radius:6px;margin-bottom:10px;display:none}
-@media(max-width:1000px){.workspace{grid-template-columns:1fr}.operation-grid{grid-template-columns:1fr}.operation-grid .full{grid-column:auto}}
+
+.data-table tr.selected-row td{
+    background:#fff2c9!important;
+    outline:1px solid #d5a600
+}
+
+.row-number{
+    background:#f5f6f7;
+    color:#59636c;
+    text-align:center;
+    font-weight:700;
+    cursor:pointer!important
+}
+
+.operation-panel{
+    margin-top:12px;
+    border:1px solid #d9e0e7;
+    border-radius:7px;
+    background:white;
+    padding:14px
+}
+
+.operation-grid{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:10px
+}
+
+.operation-grid .full{grid-column:1/-1}
+
+.operation-panel label{
+    display:block;
+    font-size:11px;
+    font-weight:700;
+    margin-bottom:4px;
+    color:#334155
+}
+
+.operation-panel input,
+.operation-panel select{
+    width:100%;
+    box-sizing:border-box;
+    padding:8px;
+    border:1px solid #cbd5df;
+    border-radius:5px;
+    background:white;
+    font-size:11px
+}
+
+.operation-panel input[type="checkbox"]{
+    width:auto
+}
+
+.actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:12px
+}
+
+.btn{
+    border:0;
+    border-radius:5px;
+    padding:8px 13px;
+    cursor:pointer;
+    font-size:11px;
+    background:#17365d;
+    color:white;
+    text-decoration:none
+}
+
+.btn-success{background:#287a46}
+.btn-warning{background:#9a6a00}
+.btn-secondary{background:#66727d}
+.btn-danger{background:#a52a2a}
+.btn-info{background:#286090}
+
+.info{
+    padding:10px;
+    background:#f3f7fb;
+    border:1px solid #d9e3ec;
+    border-radius:6px;
+    font-size:11px
+}
+
+.badge{
+    display:inline-block;
+    padding:4px 8px;
+    border-radius:10px;
+    background:#e9eef3;
+    font-size:10px
+}
+
+.muted{line-height:1.5}
+
+.copy-hint{
+    font-size:10px;
+    color:#59636c;
+    margin-top:5px
+}
+
+.selected-row-info{
+    padding:8px 10px;
+    background:#fff9e6;
+    border:1px solid #ecd99a;
+    border-radius:5px;
+    margin-top:8px;
+    font-size:11px
+}
+
+.editing-banner{
+    padding:9px 12px;
+    background:#eef4f9;
+    border:1px solid #cbdde9;
+    border-radius:6px;
+    margin-bottom:10px;
+    display:none
+}
+
+@media(max-width:1000px){
+    .workspace{grid-template-columns:1fr}
+    .operation-grid{grid-template-columns:1fr}
+    .operation-grid .full{grid-column:auto}
+}
 </style>
 
+
+<!-- ========================================================= -->
+<!-- HEADER -->
+<!-- ========================================================= -->
+
 <div class="card transform-header">
-  <div class="label">DATA & EVIDENCE · STEP 2C-3</div>
-  <h2>Transform Data</h2>
-  <p class="muted">Power Query-style data preparation workspace. Every transformation is recorded as a separate applied step. The original uploaded source is never changed.</p>
-  <div class="info"><b>{{ source.source_name }}</b> · {{ source.source_ref }} · Version {{ version.version_number }} · {{ version.original_filename }} · {{ "{:,}".format(original_rows) }} rows · {{ original_columns|length }} columns</div>
+
+    <div class="label">
+        DATA & EVIDENCE · STEP 2C-3
+    </div>
+
+    <h2>Transform Data</h2>
+
+    <p class="muted">
+        Power Query-style data preparation workspace.
+        Every transformation is recorded as a separate applied step.
+        The original uploaded source is never changed.
+    </p>
+
+    <div class="info">
+
+        <b>{{ source.source_name|default('Data Source', true) }}</b>
+
+        ·
+
+        {{ source.source_ref|default('', true) }}
+
+        · Version
+
+        {{ version.version_number|default('', true) }}
+
+        ·
+
+        {{ version.original_filename|default('', true) }}
+
+        ·
+
+        {{ "{:,}".format(original_rows|default(0, true)|int) }}
+
+        rows
+
+        ·
+
+        {{ (original_columns|default([], true)|length) }}
+
+        columns
+
+    </div>
+
 </div>
+
+
+<!-- ========================================================= -->
+<!-- TRANSFORMATION TOOLBAR -->
+<!-- ========================================================= -->
 
 <div class="card">
-  <h3>Transformations</h3>
-  <div class="toolbar">
-    <button type="button" onclick="showPanel('headers')">Replace Headers</button>
-    <button type="button" onclick="showPanel('columns')">Select Columns</button>
-    <button type="button" onclick="showPanel('remove-columns')">Remove Columns</button>
-    <button type="button" onclick="showPanel('rename')">Rename</button>
-    <button type="button" onclick="showPanel('filter')">Filter</button>
-    <button type="button" onclick="showPanel('sort')">Sort</button>
-    <button type="button" onclick="showPanel('rows')">Remove / Keep Rows</button>
-    <button type="button" onclick="showPanel('replace')">Replace</button>
-    <button type="button" onclick="showPanel('type')">Change Type</button>
-    <button type="button" onclick="showPanel('fill')">Fill</button>
-    <button type="button" onclick="showPanel('text')">Trim / Clean</button>
-    <button type="button" onclick="showPanel('alignment')">Alignment</button>
-  </div>
+
+    <h3>Transformations</h3>
+
+    <div class="toolbar">
+
+        <button type="button"
+                onclick="showPanel('headers')">
+            Replace Headers
+        </button>
+
+        <button type="button"
+                onclick="showPanel('columns')">
+            Select Columns
+        </button>
+
+        <button type="button"
+                onclick="showPanel('remove-columns')">
+            Remove Columns
+        </button>
+
+        <button type="button"
+                onclick="showPanel('rename')">
+            Rename
+        </button>
+
+        <button type="button"
+                onclick="showPanel('filter')">
+            Filter
+        </button>
+
+        <button type="button"
+                onclick="showPanel('sort')">
+            Sort
+        </button>
+
+        <button type="button"
+                onclick="showPanel('rows')">
+            Remove / Keep Rows
+        </button>
+
+        <button type="button"
+                onclick="showPanel('replace')">
+            Replace
+        </button>
+
+        <button type="button"
+                onclick="showPanel('type')">
+            Change Type
+        </button>
+
+        <button type="button"
+                onclick="showPanel('fill')">
+            Fill
+        </button>
+
+        <button type="button"
+                onclick="showPanel('text')">
+            Trim / Clean
+        </button>
+
+        <button type="button"
+                onclick="showPanel('alignment')">
+            Alignment
+        </button>
+
+    </div>
+
 </div>
+
+
+<!-- ========================================================= -->
+<!-- WORKSPACE -->
+<!-- ========================================================= -->
 
 <div class="workspace">
-  <div class="sidebar">
-    <h4>Applied Steps</h4>
-    <div class="step">
-      <div class="step-head">
-        <div><span class="step-number">1.</span> <span class="step-title">Source</span></div>
-      </div>
-      <div class="muted">Original uploaded data</div>
-    </div>
 
-    {% for step in steps %}
-    <div class="step">
-      <div class="step-head">
-        <div>
-          <span class="step-number">{{ loop.index + 1 }}.</span>
-          <span class="step-title">{{ step.operation|replace('_',' ')|title }}</span>
+
+    <!-- ======================================================= -->
+    <!-- APPLIED STEPS -->
+    <!-- ======================================================= -->
+
+    <div class="sidebar">
+
+        <h4>Applied Steps</h4>
+
+        <div class="step">
+
+            <div class="step-head">
+
+                <div>
+
+                    <span class="step-number">
+                        1.
+                    </span>
+
+                    <span class="step-title">
+                        Source
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div class="muted">
+                Original uploaded data
+            </div>
+
         </div>
-        <div class="step-actions">
-          <button type="button" class="edit-step" onclick="editStep({{ loop.index0 }})">Edit</button>
-          <form method="POST" style="display:inline" onsubmit="return confirm('Delete this transformation step? The following steps will be recalculated.');">
-            <input type="hidden" name="action" value="delete_step">
-            <input type="hidden" name="step_index" value="{{ loop.index0 }}">
-            <button type="submit" class="delete-step">Delete</button>
-          </form>
+
+
+        {% for step in steps|default([], true) %}
+
+        <div class="step">
+
+            <div class="step-head">
+
+                <div>
+
+                    <span class="step-number">
+                        {{ loop.index + 1 }}.
+                    </span>
+
+                    <span class="step-title">
+                        {{ step.operation|default('Transformation', true)|replace('_',' ')|title }}
+                    </span>
+
+                </div>
+
+                <div class="step-actions">
+
+                    <button
+                        type="button"
+                        class="edit-step"
+                        onclick="editStep({{ loop.index0 }})">
+
+                        Edit
+
+                    </button>
+
+
+                    <form
+                        method="POST"
+                        style="display:inline"
+                        onsubmit="return confirm('Delete this transformation step? The following steps will be recalculated.');">
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="delete_step">
+
+                        <input
+                            type="hidden"
+                            name="step_index"
+                            value="{{ loop.index0 }}">
+
+                        <button
+                            type="submit"
+                            class="delete-step">
+
+                            Delete
+
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+
+            {% if step.column %}
+
+            <div class="muted">
+                Column: {{ step.column }}
+            </div>
+
+            {% endif %}
+
+
+            {% if step.columns %}
+
+            <div class="muted">
+                Columns: {{ step.columns|join(', ') }}
+            </div>
+
+            {% endif %}
+
+
+            {% if step.row_number %}
+
+            <div class="muted">
+                Header row: {{ step.row_number }}
+            </div>
+
+            {% endif %}
+
+
+            {% if step.old_name %}
+
+            <div class="muted">
+                {{ step.old_name }} → {{ step.new_name }}
+            </div>
+
+            {% endif %}
+
+
+            {% if step.direction %}
+
+            <div class="muted">
+                {{ step.direction|title }}
+            </div>
+
+            {% endif %}
+
+
+            {% if step.count is defined %}
+
+            <div class="muted">
+                Rows: {{ step.count }}
+            </div>
+
+            {% endif %}
+
+
+            {% if step.alignment %}
+
+            <div class="muted">
+                Alignment: {{ step.alignment|title }}
+            </div>
+
+            {% endif %}
+
         </div>
-      </div>
-      {% if step.column %}<div class="muted">Column: {{ step.column }}</div>{% endif %}
-      {% if step.columns %}<div class="muted">Columns: {{ step.columns|join(', ') }}</div>{% endif %}
-      {% if step.row_number %}<div class="muted">Header row: {{ step.row_number }}</div>{% endif %}
-      {% if step.old_name %}<div class="muted">{{ step.old_name }} → {{ step.new_name }}</div>{% endif %}
-      {% if step.direction %}<div class="muted">{{ step.direction|title }}</div>{% endif %}
-      {% if step.count is defined %}<div class="muted">Rows: {{ step.count }}</div>{% endif %}
-      {% if step.alignment %}<div class="muted">Alignment: {{ step.alignment|title }}</div>{% endif %}
+
+        {% endfor %}
+
+
+        <div class="actions">
+
+            <form method="POST">
+
+                <input
+                    type="hidden"
+                    name="action"
+                    value="undo">
+
+                <button
+                    class="btn btn-secondary"
+                    type="submit">
+
+                    Undo Last
+
+                </button>
+
+            </form>
+
+
+            <form
+                method="POST"
+                onsubmit="return confirm('Clear all transformation steps?');">
+
+                <input
+                    type="hidden"
+                    name="action"
+                    value="clear">
+
+                <button
+                    class="btn btn-danger"
+                    type="submit">
+
+                    Clear All
+
+                </button>
+
+            </form>
+
+        </div>
+
     </div>
-    {% endfor %}
 
-    <div class="actions">
-      <form method="POST">
-        <input type="hidden" name="action" value="undo">
-        <button class="btn btn-secondary" type="submit">Undo Last</button>
-      </form>
 
-      <form method="POST" onsubmit="return confirm('Clear all transformation steps?');">
-        <input type="hidden" name="action" value="clear">
-        <button class="btn btn-danger" type="submit">Clear All</button>
-      </form>
+    <!-- ======================================================= -->
+    <!-- DATA PREVIEW -->
+    <!-- ======================================================= -->
+
+    <div class="preview">
+
+        <div class="preview-header">
+
+            <b>
+                Data Preview
+            </b>
+
+            <span class="badge">
+                Showing up to 100 rows
+            </span>
+
+            <div
+                class="muted"
+                style="margin-top:5px">
+
+                {{ preview_rows|default(0, true) }}
+
+                preview rows
+
+                ·
+
+                {{ preview_columns|default([], true)|length }}
+
+                columns
+
+            </div>
+
+
+            <div class="actions">
+
+                <button
+                    type="button"
+                    class="btn btn-info"
+                    onclick="copyVisibleData()">
+
+                    Copy All Visible Data
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    onclick="copySelectedRow()">
+
+                    Copy Selected Row
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    onclick="copySelectedCellOnly()">
+
+                    Copy Selected Cell
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    onclick="clearRowSelection()">
+
+                    Clear Row Selection
+
+                </button>
+
+            </div>
+
+
+            <div class="copy-hint">
+
+                Click any cell to copy its value.
+                Click a row number or any cell once to select the row.
+                You can also use normal mouse selection and Ctrl+C.
+
+            </div>
+
+
+            <div
+                id="selectedRowInfo"
+                class="selected-row-info">
+
+                No row selected.
+
+            </div>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table
+                class="data-table"
+                id="previewTable">
+
+                <thead>
+
+                    <tr>
+
+                        <th
+                            onclick="copyText(this.innerText)"
+                            title="Click to copy">
+
+                            #
+
+                        </th>
+
+
+                        {% for column in preview_columns|default([], true) %}
+
+                        <th
+                            onclick="copyText(this.innerText)"
+                            title="Click to copy">
+
+                            {{ column }}
+
+                        </th>
+
+                        {% endfor %}
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for row in preview_records|default([], true) %}
+
+                    <tr
+                        data-row-index="{{ loop.index }}">
+
+                        <td
+                            class="row-number"
+                            onclick="selectRow(this.parentElement)">
+
+                            {{ loop.index }}
+
+                        </td>
+
+
+                        {% for column in preview_columns|default([], true) %}
+
+                        <td
+                            title="Click to copy"
+                            onclick="cellClicked(this)">
+
+                            {{ row[column]|default('', true) }}
+
+                        </td>
+
+                        {% endfor %}
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
     </div>
-  </div>
 
-  <div class="preview">
-    <div class="preview-header">
-      <b>Data Preview</b>
-      <span class="badge">Showing up to 100 rows</span>
-      <div class="muted" style="margin-top:5px">{{ preview_rows }} preview rows · {{ preview_columns|length }} columns</div>
+</div>
 
-      <div class="actions">
-        <button type="button" class="btn btn-info" onclick="copyVisibleData()">Copy All Visible Data</button>
-        <button type="button" class="btn btn-secondary" onclick="copySelectedRow()">Copy Selected Row</button>
-        <button type="button" class="btn btn-secondary" onclick="copySelectedCellOnly()">Copy Selected Cell</button>
-        <button type="button" class="btn btn-secondary" onclick="clearRowSelection()">Clear Row Selection</button>
-      </div>
 
-      <div class="copy-hint">
-        Click any cell to copy its value.
-        Click a row number or any cell once to select the row.
-        You can also use normal mouse selection and Ctrl+C.
-      </div>
+<!-- ========================================================= -->
+<!-- EDITING BANNER -->
+<!-- ========================================================= -->
 
-      <div id="selectedRowInfo" class="selected-row-info">
-        No row selected.
-      </div>
-    </div>
+<div
+    id="editingBanner"
+    class="editing-banner">
 
-    <div class="table-wrap">
-      <table class="data-table" id="previewTable">
-        <thead>
-          <tr>
-            <th onclick="copyText(this.innerText)" title="Click to copy">#</th>
-            {% for column in preview_columns %}
-            <th onclick="copyText(this.innerText)" title="Click to copy">{{ column }}</th>
+    <b>
+        Editing transformation step.
+    </b>
+
+    Change the settings below and click
+    <b>
+        Save Edited Step
+    </b>.
+
+    The preview will be recalculated from the original source
+    using all steps in sequence.
+
+    <button
+        type="button"
+        class="btn btn-secondary"
+        style="float:right;padding:4px 8px"
+        onclick="cancelEdit()">
+
+        Cancel Edit
+
+    </button>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- REPLACE HEADERS -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-headers"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Replace Headers with Row
+    </h3>
+
+    <p class="muted">
+
+        Select the row that contains the real column headings.
+        Rows above the selected row will be removed, and the
+        selected row will become the headers.
+
+    </p>
+
+
+    <form
+        method="POST"
+        id="headersForm">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step"
+            id="headersAction">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            id="headersStepIndex">
+
+        <input
+            type="hidden"
+            name="operation"
+            value="replace_headers_with_row">
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Selected Row Number
+                </label>
+
+                <input
+                    type="number"
+                    name="row_number"
+                    id="headerRowNumber"
+                    value="1"
+                    min="1"
+                    required>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Quick Selection
+                </label>
+
+                <div class="muted">
+
+                    Click a row in the preview above.
+                    Its row number will be placed here.
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit"
+                id="headersSubmit">
+
+                Use Selected Row as Headers
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- SELECT COLUMNS -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-columns"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Select Columns
+    </h3>
+
+    <form
+        method="POST"
+        id="columnsForm">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
+
+        <input
+            type="hidden"
+            name="operation"
+            value="select_columns">
+
+
+        <div class="operation-grid">
+
+            {% for column in preview_columns|default([], true) %}
+
+            <label>
+
+                <input
+                    type="checkbox"
+                    name="columns"
+                    value="{{ column }}"
+                    checked>
+
+                {{ column }}
+
+            </label>
+
             {% endfor %}
-          </tr>
-        </thead>
 
-        <tbody>
-          {% for row in preview_records %}
-          <tr data-row-index="{{ loop.index }}">
-            <td class="row-number" onclick="selectRow(this.parentElement)">
-              {{ loop.index }}
-            </td>
-
-            {% for column in preview_columns %}
-            <td title="Click to copy" onclick="cellClicked(this)">
-              {{ row[column] }}
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<div id="editingBanner" class="editing-banner">
-  <b>Editing transformation step.</b>
-  Change the settings below and click <b>Save Edited Step</b>.
-  The preview will be recalculated from the original source using all steps in sequence.
-
-  <button
-    type="button"
-    class="btn btn-secondary"
-    style="float:right;padding:4px 8px"
-    onclick="cancelEdit()"
-  >
-    Cancel Edit
-  </button>
-</div>
-
-
-<!-- ============================================================
-     REPLACE HEADERS
-============================================================ -->
-
-<div id="panel-headers" class="operation-panel" style="display:none">
-
-  <h3>Replace Headers with Row</h3>
-
-  <p class="muted">
-    Select the row that contains the real column headings.
-    Rows above the selected row will be removed,
-    and the selected row will become the headers.
-  </p>
-
-  <form method="POST" id="headersForm">
-
-    <input type="hidden" name="action" value="add_step" id="headersAction">
-
-    <input type="hidden" name="step_index" value="" id="headersStepIndex">
-
-    <input type="hidden" name="operation" value="replace_headers_with_row">
-
-    <div class="operation-grid">
-
-      <div>
-        <label>Selected Row Number</label>
-
-        <input
-          type="number"
-          name="row_number"
-          id="headerRowNumber"
-          value="1"
-          min="1"
-          required
-        >
-      </div>
-
-      <div>
-        <label>Quick Selection</label>
-
-        <div class="muted">
-          Click a row in the preview above.
-          Its row number will be placed here.
         </div>
-      </div>
 
-    </div>
 
-    <div class="actions">
+        <div class="actions">
 
-      <button
-        class="btn btn-success"
-        type="submit"
-        id="headersSubmit"
-      >
-        Use Selected Row as Headers
-      </button>
+            <button
+                class="btn btn-success"
+                type="submit">
 
-    </div>
+                Apply Selection
 
-  </form>
+            </button>
+
+        </div>
+
+    </form>
 
 </div>
 
 
-<!-- ============================================================
-     SELECT COLUMNS
-============================================================ -->
+<!-- ========================================================= -->
+<!-- REMOVE COLUMNS -->
+<!-- ========================================================= -->
 
-<div id="panel-columns" class="operation-panel" style="display:none">
+<div
+    id="panel-remove-columns"
+    class="operation-panel"
+    style="display:none">
 
-  <h3>Select Columns</h3>
+    <h3>
+        Remove Columns
+    </h3>
 
-  <form method="POST" id="columnsForm">
+    <form method="POST">
 
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <input type="hidden" name="operation" value="select_columns">
-
-    <div class="operation-grid">
-
-      {% for column in preview_columns %}
-
-      <label>
         <input
-          type="checkbox"
-          name="columns"
-          value="{{ column }}"
-          checked
-        >
+            type="hidden"
+            name="action"
+            value="add_step">
 
-        {{ column }}
-      </label>
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
 
-      {% endfor %}
+        <input
+            type="hidden"
+            name="operation"
+            value="remove_columns">
 
-    </div>
 
-    <div class="actions">
+        <div class="operation-grid">
 
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply Selection
-      </button>
+            {% for column in preview_columns|default([], true) %}
 
-    </div>
+            <label>
 
-  </form>
+                <input
+                    type="checkbox"
+                    name="columns"
+                    value="{{ column }}">
+
+                {{ column }}
+
+            </label>
+
+            {% endfor %}
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-danger"
+                type="submit">
+
+                Remove Selected Columns
+
+            </button>
+
+        </div>
+
+    </form>
 
 </div>
 
 
-<!-- ============================================================
-     REMOVE COLUMNS
-============================================================ -->
+<!-- ========================================================= -->
+<!-- RENAME -->
+<!-- ========================================================= -->
 
-<div id="panel-remove-columns" class="operation-panel" style="display:none">
+<div
+    id="panel-rename"
+    class="operation-panel"
+    style="display:none">
 
-  <h3>Remove Columns</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <input type="hidden" name="operation" value="remove_columns">
-
-    <div class="operation-grid">
-
-      {% for column in preview_columns %}
-
-      <label>
-
-        <input
-          type="checkbox"
-          name="columns"
-          value="{{ column }}"
-        >
-
-        {{ column }}
-
-      </label>
-
-      {% endfor %}
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-danger"
-        type="submit"
-      >
-        Remove Selected Columns
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     RENAME
-============================================================ -->
-
-<div id="panel-rename" class="operation-panel" style="display:none">
-
-  <h3>Rename Column</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <input type="hidden" name="operation" value="rename_column">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>Existing Column</label>
-
-        <select name="old_name">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>New Column Name</label>
-
-        <input
-          name="new_name"
-          required
-          placeholder="New name"
-        >
-
-      </div>
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
+    <h3>
         Rename Column
-      </button>
+    </h3>
 
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     FILTER
-============================================================ -->
-
-<div id="panel-filter" class="operation-panel" style="display:none">
-
-  <h3>Filter Rows</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <input type="hidden" name="operation" value="filter">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>Column</label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>Condition</label>
-
-        <select name="operator">
-
-          <option value="contains">Contains</option>
-          <option value="equals">Equals</option>
-          <option value="not_equals">Does not equal</option>
-          <option value="starts_with">Starts with</option>
-          <option value="ends_with">Ends with</option>
-          <option value="blank">Is blank</option>
-          <option value="not_blank">Is not blank</option>
-
-        </select>
-
-      </div>
-
-      <div class="full">
-
-        <label>Value</label>
+    <form method="POST">
 
         <input
-          name="value"
-          placeholder="Enter filter value"
-        >
+            type="hidden"
+            name="action"
+            value="add_step">
 
-      </div>
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
 
-    </div>
+        <input
+            type="hidden"
+            name="operation"
+            value="rename_column">
 
-    <div class="actions">
 
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply Filter
-      </button>
+        <div class="operation-grid">
 
-    </div>
+            <div>
 
-  </form>
+                <label>
+                    Existing Column
+                </label>
+
+                <select name="old_name">
+
+                    {% for column in preview_columns|default([], true) %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    New Column Name
+                </label>
+
+                <input
+                    name="new_name"
+                    required
+                    placeholder="New name">
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Rename Column
+
+            </button>
+
+        </div>
+
+    </form>
 
 </div>
 
 
-<!-- ============================================================
-     SORT
-============================================================ -->
+<!-- ========================================================= -->
+<!-- FILTER -->
+<!-- ========================================================= -->
 
-<div id="panel-sort" class="operation-panel" style="display:none">
+<div
+    id="panel-filter"
+    class="operation-panel"
+    style="display:none">
 
-  <h3>Sort</h3>
+    <h3>
+        Filter Rows
+    </h3>
 
-  <form method="POST">
+    <form method="POST">
 
-    <input type="hidden" name="action" value="add_step">
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
 
-    <input type="hidden" name="step_index" value="" class="edit-index">
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
 
-    <input type="hidden" name="operation" value="sort">
+        <input
+            type="hidden"
+            name="operation"
+            value="filter">
 
-    <div class="operation-grid">
 
-      <div>
+        <div class="operation-grid">
 
-        <label>Column</label>
+            <div>
 
-        <select name="column">
+                <label>
+                    Column
+                </label>
 
-          {% for column in preview_columns %}
+                <select name="column">
 
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
+                    {% for column in preview_columns|default([], true) %}
 
-          {% endfor %}
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
 
-        </select>
+                    {% endfor %}
 
-      </div>
+                </select>
 
-      <div>
+            </div>
 
-        <label>Direction</label>
 
-        <select name="direction">
+            <div>
 
-          <option value="ascending">Ascending</option>
-          <option value="descending">Descending</option>
+                <label>
+                    Condition
+                </label>
 
-        </select>
+                <select name="operator">
 
-      </div>
+                    <option value="contains">
+                        Contains
+                    </option>
 
-    </div>
+                    <option value="equals">
+                        Equals
+                    </option>
 
-    <div class="actions">
+                    <option value="not_equals">
+                        Does not equal
+                    </option>
 
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
+                    <option value="starts_with">
+                        Starts with
+                    </option>
+
+                    <option value="ends_with">
+                        Ends with
+                    </option>
+
+                    <option value="blank">
+                        Is blank
+                    </option>
+
+                    <option value="not_blank">
+                        Is not blank
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="full">
+
+                <label>
+                    Value
+                </label>
+
+                <input
+                    name="value"
+                    placeholder="Enter filter value">
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Apply Filter
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- SORT -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-sort"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
         Sort
-      </button>
+    </h3>
 
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     ROWS
-============================================================ -->
-
-<div id="panel-rows" class="operation-panel" style="display:none">
-
-  <h3>Remove / Keep Rows</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>Operation</label>
-
-        <select name="operation">
-
-          <option value="remove_blank_rows">
-            Remove Blank Rows
-          </option>
-
-          <option value="remove_duplicates">
-            Remove Duplicates
-          </option>
-
-          <option value="remove_top_rows">
-            Remove Top Rows
-          </option>
-
-          <option value="remove_bottom_rows">
-            Remove Bottom Rows
-          </option>
-
-          <option value="keep_top_rows">
-            Keep Top Rows
-          </option>
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>Number of Rows</label>
+    <form method="POST">
 
         <input
-          type="number"
-          name="count"
-          value="1"
-          min="0"
-        >
+            type="hidden"
+            name="action"
+            value="add_step">
 
-      </div>
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
 
-    </div>
+        <input
+            type="hidden"
+            name="operation"
+            value="sort">
 
-    <div class="actions">
 
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply
-      </button>
+        <div class="operation-grid">
 
-    </div>
+            <div>
 
-  </form>
+                <label>
+                    Column
+                </label>
 
-</div>
+                <select name="column">
 
+                    {% for column in preview_columns|default([], true) %}
 
-<!-- ============================================================
-     REPLACE
-============================================================ -->
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
 
-<div id="panel-replace" class="operation-panel" style="display:none">
+                    {% endfor %}
 
-  <h3>Replace Values</h3>
+                </select>
 
-  <form method="POST">
+            </div>
 
-    <input type="hidden" name="action" value="add_step">
 
-    <input type="hidden" name="step_index" value="" class="edit-index">
+            <div>
 
-    <input type="hidden" name="operation" value="replace_value">
+                <label>
+                    Direction
+                </label>
 
-    <div class="operation-grid">
+                <select name="direction">
 
-      <div>
+                    <option value="ascending">
+                        Ascending
+                    </option>
 
-        <label>Column</label>
+                    <option value="descending">
+                        Descending
+                    </option>
 
-        <select name="column">
+                </select>
 
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>Existing Value</label>
-
-        <input name="old_value">
-
-      </div>
-
-      <div>
-
-        <label>Replace With</label>
-
-        <input name="new_value">
-
-      </div>
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Replace
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     TYPE
-============================================================ -->
-
-<div id="panel-type" class="operation-panel" style="display:none">
-
-  <h3>Change Data Type</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <input type="hidden" name="operation" value="change_type">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>Column</label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>Data Type</label>
-
-        <select name="target_type">
-
-          <option value="text">
-            Text
-          </option>
-
-          <option value="whole">
-            Whole Number
-          </option>
-
-          <option value="decimal">
-            Decimal Number
-          </option>
-
-          <option value="date">
-            Date
-          </option>
-
-          <option value="datetime">
-            Date / Time
-          </option>
-
-          <option value="boolean">
-            True / False
-          </option>
-
-        </select>
-
-      </div>
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Change Type
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     FILL
-============================================================ -->
-
-<div id="panel-fill" class="operation-panel" style="display:none">
-
-  <h3>Fill Values</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>Operation</label>
-
-        <select name="operation">
-
-          <option value="fill_down">
-            Fill Down
-          </option>
-
-          <option value="fill_up">
-            Fill Up
-          </option>
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>Column</label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Fill
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     TEXT
-============================================================ -->
-
-<div id="panel-text" class="operation-panel" style="display:none">
-
-  <h3>Trim / Clean Text</h3>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>Operation</label>
-
-        <select name="operation">
-
-          <option value="trim">
-            Trim whitespace
-          </option>
-
-          <option value="clean_text">
-            Clean text
-          </option>
-
-        </select>
-
-      </div>
-
-      <div>
-
-        <label>Column</label>
-
-        <select name="column">
-
-          {% for column in preview_columns %}
-
-          <option value="{{ column }}">
-            {{ column }}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply
-      </button>
-
-    </div>
-
-  </form>
-
-</div>
-
-
-<!-- ============================================================
-     ALIGNMENT
-============================================================ -->
-
-<div id="panel-alignment" class="operation-panel" style="display:none">
-
-  <h3>Alignment</h3>
-
-  <p class="muted">
-    Alignment is a presentation setting for the generated Excel
-    clean version. It does not change the underlying values.
-  </p>
-
-  <form method="POST">
-
-    <input type="hidden" name="action" value="add_step">
-
-    <input type="hidden" name="step_index" value="" class="edit-index">
-
-    <input type="hidden" name="operation" value="alignment">
-
-    <div class="operation-grid">
-
-      <div>
-
-        <label>
-
-          <input
-            type="checkbox"
-            id="alignmentSelectAll"
-            onclick="toggleAllAlignment(this)"
-          >
-
-          <b>All Columns</b>
-
-        </label>
-
-        <div
-          style="
-            max-height:180px;
-            overflow:auto;
-            border:1px solid #d9e0e7;
-            padding:8px;
-            margin-top:6px
-          "
-        >
-
-          {% for column in preview_columns %}
-
-          <label
-            style="
-              display:block;
-              margin-bottom:5px
-            "
-          >
-
-            <input
-              type="checkbox"
-              name="columns"
-              value="{{ column }}"
-              class="alignment-column"
-            >
-
-            {{ column }}
-
-          </label>
-
-          {% endfor %}
+            </div>
 
         </div>
 
-      </div>
 
-      <div>
+        <div class="actions">
 
-        <label>
-          Alignment
-        </label>
+            <button
+                class="btn btn-success"
+                type="submit">
 
-        <select name="alignment">
+                Sort
 
-          <option value="left">
-            Left
-          </option>
-
-          <option value="center">
-            Center
-          </option>
-
-          <option value="right">
-            Right
-          </option>
-
-        </select>
-
-        <div
-          class="muted small"
-          style="margin-top:8px"
-        >
-
-          Select <b>All Columns</b> to apply the alignment
-          to every column.
+            </button>
 
         </div>
 
-      </div>
-
-    </div>
-
-    <div class="actions">
-
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Apply Alignment
-      </button>
-
-    </div>
-
-  </form>
+    </form>
 
 </div>
 
 
-<!-- ============================================================
-     SAVE TRANSFORMATION
-============================================================ -->
+<!-- ========================================================= -->
+<!-- ROW OPERATIONS -->
+<!-- ========================================================= -->
 
 <div
-  class="card"
-  style="margin-top:15px"
->
+    id="panel-rows"
+    class="operation-panel"
+    style="display:none">
 
-  <h3>
-    Save Transformation
-  </h3>
+    <h3>
+        Remove / Keep Rows
+    </h3>
 
-  <p class="muted">
+    <form method="POST">
 
-    Saving stores the recipe, creates the controlled clean version,
-    and returns you to the Data Sources page.
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
 
-    The original uploaded file remains unchanged.
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
 
-    From there you can Transform, Approve or Reject the clean version.
 
-  </p>
+        <div class="operation-grid">
 
-  <form method="POST">
+            <div>
 
-    <input
-      type="hidden"
-      name="action"
-      value="save_recipe"
-    >
+                <label>
+                    Operation
+                </label>
 
-    <label>
-      Recipe Name
-    </label>
+                <select name="operation">
 
-    <!-- FIX: protect against Undefined recipe_name -->
-    <input
-      name="recipe_name"
-      value="{{ recipe.recipe_name|default('', true) }}"
-    >
+                    <option value="remove_blank_rows">
+                        Remove Blank Rows
+                    </option>
 
-    <div class="actions">
+                    <option value="remove_duplicates">
+                        Remove Duplicates
+                    </option>
 
-      <button
-        class="btn btn-success"
-        type="submit"
-      >
-        Save & Return to Data Sources
-      </button>
+                    <option value="remove_top_rows">
+                        Remove Top Rows
+                    </option>
 
-    </div>
+                    <option value="remove_bottom_rows">
+                        Remove Bottom Rows
+                    </option>
 
-  </form>
+                    <option value="keep_top_rows">
+                        Keep Top Rows
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Number of Rows
+                </label>
+
+                <input
+                    type="number"
+                    name="count"
+                    value="1"
+                    min="0">
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Apply
+
+            </button>
+
+        </div>
+
+    </form>
 
 </div>
 
 
-<div
-  class="actions"
-  style="margin-top:15px"
->
+<!-- ========================================================= -->
+<!-- REPLACE -->
+<!-- ========================================================= -->
 
-  <a
-    href="{{ url_for('data_sources') }}"
-    class="btn btn-secondary"
-  >
-    ← Back to Data Sources
-  </a>
+<div
+    id="panel-replace"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Replace Values
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
+
+        <input
+            type="hidden"
+            name="operation"
+            value="replace_value">
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns|default([], true) %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Existing Value
+                </label>
+
+                <input name="old_value">
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Replace With
+                </label>
+
+                <input name="new_value">
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Replace
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- CHANGE TYPE -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-type"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Change Data Type
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
+
+        <input
+            type="hidden"
+            name="operation"
+            value="change_type">
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns|default([], true) %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Data Type
+                </label>
+
+                <select name="target_type">
+
+                    <option value="text">
+                        Text
+                    </option>
+
+                    <option value="whole">
+                        Whole Number
+                    </option>
+
+                    <option value="decimal">
+                        Decimal Number
+                    </option>
+
+                    <option value="date">
+                        Date
+                    </option>
+
+                    <option value="datetime">
+                        Date / Time
+                    </option>
+
+                    <option value="boolean">
+                        True / False
+                    </option>
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Change Type
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- FILL -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-fill"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Fill Values
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Operation
+                </label>
+
+                <select name="operation">
+
+                    <option value="fill_down">
+                        Fill Down
+                    </option>
+
+                    <option value="fill_up">
+                        Fill Up
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns|default([], true) %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Fill
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- TEXT -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-text"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Trim / Clean Text
+    </h3>
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+                    Operation
+                </label>
+
+                <select name="operation">
+
+                    <option value="trim">
+                        Trim whitespace
+                    </option>
+
+                    <option value="clean_text">
+                        Clean text
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Column
+                </label>
+
+                <select name="column">
+
+                    {% for column in preview_columns|default([], true) %}
+
+                    <option value="{{ column }}">
+                        {{ column }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Apply
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- ALIGNMENT -->
+<!-- ========================================================= -->
+
+<div
+    id="panel-alignment"
+    class="operation-panel"
+    style="display:none">
+
+    <h3>
+        Alignment
+    </h3>
+
+    <p class="muted">
+
+        Alignment is a presentation setting for the generated
+        Excel clean version. It does not change the underlying values.
+
+    </p>
+
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="add_step">
+
+        <input
+            type="hidden"
+            name="step_index"
+            value=""
+            class="edit-index">
+
+        <input
+            type="hidden"
+            name="operation"
+            value="alignment">
+
+
+        <div class="operation-grid">
+
+            <div>
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="alignmentSelectAll"
+                        onclick="toggleAllAlignment(this)">
+
+                    <b>
+                        All Columns
+                    </b>
+
+                </label>
+
+
+                <div
+                    style="max-height:180px;overflow:auto;border:1px solid #d9e0e7;padding:8px;margin-top:6px">
+
+                    {% for column in preview_columns|default([], true) %}
+
+                    <label
+                        style="display:block;margin-bottom:5px">
+
+                        <input
+                            type="checkbox"
+                            name="columns"
+                            value="{{ column }}"
+                            class="alignment-column">
+
+                        {{ column }}
+
+                    </label>
+
+                    {% endfor %}
+
+                </div>
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Alignment
+                </label>
+
+                <select name="alignment">
+
+                    <option value="left">
+                        Left
+                    </option>
+
+                    <option value="center">
+                        Center
+                    </option>
+
+                    <option value="right">
+                        Right
+                    </option>
+
+                </select>
+
+
+                <div
+                    class="muted"
+                    style="margin-top:8px">
+
+                    Select
+                    <b>All Columns</b>
+                    to apply the alignment to every column.
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Apply Alignment
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- SAVE TRANSFORMATION -->
+<!-- ========================================================= -->
+
+<div
+    class="card"
+    style="margin-top:15px">
+
+    <h3>
+        Save Transformation
+    </h3>
+
+    <p class="muted">
+
+        Saving stores the recipe, creates the controlled clean
+        version, and returns you to the Data Sources page.
+
+        The original uploaded file remains unchanged.
+
+        From there you can Transform, Approve or Reject the
+        clean version.
+
+    </p>
+
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="action"
+            value="save_recipe">
+
+
+        <label>
+            Recipe Name
+        </label>
+
+        <input
+            name="recipe_name"
+            value="{{ recipe.recipe_name|default('Transform ' ~ source.source_name|default('Data Source', true), true) }}"
+            style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #cbd5df;border-radius:5px">
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-success"
+                type="submit">
+
+                Save & Return to Data Sources
+
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BACK -->
+<!-- ========================================================= -->
+
+<div
+    class="actions"
+    style="margin-top:15px">
+
+    <a
+        href="{{ url_for('data_sources') }}"
+        class="btn btn-secondary">
+
+        ← Back to Data Sources
+
+    </a>
 
 </div>
 
@@ -1142,1030 +2005,1213 @@
 <script>
 
 /*
-============================================================
-FIX:
-Always provide a JSON-safe list to JavaScript.
+=============================================================
+SAFE SERVER DATA
+=============================================================
 
-The original:
+IMPORTANT:
+The original template used:
+
     const stepsData = {{ steps|tojson }};
 
-could fail with:
+If Jinja receives Undefined here, Flask's JSON provider raises:
 
     TypeError: Object of type Undefined is not JSON serializable
 
-when the backend did not provide steps.
-
-The rest of the original Transform JavaScript is retained.
-============================================================
+Everything coming from Jinja is therefore given a safe default
+before being passed to JavaScript.
 */
 
-const stepsData = {{ steps|default([], true)|tojson }};
+const stepsData = {{ (steps|default([], true))|tojson }};
 
 const panels = [
-  'headers',
-  'columns',
-  'remove-columns',
-  'rename',
-  'filter',
-  'sort',
-  'rows',
-  'replace',
-  'type',
-  'fill',
-  'text',
-  'alignment'
+    'headers',
+    'columns',
+    'remove-columns',
+    'rename',
+    'filter',
+    'sort',
+    'rows',
+    'replace',
+    'type',
+    'fill',
+    'text',
+    'alignment'
 ];
 
 let selectedPreviewRow = null;
+let selectedCellText = '';
 
+
+/*
+=============================================================
+SHOW PANEL
+=============================================================
+*/
 
 function showPanel(name){
 
-  panels.forEach(function(panel){
+    panels.forEach(function(panel){
 
-    const element =
-      document.getElementById(
-        'panel-' + panel
-      );
+        const e =
+            document.getElementById('panel-' + panel);
 
-    if(element){
+        if(e){
 
-      element.style.display =
-        panel === name
-          ? 'block'
-          : 'none';
+            e.style.display =
+                panel === name
+                    ? 'block'
+                    : 'none';
 
-    }
+        }
 
-  });
-
-
-  const selected =
-    document.getElementById(
-      'panel-' + name
-    );
-
-  if(selected){
-
-    selected.scrollIntoView({
-      behavior:'smooth',
-      block:'start'
     });
 
-  }
+
+    const selected =
+        document.getElementById('panel-' + name);
+
+
+    if(selected){
+
+        selected.scrollIntoView({
+            behavior:'smooth',
+            block:'start'
+        });
+
+    }
 
 }
 
 
+/*
+=============================================================
+ROW SELECTION
+=============================================================
+*/
+
 function selectRow(row){
 
-  document
-    .querySelectorAll(
-      '#previewTable tbody tr'
-    )
-    .forEach(function(r){
+    document
+        .querySelectorAll('#previewTable tbody tr')
+        .forEach(function(r){
 
-      r.classList.remove(
-        'selected-row'
-      );
+            r.classList.remove('selected-row');
 
-    });
+        });
 
 
-  row.classList.add(
-    'selected-row'
-  );
+    row.classList.add('selected-row');
 
 
-  selectedPreviewRow =
-    parseInt(
-      row.dataset.rowIndex,
-      10
-    );
+    selectedPreviewRow =
+        parseInt(
+            row.dataset.rowIndex,
+            10
+        );
 
 
-  const headerRow =
-    document.getElementById(
-      'headerRowNumber'
-    );
-
-  if(headerRow){
-
-    headerRow.value =
-      selectedPreviewRow;
-
-  }
+    const headerRow =
+        document.getElementById('headerRowNumber');
 
 
-  const info =
-    document.getElementById(
-      'selectedRowInfo'
-    );
+    if(headerRow){
 
-  if(info){
+        headerRow.value =
+            selectedPreviewRow;
 
-    info.textContent =
-      'Selected preview row ' +
-      selectedPreviewRow +
-      '. You can use this row as the new headers.';
+    }
 
-  }
+
+    const info =
+        document.getElementById('selectedRowInfo');
+
+
+    if(info){
+
+        info.textContent =
+            'Selected preview row ' +
+            selectedPreviewRow +
+            '. You can use this row as the new headers.';
+
+    }
 
 }
 
 
 function clearRowSelection(){
 
-  selectedPreviewRow = null;
+    selectedPreviewRow = null;
 
 
-  document
-    .querySelectorAll(
-      '#previewTable tbody tr'
-    )
-    .forEach(function(r){
+    document
+        .querySelectorAll('#previewTable tbody tr')
+        .forEach(function(r){
 
-      r.classList.remove(
-        'selected-row'
-      );
+            r.classList.remove('selected-row');
 
-    });
+        });
 
 
-  const info =
-    document.getElementById(
-      'selectedRowInfo'
-    );
+    const info =
+        document.getElementById('selectedRowInfo');
 
-  if(info){
 
-    info.textContent =
-      'No row selected.';
+    if(info){
 
-  }
+        info.textContent =
+            'No row selected.';
+
+    }
 
 }
 
 
+/*
+=============================================================
+COPY
+=============================================================
+*/
+
 async function copyText(text){
 
-  try{
+    try{
 
-    await navigator.clipboard.writeText(
-      text
-    );
+        await navigator.clipboard.writeText(
+            String(text ?? '')
+        );
 
-    showCopyMessage(
-      'Copied to clipboard.'
-    );
+        showCopyMessage(
+            'Copied to clipboard.'
+        );
 
-  }catch(e){
+    }
+    catch(e){
 
-    const ta =
-      document.createElement(
-        'textarea'
-      );
+        const ta =
+            document.createElement('textarea');
 
-    ta.value =
-      text;
+        ta.value =
+            String(text ?? '');
 
-    document.body.appendChild(
-      ta
-    );
+        document.body.appendChild(ta);
 
-    ta.select();
+        ta.select();
 
-    document.execCommand(
-      'copy'
-    );
+        document.execCommand('copy');
 
-    ta.remove();
+        ta.remove();
 
-    showCopyMessage(
-      'Copied to clipboard.'
-    );
+        showCopyMessage(
+            'Copied to clipboard.'
+        );
 
-  }
+    }
 
 }
 
 
 function showCopyMessage(message){
 
-  const info =
-    document.getElementById(
-      'selectedRowInfo'
-    );
-
-  info.textContent =
-    message;
+    const info =
+        document.getElementById('selectedRowInfo');
 
 
-  setTimeout(function(){
+    if(!info)
+        return;
 
-    if(!selectedPreviewRow){
 
-      info.textContent =
-        'No row selected.';
+    info.textContent =
+        message;
 
-    }else{
 
-      info.textContent =
-        'Selected preview row ' +
-        selectedPreviewRow +
-        '. You can use this row as the new headers.';
+    setTimeout(function(){
 
-    }
+        if(!selectedPreviewRow){
 
-  },1800);
+            info.textContent =
+                'No row selected.';
+
+        }
+        else{
+
+            info.textContent =
+                'Selected preview row ' +
+                selectedPreviewRow +
+                '. You can use this row as the new headers.';
+
+        }
+
+    },1800);
 
 }
 
 
-let selectedCellText = '';
-
+/*
+=============================================================
+CELL COPY
+=============================================================
+*/
 
 function cellClicked(cell){
 
-  const row =
-    cell.parentElement;
+    const row =
+        cell.parentElement;
 
-  selectRow(
-    row
-  );
 
-  selectedCellText =
-    cell.innerText;
+    selectRow(row);
 
-  copyText(
-    selectedCellText
-  );
+
+    selectedCellText =
+        cell.innerText;
+
+
+    copyText(
+        selectedCellText
+    );
 
 }
 
 
 function copySelectedCellOnly(){
 
-  if(!selectedCellText){
+    if(!selectedCellText){
 
-    showCopyMessage(
-      'Click a cell first.'
+        showCopyMessage(
+            'Click a cell first.'
+        );
+
+        return;
+
+    }
+
+
+    copyText(
+        selectedCellText
     );
-
-    return;
-
-  }
-
-  copyText(
-    selectedCellText
-  );
 
 }
 
 
+/*
+=============================================================
+ROW COPY
+=============================================================
+*/
+
 function rowText(row){
 
-  return Array
-    .from(
-      row.cells
-    )
-    .slice(1)
-    .map(function(c){
+    return Array
+        .from(row.cells)
+        .slice(1)
+        .map(function(c){
 
-      return c.innerText;
+            return c.innerText;
 
-    })
-    .join('\t');
+        })
+        .join('\t');
 
 }
 
 
 function copySelectedRow(){
 
-  if(!selectedPreviewRow){
+    if(!selectedPreviewRow){
 
-    showCopyMessage(
-      'Select a row first.'
-    );
+        showCopyMessage(
+            'Select a row first.'
+        );
 
-    return;
+        return;
 
-  }
-
-
-  const row =
-    document.querySelector(
-      '#previewTable tbody tr[data-row-index="' +
-      selectedPreviewRow +
-      '"]'
-    );
+    }
 
 
-  if(row){
+    const row =
+        document.querySelector(
+            '#previewTable tbody tr[data-row-index="' +
+            selectedPreviewRow +
+            '"]'
+        );
 
-    copyText(
-      rowText(row)
-    );
 
-  }
+    if(row){
+
+        copyText(
+            rowText(row)
+        );
+
+    }
 
 }
 
+
+/*
+=============================================================
+COPY VISIBLE DATA
+=============================================================
+*/
 
 function copyVisibleData(){
 
-  const table =
-    document.getElementById(
-      'previewTable'
+    const table =
+        document.getElementById(
+            'previewTable'
+        );
+
+
+    if(!table){
+
+        showCopyMessage(
+            'No preview table is available.'
+        );
+
+        return;
+
+    }
+
+
+    const lines = [];
+
+
+    const headers =
+        Array
+            .from(
+                table.querySelectorAll(
+                    'thead th'
+                )
+            )
+            .slice(1)
+            .map(function(c){
+
+                return c.innerText;
+
+            });
+
+
+    lines.push(
+        headers.join('\t')
     );
 
-  const lines = [];
 
-
-  const headers =
-    Array
-      .from(
-        table.querySelectorAll(
-          'thead th'
+    table
+        .querySelectorAll(
+            'tbody tr'
         )
-      )
-      .slice(1)
-      .map(function(c){
+        .forEach(function(row){
 
-        return c.innerText;
+            lines.push(
+                rowText(row)
+            );
 
-      });
-
-
-  lines.push(
-    headers.join('\t')
-  );
+        });
 
 
-  table
-    .querySelectorAll(
-      'tbody tr'
-    )
-    .forEach(function(row){
-
-      lines.push(
-        rowText(row)
-      );
-
-    });
-
-
-  copyText(
-    lines.join('\n')
-  );
+    copyText(
+        lines.join('\n')
+    );
 
 }
 
+
+/*
+=============================================================
+EDIT MODE
+=============================================================
+*/
 
 function setEditMode(index){
 
-  document
-    .querySelectorAll(
-      '.edit-index'
-    )
-    .forEach(function(e){
+    document
+        .querySelectorAll('.edit-index')
+        .forEach(function(e){
 
-      e.value =
-        index;
+            e.value =
+                index;
 
-    });
+        });
 
 
-  const headersStepIndex =
-    document.getElementById(
-      'headersStepIndex'
-    );
-
-  if(headersStepIndex){
-
-    headersStepIndex.value =
-      index;
-
-  }
+    const headersStepIndex =
+        document.getElementById(
+            'headersStepIndex'
+        );
 
 
-  const editingBanner =
-    document.getElementById(
-      'editingBanner'
-    );
+    if(headersStepIndex){
 
-  if(editingBanner){
+        headersStepIndex.value =
+            index;
 
-    editingBanner.style.display =
-      'block';
-
-  }
+    }
 
 
-  document
-    .querySelectorAll(
-      'form[action=""]'
-    )
-    .forEach(function(){});
+    const banner =
+        document.getElementById(
+            'editingBanner'
+        );
+
+
+    if(banner){
+
+        banner.style.display =
+            'block';
+
+    }
 
 }
 
 
-function editStep(index){
+/*
+=============================================================
+FORM HELPERS
+=============================================================
+*/
 
-  const step =
-    stepsData[index];
+function prepareFormForEdit(
+    panel,
+    index,
+    step
+){
 
-  if(!step){
-
-    return;
-
-  }
-
-
-  const op =
-    step.operation;
-
-  let panel =
-    op;
-
-
-  if([
-    'remove_top_rows',
-    'remove_bottom_rows',
-    'keep_top_rows',
-    'remove_blank_rows',
-    'remove_duplicates'
-  ].includes(op)){
-
-    panel =
-      'rows';
-
-  }
+    const p =
+        document.getElementById(
+            'panel-' + panel
+        );
 
 
-  if([
-    'trim',
-    'clean_text'
-  ].includes(op)){
-
-    panel =
-      'text';
-
-  }
+    if(!p)
+        return;
 
 
-  if(
-    op ===
-    'replace_headers_with_row'
-  ){
-
-    panel =
-      'headers';
-
-  }
+    const form =
+        p.querySelector('form');
 
 
-  if(
-    op ===
-    'select_columns'
-  ){
-
-    panel =
-      'columns';
-
-  }
+    if(!form)
+        return;
 
 
-  if(
-    op ===
-    'remove_columns'
-  ){
-
-    panel =
-      'remove-columns';
-
-  }
+    const action =
+        form.querySelector(
+            'input[name="action"]'
+        );
 
 
-  if(
-    op ===
-    'rename_column'
-  ){
+    if(action){
 
-    panel =
-      'rename';
-
-  }
-
-
-  if(
-    op ===
-    'replace_value' ||
-    op ===
-    'replace_text'
-  ){
-
-    panel =
-      'replace';
-
-  }
-
-
-  if(
-    op ===
-    'change_type'
-  ){
-
-    panel =
-      'type';
-
-  }
-
-
-  if(
-    op === 'fill_down' ||
-    op === 'fill_up'
-  ){
-
-    panel =
-      'fill';
-
-  }
-
-
-  if(
-    op === 'alignment'
-  ){
-
-    panel =
-      'alignment';
-
-  }
-
-
-  showPanel(
-    panel
-  );
-
-
-  setEditMode(
-    index
-  );
-
-
-  /*
-   * Populate the relevant edit form
-   * from the stored transformation step.
-   */
-
-  const form =
-    document
-      .getElementById(
-        'panel-' + panel
-      )
-      ?.querySelector(
-        'form'
-      );
-
-
-  if(!form){
-
-    return;
-
-  }
-
-
-  if(
-    op ===
-    'replace_headers_with_row'
-  ){
-
-    const input =
-      form.querySelector(
-        '[name="row_number"]'
-      );
-
-    if(input){
-
-      input.value =
-        step.row_number;
+        action.value =
+            'edit_step';
 
     }
 
-  }
+
+    const idx =
+        form.querySelector(
+            'input[name="step_index"]'
+        );
 
 
-  if(
-    op ===
-    'rename_column'
-  ){
+    if(idx){
 
-    const oldName =
-      form.querySelector(
-        '[name="old_name"]'
-      );
-
-    const newName =
-      form.querySelector(
-        '[name="new_name"]'
-      );
-
-
-    if(oldName){
-
-      oldName.value =
-        step.old_name;
+        idx.value =
+            index;
 
     }
 
-
-    if(newName){
-
-      newName.value =
-        step.new_name;
-
-    }
-
-  }
+}
 
 
-  if(
-    op ===
-    'filter'
-  ){
+function setSelectValue(
+    form,
+    name,
+    value
+){
 
-    const column =
-      form.querySelector(
-        '[name="column"]'
-      );
-
-    const operator =
-      form.querySelector(
-        '[name="operator"]'
-      );
-
-    const value =
-      form.querySelector(
-        '[name="value"]'
-      );
+    const el =
+        form.querySelector(
+            '[name="' + name + '"]'
+        );
 
 
-    if(column){
+    if(
+        el &&
+        value !== undefined &&
+        value !== null
+    ){
 
-      column.value =
-        step.column;
+        el.value =
+            value;
 
     }
 
-
-    if(operator){
-
-      operator.value =
-        step.operator;
-
-    }
+}
 
 
-    if(value){
+function setInputValue(
+    form,
+    name,
+    value
+){
 
-      value.value =
-        step.value || '';
-
-    }
-
-  }
-
-
-  if(
-    op ===
-    'sort'
-  ){
-
-    const column =
-      form.querySelector(
-        '[name="column"]'
-      );
-
-    const direction =
-      form.querySelector(
-        '[name="direction"]'
-      );
+    const el =
+        form.querySelector(
+            '[name="' + name + '"]'
+        );
 
 
-    if(column){
+    if(el){
 
-      column.value =
-        step.column;
+        el.value =
+            value === undefined ||
+            value === null
+                ? ''
+                : value;
 
     }
 
+}
 
-    if(direction){
 
-      direction.value =
-        step.direction;
+function setCheckboxes(
+    form,
+    values
+){
 
-    }
-
-  }
-
-
-  if([
-    'remove_top_rows',
-    'remove_bottom_rows',
-    'keep_top_rows'
-  ].includes(op)){
-
-    const operation =
-      form.querySelector(
-        '[name="operation"]'
-      );
-
-    const count =
-      form.querySelector(
-        '[name="count"]'
-      );
-
-
-    if(operation){
-
-      operation.value =
-        op;
-
-    }
-
-
-    if(count){
-
-      count.value =
-        step.count;
-
-    }
-
-  }
-
-
-  if(
-    op ===
-    'change_type'
-  ){
-
-    const column =
-      form.querySelector(
-        '[name="column"]'
-      );
-
-    const targetType =
-      form.querySelector(
-        '[name="target_type"]'
-      );
-
-
-    if(column){
-
-      column.value =
-        step.column;
-
-    }
-
-
-    if(targetType){
-
-      targetType.value =
-        step.target_type;
-
-    }
-
-  }
-
-
-  if(
-    op === 'fill_down' ||
-    op === 'fill_up'
-  ){
-
-    const operation =
-      form.querySelector(
-        '[name="operation"]'
-      );
-
-    const column =
-      form.querySelector(
-        '[name="column"]'
-      );
-
-
-    if(operation){
-
-      operation.value =
-        op;
-
-    }
-
-
-    if(column){
-
-      column.value =
-        step.column;
-
-    }
-
-  }
-
-
-  if(
-    op === 'trim' ||
-    op === 'clean_text'
-  ){
-
-    const operation =
-      form.querySelector(
-        '[name="operation"]'
-      );
-
-    const column =
-      form.querySelector(
-        '[name="column"]'
-      );
-
-
-    if(operation){
-
-      operation.value =
-        op;
-
-    }
-
-
-    if(column){
-
-      column.value =
-        step.column;
-
-    }
-
-  }
-
-
-  if(
-    op ===
-    'replace_value'
-  ){
-
-    const column =
-      form.querySelector(
-        '[name="column"]'
-      );
-
-    const oldValue =
-      form.querySelector(
-        '[name="old_value"]'
-      );
-
-    const newValue =
-      form.querySelector(
-        '[name="new_value"]'
-      );
-
-
-    if(column){
-
-      column.value =
-        step.column;
-
-    }
-
-
-    if(oldValue){
-
-      oldValue.value =
-        step.old_value;
-
-    }
-
-
-    if(newValue){
-
-      newValue.value =
-        step.new_value;
-
-    }
-
-  }
-
-
-  if(
-    op ===
-    'alignment'
-  ){
-
-    const alignment =
-      form.querySelector(
-        '[name="alignment"]'
-      );
-
-
-    if(alignment){
-
-      alignment.value =
-        step.alignment;
-
-    }
-
-
-    const columns =
-      step.columns || [];
+    const wanted =
+        new Set(
+            values || []
+        );
 
 
     form
-      .querySelectorAll(
-        '.alignment-column'
-      )
-      .forEach(function(cb){
+        .querySelectorAll(
+            'input[name="columns"]'
+        )
+        .forEach(function(cb){
 
-        cb.checked =
-          columns.includes(
-            cb.value
-          );
+            cb.checked =
+                wanted.has(
+                    cb.value
+                );
 
-      });
+        });
 
-  }
+
+    const all =
+        form.querySelector(
+            '#alignmentSelectAll'
+        );
+
+
+    if(all){
+
+        const boxes =
+            Array.from(
+                form.querySelectorAll(
+                    '.alignment-column'
+                )
+            );
+
+
+        all.checked =
+            boxes.length > 0 &&
+            boxes.every(function(cb){
+
+                return cb.checked;
+
+            });
+
+    }
 
 }
 
+
+/*
+=============================================================
+ALIGNMENT
+=============================================================
+*/
 
 function toggleAllAlignment(master){
 
-  document
-    .querySelectorAll(
-      '.alignment-column'
-    )
-    .forEach(function(cb){
+    document
+        .querySelectorAll(
+            '#panel-alignment .alignment-column'
+        )
+        .forEach(function(cb){
 
-      cb.checked =
-        master.checked;
+            cb.checked =
+                master.checked;
 
-    });
+        });
 
 }
 
+
+/*
+=============================================================
+EDIT STEP
+=============================================================
+*/
+
+function editStep(index){
+
+    const step =
+        stepsData[index];
+
+
+    if(!step)
+        return;
+
+
+    const op =
+        step.operation;
+
+
+    let panel =
+        op;
+
+
+    if([
+        'remove_top_rows',
+        'remove_bottom_rows',
+        'keep_top_rows',
+        'remove_blank_rows',
+        'remove_duplicates'
+    ].includes(op)){
+
+        panel =
+            'rows';
+
+    }
+
+
+    if([
+        'trim',
+        'clean_text'
+    ].includes(op)){
+
+        panel =
+            'text';
+
+    }
+
+
+    if(
+        op ===
+        'replace_headers_with_row'
+    ){
+
+        panel =
+            'headers';
+
+    }
+
+
+    if(
+        op ===
+        'select_columns'
+    ){
+
+        panel =
+            'columns';
+
+    }
+
+
+    if(
+        op ===
+        'remove_columns'
+    ){
+
+        panel =
+            'remove-columns';
+
+    }
+
+
+    if(
+        op ===
+        'rename_column'
+    ){
+
+        panel =
+            'rename';
+
+    }
+
+
+    if(
+        op === 'replace_value' ||
+        op === 'replace_text'
+    ){
+
+        panel =
+            'replace';
+
+    }
+
+
+    if(
+        op ===
+        'change_type'
+    ){
+
+        panel =
+            'type';
+
+    }
+
+
+    if(
+        op === 'fill_down' ||
+        op === 'fill_up'
+    ){
+
+        panel =
+            'fill';
+
+    }
+
+
+    if(
+        op ===
+        'alignment'
+    ){
+
+        panel =
+            'alignment';
+
+    }
+
+
+    showPanel(panel);
+
+    setEditMode(index);
+
+
+    const panelElement =
+        document.getElementById(
+            'panel-' + panel
+        );
+
+
+    if(!panelElement)
+        return;
+
+
+    const form =
+        panelElement.querySelector(
+            'form'
+        );
+
+
+    if(!form)
+        return;
+
+
+    /*
+    Change the form from ADD to EDIT.
+    */
+
+    const action =
+        form.querySelector(
+            'input[name="action"]'
+        );
+
+
+    if(action){
+
+        action.value =
+            'edit_step';
+
+    }
+
+
+    const stepIndex =
+        form.querySelector(
+            'input[name="step_index"]'
+        );
+
+
+    if(stepIndex){
+
+        stepIndex.value =
+            index;
+
+    }
+
+
+    /*
+    Populate fields.
+    */
+
+    if(
+        op ===
+        'replace_headers_with_row'
+    ){
+
+        setInputValue(
+            form,
+            'row_number',
+            step.row_number
+        );
+
+    }
+
+
+    else if(
+        op === 'select_columns' ||
+        op === 'remove_columns' ||
+        op === 'remove_duplicates' ||
+        op === 'alignment'
+    ){
+
+        setCheckboxes(
+            form,
+            step.columns || []
+        );
+
+
+        if(
+            op ===
+            'alignment'
+        ){
+
+            setSelectValue(
+                form,
+                'alignment',
+                step.alignment
+            );
+
+        }
+
+    }
+
+
+    else if(
+        op ===
+        'rename_column'
+    ){
+
+        setSelectValue(
+            form,
+            'old_name',
+            step.old_name
+        );
+
+
+        setInputValue(
+            form,
+            'new_name',
+            step.new_name
+        );
+
+    }
+
+
+    else if(
+        op ===
+        'filter'
+    ){
+
+        setSelectValue(
+            form,
+            'column',
+            step.column
+        );
+
+
+        setSelectValue(
+            form,
+            'operator',
+            step.operator
+        );
+
+
+        setInputValue(
+            form,
+            'value',
+            step.value
+        );
+
+    }
+
+
+    else if(
+        op ===
+        'sort'
+    ){
+
+        setSelectValue(
+            form,
+            'column',
+            step.column
+        );
+
+
+        setSelectValue(
+            form,
+            'direction',
+            step.direction
+        );
+
+    }
+
+
+    else if([
+        'remove_top_rows',
+        'remove_bottom_rows',
+        'keep_top_rows'
+    ].includes(op)){
+
+        setSelectValue(
+            form,
+            'operation',
+            op
+        );
+
+
+        setInputValue(
+            form,
+            'count',
+            step.count
+        );
+
+    }
+
+
+    else if(
+        op === 'remove_blank_rows' ||
+        op === 'remove_duplicates'
+    ){
+
+        setSelectValue(
+            form,
+            'operation',
+            op
+        );
+
+
+        setInputValue(
+            form,
+            'count',
+            step.count || 1
+        );
+
+
+        setCheckboxes(
+            form,
+            step.columns || []
+        );
+
+    }
+
+
+    else if(
+        op === 'replace_value' ||
+        op === 'replace_text'
+    ){
+
+        setSelectValue(
+            form,
+            'column',
+            step.column
+        );
+
+
+        setInputValue(
+            form,
+            'old_value',
+            step.old_value
+        );
+
+
+        setInputValue(
+            form,
+            'new_value',
+            step.new_value
+        );
+
+    }
+
+
+    else if(
+        op ===
+        'change_type'
+    ){
+
+        setSelectValue(
+            form,
+            'column',
+            step.column
+        );
+
+
+        setSelectValue(
+            form,
+            'target_type',
+            step.target_type
+        );
+
+    }
+
+
+    else if(
+        op === 'fill_down' ||
+        op === 'fill_up'
+    ){
+
+        setSelectValue(
+            form,
+            'operation',
+            op
+        );
+
+
+        setSelectValue(
+            form,
+            'column',
+            step.column
+        );
+
+    }
+
+
+    else if(
+        op === 'trim' ||
+        op === 'clean_text'
+    ){
+
+        setSelectValue(
+            form,
+            'operation',
+            op
+        );
+
+
+        setSelectValue(
+            form,
+            'column',
+            step.column
+        );
+
+    }
+
+}
+
+
+/*
+=============================================================
+CANCEL EDIT
+=============================================================
+*/
 
 function cancelEdit(){
 
-  const editingBanner =
-    document.getElementById(
-      'editingBanner'
-    );
+    const banner =
+        document.getElementById(
+            'editingBanner'
+        );
 
 
-  if(editingBanner){
+    if(banner){
 
-    editingBanner.style.display =
-      'none';
+        banner.style.display =
+            'none';
 
-  }
-
-
-  document
-    .querySelectorAll(
-      '.edit-index'
-    )
-    .forEach(function(e){
-
-      e.value =
-        '';
-
-    });
+    }
 
 
-  const headersAction =
-    document.getElementById(
-      'headersAction'
-    );
+    document
+        .querySelectorAll(
+            'input[name="action"]'
+        )
+        .forEach(function(e){
 
-  if(headersAction){
+            if(
+                e.form &&
+                e.form.querySelector(
+                    'input[name="operation"]'
+                )
+            ){
 
-    headersAction.value =
-      'add_step';
+                e.value =
+                    'add_step';
 
-  }
+            }
+
+        });
 
 
-  const headersStepIndex =
-    document.getElementById(
-      'headersStepIndex'
-    );
+    document
+        .querySelectorAll(
+            '.edit-index'
+        )
+        .forEach(function(e){
 
-  if(headersStepIndex){
+            e.value =
+                '';
 
-    headersStepIndex.value =
-      '';
+        });
 
-  }
+
+    const headersAction =
+        document.getElementById(
+            'headersAction'
+        );
+
+
+    if(headersAction){
+
+        headersAction.value =
+            'add_step';
+
+    }
+
+
+    const headersStepIndex =
+        document.getElementById(
+            'headersStepIndex'
+        );
+
+
+    if(headersStepIndex){
+
+        headersStepIndex.value =
+            '';
+
+    }
 
 }
+
+
+/*
+=============================================================
+INITIALISE
+=============================================================
+*/
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function(){
+
+        /*
+        Make sure the transformation page
+        never attempts to serialise Undefined.
+        */
+
+        if(!Array.isArray(stepsData)){
+
+            console.warn(
+                'Transform steps were not supplied as an array. Using empty steps.'
+            );
+
+        }
+
+    }
+);
 
 </script>
 
