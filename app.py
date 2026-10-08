@@ -814,6 +814,25 @@ def tasks():
         'latest_finding_id': latest_finding_id,
     }
     return render_template('tasks.html',counts=counts,workflow=workflow)
+@app.route('/business')
+@login_required
+def business_rules():
+    c = db()
+    rules = c.execute('''
+        SELECT r.*,
+               (SELECT MAX(v.version_number)
+                  FROM risk_rule_versions v
+                 WHERE v.rule_id = r.id) AS latest_version,
+               (SELECT v.status
+                  FROM risk_rule_versions v
+                 WHERE v.rule_id = r.id
+                 ORDER BY v.version_number DESC LIMIT 1) AS latest_status
+        FROM risk_rules r
+        ORDER BY r.id DESC
+    ''').fetchall()
+    c.close()
+    return render_template('business_rules.html', rules=rules)
+
 ALLOWED_KB_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'}
 KB_CATEGORIES = ['Tax Laws', 'Regulations', 'Procedures', 'Audit Guidance', 'Sector Knowledge', 'Risk Knowledge']
 KB_DOCUMENT_TYPES = ['Act', 'Regulation', 'Statutory Instrument', 'Procedure', 'Manual', 'Guideline', 'Circular', 'Directive', 'Sector Guide', 'Risk Note', 'Other']
