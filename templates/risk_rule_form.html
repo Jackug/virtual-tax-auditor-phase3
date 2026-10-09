@@ -419,6 +419,16 @@
   overflow:auto
 }
 
+.logic-words{
+  font:13px/1.65 Arial,sans-serif;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  max-height:300px;
+  background:#f8fbff;
+  color:#263746;
+  border:1px solid #d9e2ec
+}
+
 .hidden{
   display:none!important
 }
@@ -1552,33 +1562,15 @@
 
 
     <!-- ========================================================= -->
-    <!-- EXECUTION PLAN PREVIEW -->
-    <!-- ========================================================= -->
-
-    <div
-      class="card"
-      id="planPreviewCard"
-    >
-
-      <h3>
-        Execution Plan Preview
-      </h3>
-
-      <div
-        class="muted"
-        style="margin-bottom:8px"
-      >
-        This is the structured configuration that will be submitted
-        to the backend. It is not production until the rule is approved.
+    <!-- NATURAL LANGUAGE EXECUTION LOGIC -->
+    <div class="card" id="planPreviewCard">
+      <h3>Execution Logic in Natural Language</h3>
+      <div class="muted" style="margin-bottom:8px">
+        A plain-language explanation generated from the datasets, relationships, calculations and conditions configured by the analyst. The structured execution plan is submitted to the backend separately. Draft and test rules do not enter production until approved.
       </div>
-
-      <div
-        class="json"
-        id="planPreview"
-      >
-        {}
+      <div class="json logic-words" id="planPreview" role="status" aria-live="polite">
+        Complete the rule configuration to generate its explanation.
       </div>
-
     </div>
 
 
@@ -4906,41 +4898,127 @@ function buildPlan(){
 }
 
 
+function executionLogicInWords(p){
+
+  const lines=[];
+  const base=p.base_source || {};
+  const baseName=base.name || '';
+  const sources=Array.isArray(p.sources) ? p.sources : [];
+  const joins=Array.isArray(p.joins) ? p.joins : [];
+  const steps=Array.isArray(plan.steps) ? plan.steps : [];
+  const period=p.period || {};
+
+  if(!base.source_id || !baseName){
+    lines.push('The primary dataset has not been selected yet. Go to Stage 3 and select the dataset from which the rule should start.');
+  }else{
+    lines.push('Start the analysis using the “'+baseName+'” dataset.');
+  }
+
+  if(sources.length){
+    const names=sources.map(x=>x.name).filter(Boolean);
+    if(names.length) lines.push('Datasets included in this rule: '+names.join(', ')+'.');
+  }else{
+    lines.push('No approved data sources have been added to the execution plan yet. Select at least one dataset in Stage 2.');
+  }
+
+  const mappings=Array.isArray(p.identity_mappings) ? p.identity_mappings : [];
+  const mapped=mappings.filter(x=>x.tin_field && x.name_field);
+  if(mapped.length){
+    lines.push('Match taxpayer identity using the configured TIN and taxpayer-name columns for each participating dataset.');
+  }else{
+    lines.push('Taxpayer identity mappings are not complete yet; configure the TIN and taxpayer-name columns in Stage 2.');
+  }
+
+  joins.forEach((j,i)=>{
+    const left=sourceName(j.left_source_id);
+    const right=sourceName(j.right_source_id);
+    const lf=j.left_field || 'unselected field';
+    const rf=j.right_field || 'unselected field';
+    const jt=String(j.join_type || 'INNER').toUpperCase();
+    lines.push('Relationship '+(i+1)+': combine “'+left+'” with “'+right+'” using a '+jt+' join, matching “'+lf+'” to “'+rf+'”.');
+  });
+  if(!joins.length && sources.length>1){
+    lines.push('More than one dataset is selected, but no data relationship has been configured yet. Add and validate the required relationship in Stage 3.');
+  }
+
+  const relation=period.time_relationship || 'none';
+  const relationWords={
+    previous_month:'compare against the previous month',
+    previous_year:'compare against the same period in the previous year',
+    average_previous_3_months:'compare against the average of the previous three months',
+    average_previous_12_months:'compare against the average of the previous twelve months',
+    none:'no historical comparison is configured'
+  };
+  lines.push('Historical comparison: '+(relationWords[relation] || relation.replaceAll('_',' '))+'.');
+
+  if(period.field){
+    let periodText='Use “'+period.field+'” as the analysis period field';
+    if(period.from || period.to) periodText+=' for the period '+(period.from || 'start not specified')+' to '+(period.to || 'end not specified');
+    lines.push(periodText+'.');
+  }
+
+  if(!steps.length){
+    lines.push('No detection calculations or conditions have been configured yet. Add logic blocks in Stage 4 to define exactly which taxpayers should be flagged.');
+  }else{
+    lines.push('Detection logic, in the order configured:');
+    steps.forEach((step,i)=>{
+      const c=step.config || {};
+      const op=String(step.op || '').toUpperCase();
+      let sentence='';
+      if(op==='FIELD'){
+        sentence='Use the field “'+(c.field || 'field not selected')+'” from “'+sourceName(c.source_id)+'”.';
+      }else if(op==='CALCULATE'){
+        sentence='Calculate “'+(c.name || 'unnamed measure')+'” using '+String(c.operation || 'the selected calculation').replaceAll('_',' ').toLowerCase()+(c.expression_text ? ' with '+c.expression_text : '')+'.';
+      }else if(['IF','WHERE','EXCEPT','WHILE'].includes(op)){
+        sentence=(op==='EXCEPT' ? 'Exclude records that meet this condition: ' : op==='WHILE' ? 'Continue evaluating while this condition is true: ' : 'Flag or retain records that meet this condition: ')+conditionSummary(c).replace(/\s+/g,' ').trim()+'.';
+      }else if(op==='AND'){
+        sentence='Require this condition as well as the other connected conditions.';
+      }else if(op==='OR'){
+        sentence='Allow this condition to be satisfied as an alternative to the connected conditions.';
+      }else if(op==='NOT'){
+        sentence='Negate the selected logical condition.';
+      }else if(op==='GROUP BY'){
+        sentence='Group records using the grouping fields configured for this block.';
+      }else if(op==='STOP'){
+        sentence=c.description || 'Stop rule evaluation for the configured scope.';
+      }else{
+        sentence=stepSummary(step).replace(/\s+/g,' ').trim() || 'Apply the configured '+op.toLowerCase()+' operation.';
+      }
+      lines.push((i+1)+'. '+sentence);
+    });
+  }
+
+  const exposure=p.exposure || {};
+  if(exposure.field){
+    lines.push('Rank detected taxpayers using “'+exposure.field+'” as the exposure measure'+(exposure.minimum!=='' && exposure.minimum!=null ? ', with a minimum exposure of '+exposure.minimum : '')+'.');
+  }else{
+    lines.push('The exposure measure has not been specified yet; configure it in the Risk Exposure & Ranking section.');
+  }
+  if(p.ranking && p.ranking.description){
+    lines.push('Prioritisation: '+p.ranking.description);
+  }
+
+  return lines.join('\n\n');
+}
+
+
 function updatePlanPreview(){
 
   try{
 
-    const p=
-      buildPlan();
+    const p=buildPlan();
+    const preview=document.getElementById('planPreview');
+    if(preview) preview.textContent=executionLogicInWords(p);
 
-
-    document.getElementById(
-      'planPreview'
-    ).textContent=
-      JSON.stringify(
-        p,
-        null,
-        2
-      );
-
-
-    document.getElementById(
-      'rule_plan'
-    ).value=
-      JSON.stringify(p);
+    /* Keep the machine-readable execution plan for backend submission. */
+    const hiddenPlan=document.getElementById('rule_plan');
+    if(hiddenPlan) hiddenPlan.value=JSON.stringify(p);
 
   }
-
   catch(e){
-
-    document.getElementById(
-      'planPreview'
-    ).textContent=
-      'Unable to build execution plan: '+
-      e.message;
-
+    const preview=document.getElementById('planPreview');
+    if(preview) preview.textContent='The execution explanation could not be generated. Check the configured datasets and logic blocks, then try again.';
   }
-
 }
 
 
