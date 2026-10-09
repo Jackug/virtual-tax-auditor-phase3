@@ -1900,7 +1900,7 @@ def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,
         version=int(r['version_number'] or 0)+1;rid=r['id'];ref=r['rule_ref']
     else:ref=_rule_ref(c);version=1;rid=None
     if rid is None:
-        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
     else:
         c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural,json.dumps(plan),category,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,stamp,rid))
     c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at,execution_plan_json,generated_natural_language,preview_summary_json,preview_status,preview_approved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,version,name,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp,plan_json,natural,'{}','Not Run',0))
@@ -2165,7 +2165,7 @@ def _rule_form_context(c,rule=None):
 @app.route('/business')
 @login_required
 def business_rules():
-    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
+    return redirect(url_for('risk_rule_new'))
 
 @app.route('/business/rules/create')
 @login_required
@@ -2186,11 +2186,7 @@ def business_rule_versions(rule_id):return redirect(url_for('risk_rule_detail',r
 @app.route('/risk-rules')
 @login_required
 def risk_rules():
-    q=request.args.get('q','').strip();status=request.args.get('status','').strip();category=request.args.get('category','').strip();c=db();sql='SELECT * FROM risk_rules WHERE 1=1';params=[]
-    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)';like='%'+q+'%';params += [like,like,like]
-    if status:sql+=' AND status=?';params.append(status)
-    if category:sql+=' AND COALESCE(risk_category,category)=?';params.append(category)
-    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC";rows=c.execute(sql,params).fetchall();c.close();return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
+    return redirect(url_for('risk_rule_new'))
 
 def _extract_common_rule_form(c):
     name=request.form.get('rule_name','').strip();category=request.form.get('risk_category','').strip();tax_type=request.form.get('tax_type','General').strip() or 'General';scope=request.form.get('taxpayer_scope','').strip();period=request.form.get('applicable_period','').strip()
@@ -2336,10 +2332,10 @@ def risk_rule_approve(rule_id):
 def risk_rule_decision(rule_id):
     decision=request.form.get('decision','').strip();comments=request.form.get('comments','').strip()
     if decision=='Approved':return risk_rule_approve(rule_id)
-    if decision not in ('Under Review','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rules'))
+    if decision not in ('Under Review','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rule_new'))
     c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
     if not r:c.close();abort(404)
-    c.execute('UPDATE risk_rules SET status=?,approved=0,updated_at=? WHERE id=?',(decision,now(),rule_id));c.execute('UPDATE risk_rule_versions SET status=?,approved_by=NULL,approved_at=NULL WHERE rule_id=? AND version_number=?',(decision,rule_id,r['version_number']));c.commit();c.close();log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}');flash(f'{r["rule_ref"]} Version {r["version_number"]}: {decision}.','success');return redirect(url_for('risk_rules'))
+    c.execute('UPDATE risk_rules SET status=?,approved=0,updated_at=? WHERE id=?',(decision,now(),rule_id));c.execute('UPDATE risk_rule_versions SET status=?,approved_by=NULL,approved_at=NULL WHERE rule_id=? AND version_number=?',(decision,rule_id,r['version_number']));c.commit();c.close();log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}');flash(f'{r["rule_ref"]} Version {r["version_number"]}: {decision}.','success');return redirect(url_for('risk_rule_new'))
 
 @app.route('/risk-rules/<int:rule_id>')
 @login_required
