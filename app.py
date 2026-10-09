@@ -1031,8 +1031,28 @@ def dashboard():
         for r in rows:
             for v in r.get(key) or []: out[v]=out.get(v,0)+1
         return sorted(out.items(),key=lambda x:(-x[1],x[0]))
-    categories=counts_for('category_list'); tax_types=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
-    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
+    categories=counts_for('category_list'); tax_type_counts=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
+
+    # Supply the current Risk Command Centre template with its required context.
+    taxpayers_analysed=c.execute("SELECT COUNT(DISTINCT taxpayer_id) FROM risk_assessments").fetchone()[0] or 0
+    latest_ids="SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id"
+    high_risk=c.execute("SELECT COUNT(*) FROM risk_assessments WHERE id IN ("+latest_ids+") AND band='High'").fetchone()[0] or 0
+    critical_risk=c.execute("SELECT COUNT(*) FROM risk_assessments WHERE id IN ("+latest_ids+") AND band='Critical'").fetchone()[0] or 0
+    in_audit=c.execute("SELECT COUNT(*) FROM audit_cases WHERE status NOT IN ('Closed','Rejected')").fetchone()[0] or 0
+    pending_validation=c.execute("SELECT COUNT(*) FROM findings WHERE status='AI Generated'").fetchone()[0] or 0
+    risk_distribution=[('Critical',sum(1 for r in rows if r['band']=='Critical')),('High',sum(1 for r in rows if r['band']=='High')),('Medium',sum(1 for r in rows if r['band']=='Medium')),('Low',sum(1 for r in rows if r['band']=='Low'))]
+    driver_sql="SELECT rr.name AS name, COALESCE(rr.risk_category,rr.category,'Uncategorised') AS category, COUNT(*) AS n, COALESCE(SUM(ABS(COALESCE(rd.variance,0))),0) AS exposure FROM risk_drivers rd JOIN risk_assessments ra ON ra.id=rd.assessment_id JOIN risk_rules rr ON rr.id=rd.rule_id WHERE ra.id IN ("+latest_ids+") GROUP BY rr.id,rr.name,COALESCE(rr.risk_category,rr.category,'Uncategorised') ORDER BY n DESC, exposure DESC LIMIT 10"
+    top_drivers=[dict(r) for r in c.execute(driver_sql).fetchall()]
+    attention=sorted(rows,key=lambda r:(0 if r['band']=='Critical' else 1 if r['band']=='High' else 2, -(r.get('exposure') or 0)))[:12]
+    validation_queue={
+        'findings':pending_validation,
+        'communications':c.execute("SELECT COUNT(*) FROM communications WHERE status='Draft'").fetchone()[0] or 0,
+        'evidence':c.execute("SELECT COUNT(*) FROM taxpayer_responses tr WHERE NOT EXISTS (SELECT 1 FROM response_analyses ra WHERE ra.response_id=tr.id)").fetchone()[0] or 0
+    }
+    financial_years=[x[0] for x in c.execute("SELECT DISTINCT financial_year FROM taxpayers WHERE financial_year IS NOT NULL AND financial_year<>'' ORDER BY financial_year DESC").fetchall()]
+    stations=[x[0] for x in c.execute("SELECT DISTINCT station FROM taxpayers WHERE station IS NOT NULL AND station<>'' ORDER BY station").fetchall()]
+    tax_types=[x[0] for x in c.execute("SELECT DISTINCT COALESCE(tax_type,'General') FROM risk_rules WHERE tax_type IS NOT NULL AND tax_type<>'' ORDER BY 1").fetchall()]
+    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_type_counts=tax_type_counts,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q,taxpayers_analysed=taxpayers_analysed,high_risk=high_risk,critical_risk=critical_risk,in_audit=in_audit,pending_validation=pending_validation,risk_distribution=risk_distribution,top_drivers=top_drivers,attention=attention,validation_queue=validation_queue,financial_years=financial_years,stations=stations,tax_types=tax_types,financial_year='',tax_type='')
 
 @app.route('/risk/<int:assessment_id>')
 @login_required
@@ -1880,7 +1900,7 @@ def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,
         version=int(r['version_number'] or 0)+1;rid=r['id'];ref=r['rule_ref']
     else:ref=_rule_ref(c);version=1;rid=None
     if rid is None:
-        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
     else:
         c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural,json.dumps(plan),category,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,stamp,rid))
     c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at,execution_plan_json,generated_natural_language,preview_summary_json,preview_status,preview_approved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,version,name,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp,plan_json,natural,'{}','Not Run',0))
