@@ -1907,6 +1907,19 @@ def _generate_rule_natural_language(plan):
     # State calculation steps before filters because filters may depend on calculated fields.
     for calc in plan.get('calculations',[]):
         expr=calc.get('expression_text') or calc.get('operation','the configured calculation')
+        op=str(calc.get('operation','')).upper()
+        left=calc.get('left') or {}
+        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and left.get('field'):
+            src=source_map.get(str(left.get('source_id')),{}).get('name','selected source')
+            group_by=calc.get('group_by') or []
+            if group_by:
+                group_names=[]
+                for g in group_by:
+                    gs=source_map.get(str(g.get('source_id')),{}).get('name','source')
+                    group_names.append(f"{gs}.{g.get('field','')}")
+                expr=f"{op} of {src}.{left.get('field')} grouped by {', '.join(group_names)}"
+            else:
+                expr=f"{op} of {src}.{left.get('field')}"
         parts.append(f"The system will CALCULATE {calc.get('name','the derived value')} using {expr}.")
     for f in plan.get('filters',[]):
         text=_condition_text(f,source_map); clause=f.get('clause','WHERE')
@@ -2083,7 +2096,42 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         name=str(calc.get('name','')).strip()
         if not name:
             raise ValueError('Every calculation must have a name.')
-        op=calc.get('operation')
+        op=str(calc.get('operation','')).strip().upper()
+        left_ref=dict(calc.get('left') or {})
+        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and not left_ref.get('source_id'):
+            left_ref['source_id']=base_id
+            calc['left']=left_ref
+
+        # Older rule-builder saves can contain a source ID but an empty field for a
+        # SUM/COUNT/AVERAGE/MIN/MAX calculation. Recover only from an unambiguous,
+        # business-meaningful amount field; never silently use an arbitrary column.
+        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and not str(left_ref.get('field') or '').strip():
+            sid=int(left_ref.get('source_id') or base_id)
+            columns=source_originals.get(sid,[])
+            norm=lambda value: re.sub(r'[^a-z0-9]+','',str(value or '').lower())
+            by_norm={norm(col):col for col in columns}
+            expression=str(calc.get('expression_text') or '')
+            mentioned=[col for col in columns if col and col.lower() in expression.lower()]
+            preferred=('collectedamount','totalcollectedamount','paymentamount','transactionamount',
+                       'taxamount','taxpaid','totalamount','amount','grossamount','totalsales',
+                       'sales','grossprofit','profitbeforetax')
+            chosen=mentioned[0] if len(mentioned)==1 else next((by_norm[k] for k in preferred if k in by_norm),None)
+            if not chosen:
+                raise ValueError(f"Calculation '{name}' ({op}) has no Left Field. Edit the rule and select the numeric source field to aggregate.")
+            left_ref=dict(left_ref);left_ref.update({'type':'field','source_id':sid,'field':chosen})
+            calc['left']=left_ref
+
+        # Taxpayer totals must be grouped by TIN. If an older plan omitted GROUP BY,
+        # infer the TIN column from the same source instead of summing across all taxpayers.
+        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and not calc.get('group_by'):
+            sid=int(left_ref.get('source_id') or base_id)
+            columns=source_originals.get(sid,[])
+            tin_candidates={'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno','taxpayeridentificationnumbertin'}
+            tin_col=next((col for col in columns if _normalise_header(col) in tin_candidates),None)
+            if not tin_col:
+                raise ValueError(f"Calculation '{name}' requires GROUP BY a taxpayer TIN field to calculate taxpayer-level totals.")
+            calc['group_by']=[{'source_id':sid,'field':tin_col}]
+
         a=pd.to_numeric(series_for(calc.get('left')),errors='coerce')
         b=pd.to_numeric(series_for(calc.get('right')),errors='coerce') if calc.get('right') else None
         if op=='ADD': v=a+b
