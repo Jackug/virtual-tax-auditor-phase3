@@ -1107,7 +1107,7 @@ def dashboard():
             for v in r.get(key) or []: out[v]=out.get(v,0)+1
         return sorted(out.items(),key=lambda x:(-x[1],x[0]))
     categories=counts_for('category_list'); tax_types=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
-    c.close(); return render_template('dashboard.html',rows=rows,total=total,taxpayers_analysed=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
+    c.close(); return render_template('dashboard.html',rows=rows,total=total,taxpayers_analysed=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,high_risk=high,critical_risk=critical,in_audit=sum(1 for r in rows if r.get('stage') not in ('Closed','Open')),pending_validation=0,risk_distribution=[],top_drivers=[],validation_queue={},categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
 
 @app.route('/risk/<int:assessment_id>')
 @login_required

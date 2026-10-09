@@ -41,7 +41,7 @@
     <div class="card">
       <h2 class="section-title">Risk Distribution</h2><div class="section-sub">Latest assessment for each taxpayer.</div>
       {% set mx = (risk_distribution|map(attribute=1)|max) if risk_distribution else 1 %}
-      {% for label,n in risk_distribution|default([], true) %}<div class="barrow"><span class="barlabel">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ ((n / (mx or 1))*100)|round(0) }}%"></span></span><span class="num">{{ '{:,}'.format(n) }}</span></div>{% endfor %}
+      {% for label,n in risk_distribution|default([], true) %}<div class="barrow"><span class="barlabel">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ ((n / (mx or 1))*100)|round(0) }}%"></span></span><span class="num">{{ '{:,}'.format(n|default(0, true)|int) }}</span></div>{% endfor %}
     </div>
     <div class="card">
       <h2 class="section-title">Top Risk Drivers</h2><div class="section-sub">Rules most frequently driving current risk.</div>
