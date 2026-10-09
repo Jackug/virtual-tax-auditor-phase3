@@ -310,6 +310,8 @@ function syncDerived(){
   let x=s.config||{};
   if(s.op==='FROM'){base=x.source_id?Number(x.source_id):base;}
   ['source_id','left_source_id','right_source_id'].forEach(k=>{if(x[k])ids.add(Number(x[k]));});
+  ['left','right'].forEach(k=>{const ref=x[k]||{};if(ref.source_id)ids.add(Number(ref.source_id));});
+  (x.group_by||[]).forEach(ref=>{if(ref.source_id)ids.add(Number(ref.source_id));});
   if(s.op==='JOIN') plan.joins=[...(plan.joins||[]),Object.assign({},x)];
  });
  plan.base_source=base?{source_id:Number(base)}:null;
@@ -328,7 +330,13 @@ function conditionObj(s){
 }
 function calcObj(s){
  const x=s.config||{};
- return {name:x.name||'',operation:x.operation||'',left:{type:'field',source_id:Number(x.left_source_id)||0,field:x.left_field||''},right:{type:'field',source_id:Number(x.right_source_id)||0,field:x.right_field||''},expression_text:x.expression_text||''};
+ const oldLeft=x.left||{}, oldRight=x.right||{};
+ // Prefer live editor fields, but recover values from nested refs in older saved plans.
+ const leftSource=Number(x.left_source_id||oldLeft.source_id)||0;
+ const rightSource=Number(x.right_source_id||oldRight.source_id)||0;
+ const leftField=String(x.left_field||oldLeft.field||'').trim();
+ const rightField=String(x.right_field||oldRight.field||'').trim();
+ return {name:String(x.name||'').trim(),operation:String(x.operation||'').trim().toUpperCase(),left:{type:'field',source_id:leftSource,field:leftField},right:{type:'field',source_id:rightSource,field:rightField},expression_text:x.expression_text||''};
 }
 function addRequest(){
  const box=document.getElementById('requests');const n=box.children.length;
@@ -338,6 +346,38 @@ function prepareSubmit(){
  syncDerived();
  if(!plan.base_source){alert('Add a FROM step and select the primary approved data source.');return false;}
  if(!(plan.conditions?.length||plan.filters?.length||plan.calculations?.length)){alert('Build at least one executable condition or calculation.');return false;}
+ // Stop malformed references in the browser instead of saving a rule that can only fail in preview.
+ for(let i=0;i<(plan.steps||[]).length;i++){
+  const step=plan.steps[i],x=step.config||{};
+  if(step.op==='CALCULATE'){
+   const op=String(x.operation||'').trim().toUpperCase();
+   const src=Number(x.left_source_id||x.left?.source_id)||0;
+   const fld=String(x.left_field||x.left?.field||'').trim();
+   if(!String(x.name||'').trim()||!op){alert(`Calculation block ${i+1}: enter a calculated field name and select an operation.`);return false;}
+   if(['SUM','COUNT','AVERAGE','MIN','MAX','ADD','SUBTRACT','MULTIPLY','DIVIDE','PERCENTAGE DIFFERENCE','PERCENTAGE OF'].includes(op) && (!src||!fld)){
+    alert(`Calculation block ${i+1} (${x.name||op}): select a valid Left Source and Left Field. The rule has an empty field reference and cannot be executed.`);return false;
+   }
+   if(['ADD','SUBTRACT','MULTIPLY','DIVIDE','PERCENTAGE DIFFERENCE','PERCENTAGE OF'].includes(op)){
+    const rsrc=Number(x.right_source_id||x.right?.source_id)||0;
+    const rfld=String(x.right_field||x.right?.field||'').trim();
+    if(!rsrc||!rfld){alert(`Calculation block ${i+1} (${x.name||op}): select a valid Right Source and Right Field.`);return false;}
+   }
+  }
+  if(['WHERE','WHEN','IF','AND','OR','WHILE','EXCEPT'].includes(step.op)){
+   if(x.left_type==='calculation'){
+    if(!String(x.left_name||'').trim()){alert(`${step.op} block ${i+1}: select the Left Calculation.`);return false;}
+   }else if(!Number(x.left_source_id)||!String(x.left_field||'').trim()){
+    alert(`${step.op} block ${i+1}: select a valid Left Source and Left Field, or change Left Type to Calculated Field.`);return false;
+   }
+   if(x.right_type==='field'){
+    if(x.right_ref_type==='calculation'){
+     if(!String(x.right_name||'').trim()){alert(`${step.op} block ${i+1}: select the Right Calculation.`);return false;}
+    }else if(!Number(x.right_source_id)||!String(x.right_field||'').trim()){
+     alert(`${step.op} block ${i+1}: select a valid Right Source and Right Field.`);return false;
+    }
+   }
+  }
+ }
  const payload=buildPlan();
  if(!payload || !payload.base_source || !payload.base_source.source_id){alert('The executable rule plan is incomplete. Select the primary source again.');return false;}
  document.getElementById('rule_plan').value=JSON.stringify(payload);

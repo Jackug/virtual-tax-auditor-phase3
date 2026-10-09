@@ -1,0 +1,7 @@
+VTA BUSINESS RISK RULE FIELD-REFERENCE FIX
+
+Replace app.py and templates/risk_rule_form.html and templates/risk_rule_review.html in the existing repository. Keep all other existing application files and folders.
+This is a targeted patch package, not a full standalone application. Do not upload the nested folder as a new repository root.
+The form now serializes live and legacy nested calculation references consistently and blocks empty source-field references before saving. The backend emits diagnostic details for unresolved fields and includes a build marker in runtime logs. The included backend retains the existing SUM/TIN aggregation recovery.
+After deployment, confirm the Render logs show: VTA rule engine build: 2026-10-09-field-reference-hardening-1
+Then edit the failed draft, reselect the calculation's Left Source and Left Field, save, and run preview again. Do not approve until preview status is Completed.

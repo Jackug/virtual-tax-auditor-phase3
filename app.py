@@ -44,6 +44,8 @@ BASE_URL=os.getenv('BASE_URL','http://localhost:5000').rstrip('/')
 UPLOAD=Path(os.getenv('UPLOAD_DIR', BASE/'uploads')); UPLOAD.mkdir(exist_ok=True)
 SCOPES=['https://www.googleapis.com/auth/gmail.send','https://www.googleapis.com/auth/userinfo.email','openid']
 app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','change-me'); app.config.update(SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',MAX_CONTENT_LENGTH=500*1024*1024)
+VTA_RULE_FIELD_REFERENCE_BUILD='2026-10-09-field-reference-hardening-1'
+app.logger.warning('VTA rule engine build: %s', VTA_RULE_FIELD_REFERENCE_BUILD)
 
 def now(): return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
 @app.template_filter('fromjson')
@@ -2055,11 +2057,21 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
             # original full-length series after a WHERE filter can cause an unalignable
             # boolean mask or compare rows that have already been excluded.
             return calc_series[name].reindex(df.index)
-        sid=int(ref.get('source_id'))
-        field=ref.get('field')
+        try:
+            sid=int(ref.get('source_id'))
+        except (TypeError, ValueError):
+            raise ValueError('A source-field reference is missing its source ID. Edit the rule and select the source field again.')
+        field=str(ref.get('field') or '').strip()
+        if not field:
+            raise ValueError(f'A source-field reference for source {sid} has an empty field name. Edit the rule and select the field again.')
         key=_field_key(sid,field)
         if key not in df.columns:
-            raise ValueError(f"Field '{field}' from source {sid} is not available after source combination.")
+            # Report actual fields for the requested source to make the cause diagnosable.
+            available=[]
+            prefix=f's{sid}__'
+            available=[col[len(prefix):] for col in df.columns if str(col).startswith(prefix)]
+            sample=', '.join(available[:12]) or 'none'
+            raise ValueError(f"Field '{field}' from source {sid} is not available after source combination. Available fields for this source: {sample}. Check the saved source/field mapping.")
         return df[key]
 
     allowed_join_types={'inner','left','right','outer'}
