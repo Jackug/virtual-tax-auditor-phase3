@@ -43,9 +43,7 @@ CLIENT=os.getenv('GOOGLE_CLIENT_SECRETS', str(BASE/'client_secret.json'))
 BASE_URL=os.getenv('BASE_URL','http://localhost:5000').rstrip('/')
 UPLOAD=Path(os.getenv('UPLOAD_DIR', BASE/'uploads')); UPLOAD.mkdir(exist_ok=True)
 SCOPES=['https://www.googleapis.com/auth/gmail.send','https://www.googleapis.com/auth/userinfo.email','openid']
-app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','change-me'); app.config.update(SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',MAX_CONTENT_LENGTH=500*1024*1024)
-VTA_RULE_FIELD_REFERENCE_BUILD='2026-10-09-field-reference-hardening-1'
-app.logger.warning('VTA rule engine build: %s', VTA_RULE_FIELD_REFERENCE_BUILD)
+app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','change-me'); app.config.update(SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',MAX_CONTENT_LENGTH=10*1024*1024)
 
 def now(): return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
 @app.template_filter('fromjson')
@@ -338,8 +336,73 @@ def get_creds(e):
 
 def metrics(c,tid): return {r['metric_name'].lower():r for r in c.execute('SELECT * FROM taxpayer_metrics WHERE taxpayer_id=?',(tid,)).fetchall()}
 def _risk_band(score):
+    """Convert a valid 0-100 score to the configured default risk band."""
     score=float(score or 0)
     return 'Critical' if score>=90 else ('High' if score>=70 else ('Medium' if score>=40 else 'Low'))
+
+
+def _safe_float(value, default=0.0):
+    try:
+        result=float(value)
+        return result if result == result and abs(result) != float('inf') else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_score(value):
+    return max(0.0, min(100.0, _safe_float(value)))
+
+
+def _rule_scoring_config(rule):
+    """Read scoring weights saved with the approved rule version.
+
+    Supported keys:
+      base_score: points assigned when this rule triggers (0-100)
+      exposure_weight: points added when the rule has positive calculated exposure
+      frequency_weight: points added for each additional distinct triggered rule
+    """
+    raw = rule['ranking_config_json'] if 'ranking_config_json' in rule.keys() else '{}'
+    cfg = _json_or_default(raw, {}) if isinstance(raw, str) else (raw or {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return {
+        'base_score': _clamp_score(_safe_float(cfg.get('base_score'), 20.0)),
+        'exposure_weight': _clamp_score(_safe_float(cfg.get('exposure_weight'), 15.0)),
+        'frequency_weight': _clamp_score(_safe_float(cfg.get('frequency_weight'), 10.0)),
+        'description': str(cfg.get('description') or '').strip()
+    }
+
+
+def _calculate_taxpayer_risk_score(rule_exposures):
+    """Calculate an explainable 0-100 prioritisation score from distinct rules.
+
+    Per rule, use configured base points and add configured exposure points if
+    the rule has positive calculated exposure. Additional distinct triggered
+    rules add the configured frequency weight. This is not a probability of
+    non-compliance.
+    """
+    if not rule_exposures:
+        return 0.0, []
+    contributions = []
+    for item in rule_exposures:
+        rule, exposure, pct, description = item
+        cfg = _rule_scoring_config(rule)
+        exposure_value = max(0.0, _safe_float(exposure))
+        contributions.append({
+            'rule_id': int(rule['id']),
+            'rule_name': str(rule['name'] or ''),
+            'base_points': cfg['base_score'],
+            'exposure_points': cfg['exposure_weight'] if exposure_value > 0 else 0.0,
+            'exposure': exposure_value,
+            'frequency_weight': cfg['frequency_weight'],
+        })
+    strongest = max(
+        (x['base_points'] + x['exposure_points'] for x in contributions),
+        default=0.0
+    )
+    frequency = max((x['frequency_weight'] for x in contributions), default=10.0)
+    score = _clamp_score(strongest + frequency * max(0, len(contributions) - 1))
+    return round(score, 2), contributions
 
 def _normalise_header(value):
     return re.sub(r'[^a-z0-9]+','',str(value or '').lower())
@@ -443,14 +506,24 @@ def _refresh_risk_universe_from_active_rules(c):
             pct=0.0
             desc=rule['name']
             exposures.append((rule,exp,pct,desc))
-        score=min(100.0,25.0*len(exposures)+sum(10.0 for x in exposures if x[1]>0))
-        score=min(100.0,score)
+        score, score_contributions = _calculate_taxpayer_risk_score(exposures)
         band=_risk_band(score)
         exposure=sum(x[1] for x in exposures)
-        c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',(taxpayer['id'],score,band,exposure,now(),'Phase-3-Risk-Engine-Rule-Library-1.0'))
+        c.execute('INSERT INTO risk_assessments(taxpayer_id,score,band,exposure,assessed_at,engine_version) VALUES(?,?,?,?,?,?)',(taxpayer['id'],score,band,exposure,now(),'Phase-3-Risk-Engine-Rule-Library-1.1-AutoScore'))
         aid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        contribution_by_rule={x['rule_id']:x for x in score_contributions}
         for rule,exp,pct,desc in exposures:
-            c.execute('INSERT INTO risk_drivers(assessment_id,rule_id,description,variance,variance_pct) VALUES(?,?,?,?,?)',(aid,rule['id'],f"{desc}: approved rule triggered for TIN {tin}; estimated exposure UGX {exp:,.0f}.",exp,pct))
+            contribution=contribution_by_rule.get(int(rule['id']), {})
+            scoring_note=(
+                f" Scoring contribution: base {contribution.get('base_points',0):.1f}/100; "
+                f"exposure contribution {contribution.get('exposure_points',0):.1f}/100."
+            )
+            c.execute(
+                'INSERT INTO risk_drivers(assessment_id,rule_id,description,variance,variance_pct) VALUES(?,?,?,?,?)',
+                (aid,rule['id'],
+                 f"{desc}: approved rule triggered for TIN {tin}; estimated exposure UGX {exp:,.0f}."
+                 f"{scoring_note}",exp,pct)
+            )
         count+=1
     return count
 
@@ -641,11 +714,6 @@ def iter_knowledge_document(file_path, original_filename):
         wb = load_workbook(filename=str(path), read_only=True, data_only=True)
         try:
             for number, ws in enumerate(wb.worksheets, start=1):
-                # Some uploaded XLSX files advertise worksheet dimensions that
-                # are extremely large or malformed. Reset dimensions before
-                # streaming rows so openpyxl does not perform a costly
-                # parse_dimensions() scan that can kill the Render worker.
-                ws.reset_dimensions()
                 buffer = [f'Sheet: {ws.title}']
                 chars = len(buffer[0])
                 for row in ws.iter_rows(values_only=True):
@@ -1038,28 +1106,8 @@ def dashboard():
         for r in rows:
             for v in r.get(key) or []: out[v]=out.get(v,0)+1
         return sorted(out.items(),key=lambda x:(-x[1],x[0]))
-    categories=counts_for('category_list'); tax_type_counts=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
-
-    # Supply the current Risk Command Centre template with its required context.
-    taxpayers_analysed=c.execute("SELECT COUNT(DISTINCT taxpayer_id) FROM risk_assessments").fetchone()[0] or 0
-    latest_ids="SELECT MAX(id) FROM risk_assessments GROUP BY taxpayer_id"
-    high_risk=c.execute("SELECT COUNT(*) FROM risk_assessments WHERE id IN ("+latest_ids+") AND band='High'").fetchone()[0] or 0
-    critical_risk=c.execute("SELECT COUNT(*) FROM risk_assessments WHERE id IN ("+latest_ids+") AND band='Critical'").fetchone()[0] or 0
-    in_audit=c.execute("SELECT COUNT(*) FROM audit_cases WHERE status NOT IN ('Closed','Rejected')").fetchone()[0] or 0
-    pending_validation=c.execute("SELECT COUNT(*) FROM findings WHERE status='AI Generated'").fetchone()[0] or 0
-    risk_distribution=[('Critical',sum(1 for r in rows if r['band']=='Critical')),('High',sum(1 for r in rows if r['band']=='High')),('Medium',sum(1 for r in rows if r['band']=='Medium')),('Low',sum(1 for r in rows if r['band']=='Low'))]
-    driver_sql="SELECT rr.name AS name, COALESCE(rr.risk_category,rr.category,'Uncategorised') AS category, COUNT(*) AS n, COALESCE(SUM(ABS(COALESCE(rd.variance,0))),0) AS exposure FROM risk_drivers rd JOIN risk_assessments ra ON ra.id=rd.assessment_id JOIN risk_rules rr ON rr.id=rd.rule_id WHERE ra.id IN ("+latest_ids+") GROUP BY rr.id,rr.name,COALESCE(rr.risk_category,rr.category,'Uncategorised') ORDER BY n DESC, exposure DESC LIMIT 10"
-    top_drivers=[dict(r) for r in c.execute(driver_sql).fetchall()]
-    attention=sorted(rows,key=lambda r:(0 if r['band']=='Critical' else 1 if r['band']=='High' else 2, -(r.get('exposure') or 0)))[:12]
-    validation_queue={
-        'findings':pending_validation,
-        'communications':c.execute("SELECT COUNT(*) FROM communications WHERE status='Draft'").fetchone()[0] or 0,
-        'evidence':c.execute("SELECT COUNT(*) FROM taxpayer_responses tr WHERE NOT EXISTS (SELECT 1 FROM response_analyses ra WHERE ra.response_id=tr.id)").fetchone()[0] or 0
-    }
-    financial_years=[x[0] for x in c.execute("SELECT DISTINCT financial_year FROM taxpayers WHERE financial_year IS NOT NULL AND financial_year<>'' ORDER BY financial_year DESC").fetchall()]
-    stations=[x[0] for x in c.execute("SELECT DISTINCT station FROM taxpayers WHERE station IS NOT NULL AND station<>'' ORDER BY station").fetchall()]
-    tax_types=[x[0] for x in c.execute("SELECT DISTINCT COALESCE(tax_type,'General') FROM risk_rules WHERE tax_type IS NOT NULL AND tax_type<>'' ORDER BY 1").fetchall()]
-    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_type_counts=tax_type_counts,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q,taxpayers_analysed=taxpayers_analysed,high_risk=high_risk,critical_risk=critical_risk,in_audit=in_audit,pending_validation=pending_validation,risk_distribution=risk_distribution,top_drivers=top_drivers,attention=attention,validation_queue=validation_queue,financial_years=financial_years,stations=stations,tax_types=tax_types,financial_year='',tax_type='')
+    categories=counts_for('category_list'); tax_types=counts_for('tax_type_list'); station_counts=sorted([(s,sum(1 for r in rows if r['station']==s)) for s in sorted({r['station'] for r in rows if r['station']})],key=lambda x:(-x[1],x[0])); stage_counts=[(s,sum(1 for r in rows if r['stage']==s)) for s in ['Open','Review','Human Review','Communication','Client Response','Further Action','Final Decision','Closed'] if any(r['stage']==s for r in rows)]
+    c.close(); return render_template('dashboard.html',rows=rows,total=total,open_count=open_count,closed_count=closed_count,high=high,critical=critical,categories=categories,tax_types=tax_types,station_counts=station_counts,stage_counts=stage_counts,band=band,category=category,station=station,stage=stage,q=q)
 
 @app.route('/risk/<int:assessment_id>')
 @login_required
@@ -1657,94 +1705,30 @@ def data_source_ext(filename):
     return filename.rsplit('.',1)[1].lower() if '.' in filename else ''
 
 def inspect_data_source(path):
-    """Validate a source without loading an entire Excel workbook into RAM.
-
-    XLSX files are streamed with openpyxl. This avoids pandas/openpyxl trying
-    to infer worksheet dimensions by loading a very large or malformed sheet,
-    which can cause the Render worker to be killed during source registration.
-    """
-    if pd is None:
-        raise RuntimeError('pandas is required for data-source validation.')
-
-    ext = data_source_ext(path.name)
-    sample_limit = 5000
-    total_rows = 0
-    sample_rows = []
-
-    if ext == 'csv':
-        df = pd.read_csv(path, nrows=sample_limit, low_memory=False)
-        with open(path, 'rb') as fh:
-            total_rows = max(sum(1 for _ in fh) - 1, 0)
-    elif ext == 'xlsx':
-        if load_workbook is None:
-            raise RuntimeError('XLSX validation requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
-        wb = load_workbook(filename=str(path), read_only=True, data_only=True)
-        try:
-            if not wb.worksheets:
-                df = pd.DataFrame()
-            else:
-                ws = wb.worksheets[0]
-                # Ignore potentially unreliable worksheet dimensions and stream
-                # the XML directly, avoiding an expensive dimensions pre-scan.
-                ws.reset_dimensions()
-                row_iter = ws.iter_rows(values_only=True)
-                header = next(row_iter, None)
-                columns = [str(v).strip() if v is not None else '' for v in (header or ())]
-                for row in row_iter:
-                    values = list(row)
-                    if any(v is not None and str(v).strip() for v in values):
-                        total_rows += 1
-                    if len(sample_rows) < sample_limit:
-                        if len(values) < len(columns):
-                            values.extend([None] * (len(columns) - len(values)))
-                        elif len(values) > len(columns):
-                            extra = len(values) - len(columns)
-                            old_count = len(columns)
-                            columns.extend([f'Column{old_count+i+1}' for i in range(extra)])
-                            for prior in sample_rows:
-                                prior.extend([None] * extra)
-                        sample_rows.append(values[:len(columns)])
-                df = pd.DataFrame(sample_rows, columns=columns)
-        finally:
-            wb.close()
+    if pd is None: raise RuntimeError('pandas is required for data-source validation.')
+    ext=data_source_ext(path.name)
+    if ext=='csv':
+        df=pd.read_csv(path,nrows=5000,low_memory=False)
+        with open(path,'rb') as fh: total_rows=max(sum(1 for _ in fh)-1,0)
     else:
-        # Retain the existing XLS path for legacy .xls files.
-        df = pd.read_excel(path, nrows=sample_limit)
-        try:
-            total_rows = int(pd.read_excel(path, usecols=[0]).shape[0])
-        except Exception:
-            total_rows = len(df)
-
-    df.columns = [str(x).strip() for x in df.columns]
-    cols = list(df.columns)
-    errors = []
-    warnings = []
-    if not cols:
-        errors.append('No columns were detected.')
-    if len(cols) != len(set(cols)):
-        errors.append('Duplicate column names were detected.')
-    blank = [c for c in cols if not str(c).strip() or str(c).lower().startswith('unnamed')]
-    if blank:
-        warnings.append('Blank/unnamed columns detected: ' + ', '.join(blank[:10]))
-    blank_rows = len(df) - len(df.dropna(how='all'))
-    if blank_rows:
-        warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
-    normalized = {c.lower().replace(' ', '').replace('_', '') for c in cols}
-    if not normalized.intersection({'tin', 'taxpayertin', 'taxpayeridentificationnumber', 'taxpayeridentificationno'}):
+        df=pd.read_excel(path,nrows=5000)
+        try: total_rows=int(pd.read_excel(path,usecols=[0]).shape[0])
+        except Exception: total_rows=len(df)
+    df.columns=[str(x).strip() for x in df.columns]; cols=list(df.columns); errors=[]; warnings=[]
+    if not cols: errors.append('No columns were detected.')
+    if len(cols)!=len(set(cols)): errors.append('Duplicate column names were detected.')
+    blank=[c for c in cols if not str(c).strip() or str(c).lower().startswith('unnamed')]
+    if blank: warnings.append('Blank/unnamed columns detected: '+', '.join(blank[:10]))
+    blank_rows=len(df)-len(df.dropna(how='all'))
+    if blank_rows: warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
+    normalized={c.lower().replace(' ','').replace('_','') for c in cols}
+    if not normalized.intersection({'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno'}):
         warnings.append('No obvious TIN column was detected. TIN mapping will be required before Taxpayer 360 ingestion.')
-    null_summary = {c: int(df[c].isna().sum()) for c in cols if int(df[c].isna().sum()) > 0}
+    null_summary={c:int(df[c].isna().sum()) for c in cols if int(df[c].isna().sum())>0}
     if null_summary:
-        top = sorted(null_summary.items(), key=lambda x: x[1], reverse=True)[:10]
-        warnings.append('Missing values detected in: ' + ', '.join(f'{k} ({v})' for k, v in top))
-    summary = {
-        'sample_rows': int(len(df)),
-        'record_count': int(total_rows),
-        'column_count': len(cols),
-        'columns': cols,
-        'nulls_sample': null_summary,
-        'errors': errors,
-        'warnings': warnings,
-    }
+        top=sorted(null_summary.items(),key=lambda x:x[1],reverse=True)[:10]
+        warnings.append('Missing values detected in: '+', '.join(f'{k} ({v})' for k,v in top))
+    summary={'sample_rows':int(len(df)),'record_count':int(total_rows),'column_count':len(cols),'columns':cols,'nulls_sample':null_summary,'errors':errors,'warnings':warnings}
     return summary, ('Failed' if errors else ('Warnings' if warnings else 'Passed'))
 
 # ========================= STEP 3A: ANALYST RISK RULE LIBRARY =========================
@@ -1906,29 +1890,15 @@ def _generate_rule_natural_language(plan):
     if per.get('from') or per.get('to'):
         parts.append(f"The applicable period will run FROM {per.get('from') or 'the beginning of the configured period'} TO {per.get('to') or 'the end of the configured period'}.")
     if per.get('field'): parts.append(f"The period will be evaluated using the field {per['field']}.")
-    # State calculation steps before filters because filters may depend on calculated fields.
-    for calc in plan.get('calculations',[]):
-        expr=calc.get('expression_text') or calc.get('operation','the configured calculation')
-        op=str(calc.get('operation','')).upper()
-        left=calc.get('left') or {}
-        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and left.get('field'):
-            src=source_map.get(str(left.get('source_id')),{}).get('name','selected source')
-            group_by=calc.get('group_by') or []
-            if group_by:
-                group_names=[]
-                for g in group_by:
-                    gs=source_map.get(str(g.get('source_id')),{}).get('name','source')
-                    group_names.append(f"{gs}.{g.get('field','')}")
-                expr=f"{op} of {src}.{left.get('field')} grouped by {', '.join(group_names)}"
-            else:
-                expr=f"{op} of {src}.{left.get('field')}"
-        parts.append(f"The system will CALCULATE {calc.get('name','the derived value')} using {expr}.")
     for f in plan.get('filters',[]):
         text=_condition_text(f,source_map); clause=f.get('clause','WHERE')
         if clause=='EXCEPT': parts.append(f"The system will EXCLUDE records where {text}.")
         elif clause=='WHEN': parts.append(f"The system will apply this rule WHEN {text}.")
         elif clause=='WHILE': parts.append(f"The condition must remain true WHILE {text}.")
         else: parts.append(f"The analysis will be restricted WHERE {text}.")
+    for calc in plan.get('calculations',[]):
+        expr=calc.get('expression_text') or calc.get('operation','the configured calculation')
+        parts.append(f"The system will CALCULATE {calc.get('name','the derived value')} using {expr}.")
     conditions=plan.get('conditions',[])
     if conditions:
         ct=[]
@@ -1985,7 +1955,7 @@ def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,
         version=int(r['version_number'] or 0)+1;rid=r['id'];ref=r['rule_ref']
     else:ref=_rule_ref(c);version=1;rid=None
     if rid is None:
-        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+        c.execute("INSERT INTO risk_rules(name,natural_language,structured_logic,category,approved,created_at,rule_ref,version_number,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,updated_at) VALUES(?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(name,natural,json.dumps(plan),category,stamp,ref,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp));rid=c.execute('SELECT last_insert_rowid()').fetchone()[0]
     else:
         c.execute("UPDATE risk_rules SET name=?,natural_language=?,structured_logic=?,category=?,approved=0,version_number=?,risk_category=?,tax_type=?,taxpayer_scope=?,applicable_period=?,detection_logic_json=?,legal_basis_json=?,information_requests_json=?,exposure_config_json=?,ranking_config_json=?,status='Draft',updated_at=?,approved_by=NULL,approved_at=NULL WHERE id=?",(name,natural,json.dumps(plan),category,version,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,stamp,rid))
     c.execute('INSERT INTO risk_rule_versions(rule_id,version_number,rule_name,risk_category,tax_type,taxpayer_scope,applicable_period,detection_logic_json,legal_basis_json,information_requests_json,exposure_config_json,ranking_config_json,status,created_by,created_at,execution_plan_json,generated_natural_language,preview_summary_json,preview_status,preview_approved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(rid,version,name,category,tax_type,scope,period,plan_json,legal_json,req_json,exposure_json,ranking_json,'Draft',email(),stamp,plan_json,natural,'{}','Not Run',0))
@@ -2053,25 +2023,12 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
             name=ref.get('name')
             if name not in calc_series:
                 raise ValueError(f"Calculated field '{name}' is not available at this stage.")
-            # Reindex derived values to the currently filtered dataframe. Returning the
-            # original full-length series after a WHERE filter can cause an unalignable
-            # boolean mask or compare rows that have already been excluded.
-            return calc_series[name].reindex(df.index)
-        try:
-            sid=int(ref.get('source_id'))
-        except (TypeError, ValueError):
-            raise ValueError('A source-field reference is missing its source ID. Edit the rule and select the source field again.')
-        field=str(ref.get('field') or '').strip()
-        if not field:
-            raise ValueError(f'A source-field reference for source {sid} has an empty field name. Edit the rule and select the field again.')
+            return calc_series[name]
+        sid=int(ref.get('source_id'))
+        field=ref.get('field')
         key=_field_key(sid,field)
         if key not in df.columns:
-            # Report actual fields for the requested source to make the cause diagnosable.
-            available=[]
-            prefix=f's{sid}__'
-            available=[col[len(prefix):] for col in df.columns if str(col).startswith(prefix)]
-            sample=', '.join(available[:12]) or 'none'
-            raise ValueError(f"Field '{field}' from source {sid} is not available after source combination. Available fields for this source: {sample}. Check the saved source/field mapping.")
+            raise ValueError(f"Field '{field}' from source {sid} is not available after source combination.")
         return df[key]
 
     allowed_join_types={'inner','left','right','outer'}
@@ -2101,49 +2058,22 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
                 )
         df=df.merge(right,left_on=lk,right_on=rk,how=how,suffixes=('','__dup'))
 
-    # Calculate derived fields before evaluating filters. This allows WHERE/WHEN/EXCEPT
-    # clauses to reference a calculated field such as PROFIT RATIO MARGIN.
-    # Keep calculations on the combined row index; subsequent filters preserve that index.
+    for f in plan.get('filters',[]):
+        left=series_for(f.get('left'))
+        op=f.get('operator','')
+        right=series_for(f.get('right')) if f.get('right_type')=='field' else (
+            [x.strip() for x in str(f.get('value','')).split(',')] if op in ('IN','NOT IN') else f.get('value','')
+        )
+        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):
+            left,right=_coerce_series(left,right)
+        mask=_evaluate_operator(left,op,right)
+        df=df.loc[~mask].copy() if f.get('clause')=='EXCEPT' else df.loc[mask].copy()
+
     for calc in plan.get('calculations',[]):
         name=str(calc.get('name','')).strip()
         if not name:
             raise ValueError('Every calculation must have a name.')
-        op=str(calc.get('operation','')).strip().upper()
-        left_ref=dict(calc.get('left') or {})
-        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and not left_ref.get('source_id'):
-            left_ref['source_id']=base_id
-            calc['left']=left_ref
-
-        # Older rule-builder saves can contain a source ID but an empty field for a
-        # SUM/COUNT/AVERAGE/MIN/MAX calculation. Recover only from an unambiguous,
-        # business-meaningful amount field; never silently use an arbitrary column.
-        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and not str(left_ref.get('field') or '').strip():
-            sid=int(left_ref.get('source_id') or base_id)
-            columns=source_originals.get(sid,[])
-            norm=lambda value: re.sub(r'[^a-z0-9]+','',str(value or '').lower())
-            by_norm={norm(col):col for col in columns}
-            expression=str(calc.get('expression_text') or '')
-            mentioned=[col for col in columns if col and col.lower() in expression.lower()]
-            preferred=('collectedamount','totalcollectedamount','paymentamount','transactionamount',
-                       'taxamount','taxpaid','totalamount','amount','grossamount','totalsales',
-                       'sales','grossprofit','profitbeforetax')
-            chosen=mentioned[0] if len(mentioned)==1 else next((by_norm[k] for k in preferred if k in by_norm),None)
-            if not chosen:
-                raise ValueError(f"Calculation '{name}' ({op}) has no Left Field. Edit the rule and select the numeric source field to aggregate.")
-            left_ref=dict(left_ref);left_ref.update({'type':'field','source_id':sid,'field':chosen})
-            calc['left']=left_ref
-
-        # Taxpayer totals must be grouped by TIN. If an older plan omitted GROUP BY,
-        # infer the TIN column from the same source instead of summing across all taxpayers.
-        if op in ('SUM','COUNT','AVERAGE','MIN','MAX') and not calc.get('group_by'):
-            sid=int(left_ref.get('source_id') or base_id)
-            columns=source_originals.get(sid,[])
-            tin_candidates={'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno','taxpayeridentificationnumbertin'}
-            tin_col=next((col for col in columns if _normalise_header(col) in tin_candidates),None)
-            if not tin_col:
-                raise ValueError(f"Calculation '{name}' requires GROUP BY a taxpayer TIN field to calculate taxpayer-level totals.")
-            calc['group_by']=[{'source_id':sid,'field':tin_col}]
-
+        op=calc.get('operation')
         a=pd.to_numeric(series_for(calc.get('left')),errors='coerce')
         b=pd.to_numeric(series_for(calc.get('right')),errors='coerce') if calc.get('right') else None
         if op=='ADD': v=a+b
@@ -2167,18 +2097,6 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         else:
             raise ValueError(f'Unsupported calculation: {op}')
         calc_series[name]=v
-
-    # Filters run after calculations so calculated references are available here.
-    for f in plan.get('filters',[]):
-        left=series_for(f.get('left'))
-        op=f.get('operator','')
-        right=series_for(f.get('right')) if f.get('right_type')=='field' else (
-            [x.strip() for x in str(f.get('value','')).split(',')] if op in ('IN','NOT IN') else f.get('value','')
-        )
-        if hasattr(left,'dtype') and op not in ('CONTAINS','NOT CONTAINS','IN','NOT IN','EXISTS','NOT EXISTS'):
-            left,right=_coerce_series(left,right)
-        mask=_evaluate_operator(left,op,right)
-        df=df.loc[~mask].copy() if f.get('clause')=='EXCEPT' else df.loc[mask].copy()
 
     combined_mask=None
     for idx,cond in enumerate(plan.get('conditions',[])):
@@ -2302,7 +2220,7 @@ def _rule_form_context(c,rule=None):
 @app.route('/business')
 @login_required
 def business_rules():
-    return redirect(url_for('risk_rule_new'))
+    c=db();rows=c.execute('''SELECT r.*,(SELECT MAX(v.version_number) FROM risk_rule_versions v WHERE v.rule_id=r.id) AS latest_version,(SELECT v.status FROM risk_rule_versions v WHERE v.rule_id=r.id ORDER BY v.version_number DESC LIMIT 1) AS latest_status FROM risk_rules r ORDER BY r.id DESC''').fetchall();c.close();return render_template('business_rules.html',rules=rows)
 
 @app.route('/business/rules/create')
 @login_required
@@ -2323,7 +2241,11 @@ def business_rule_versions(rule_id):return redirect(url_for('risk_rule_detail',r
 @app.route('/risk-rules')
 @login_required
 def risk_rules():
-    return redirect(url_for('risk_rule_new'))
+    q=request.args.get('q','').strip();status=request.args.get('status','').strip();category=request.args.get('category','').strip();c=db();sql='SELECT * FROM risk_rules WHERE 1=1';params=[]
+    if q:sql+=' AND (name LIKE ? OR rule_ref LIKE ? OR category LIKE ?)';like='%'+q+'%';params += [like,like,like]
+    if status:sql+=' AND status=?';params.append(status)
+    if category:sql+=' AND COALESCE(risk_category,category)=?';params.append(category)
+    sql+=" ORDER BY CASE status WHEN 'Active' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Under Review' THEN 3 WHEN 'Draft' THEN 4 ELSE 5 END,id DESC";rows=c.execute(sql,params).fetchall();c.close();return render_template('risk_rules.html',rows=rows,q=q,status=status,category=category,statuses=RISK_RULE_STATUSES,categories=RISK_RULE_CATEGORIES)
 
 def _extract_common_rule_form(c):
     name=request.form.get('rule_name','').strip();category=request.form.get('risk_category','').strip();tax_type=request.form.get('tax_type','General').strip() or 'General';scope=request.form.get('taxpayer_scope','').strip();period=request.form.get('applicable_period','').strip()
@@ -2469,10 +2391,10 @@ def risk_rule_approve(rule_id):
 def risk_rule_decision(rule_id):
     decision=request.form.get('decision','').strip();comments=request.form.get('comments','').strip()
     if decision=='Approved':return risk_rule_approve(rule_id)
-    if decision not in ('Under Review','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rule_new'))
+    if decision not in ('Under Review','Rejected','Suspended','Retired'):flash('Invalid rule decision.','error');return redirect(url_for('risk_rules'))
     c=db();r=c.execute('SELECT * FROM risk_rules WHERE id=?',(rule_id,)).fetchone()
     if not r:c.close();abort(404)
-    c.execute('UPDATE risk_rules SET status=?,approved=0,updated_at=? WHERE id=?',(decision,now(),rule_id));c.execute('UPDATE risk_rule_versions SET status=?,approved_by=NULL,approved_at=NULL WHERE rule_id=? AND version_number=?',(decision,rule_id,r['version_number']));c.commit();c.close();log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}');flash(f'{r["rule_ref"]} Version {r["version_number"]}: {decision}.','success');return redirect(url_for('risk_rule_new'))
+    c.execute('UPDATE risk_rules SET status=?,approved=0,updated_at=? WHERE id=?',(decision,now(),rule_id));c.execute('UPDATE risk_rule_versions SET status=?,approved_by=NULL,approved_at=NULL WHERE rule_id=? AND version_number=?',(decision,rule_id,r['version_number']));c.commit();c.close();log('RISK_RULE_DECISION',f'{r["rule_ref"]} v{r["version_number"]}: {decision}; {comments}');flash(f'{r["rule_ref"]} Version {r["version_number"]}: {decision}.','success');return redirect(url_for('risk_rules'))
 
 @app.route('/risk-rules/<int:rule_id>')
 @login_required

@@ -1,0 +1,28 @@
+VTA AUTOMATIC RISK SCORING ENGINE — PATCH PACKAGE
+
+The revised app.py replaces the former score formula with a configurable,
+explainable scoring calculation.
+
+Rule-version ranking_config_json supports:
+- base_score: points when the rule triggers (default 20)
+- exposure_weight: additional points when a positive exposure is calculated (default 15)
+- frequency_weight: additional points for each additional distinct triggered rule (default 10)
+
+Calculation:
+1. For each triggered rule, base_score contributes.
+2. If that rule has positive calculable exposure, exposure_weight contributes.
+3. The strongest single-rule contribution is the starting taxpayer score.
+4. The configured frequency_weight is added for each additional distinct triggered rule.
+5. The final score is capped at 100.
+6. Bands are Low (0-39), Medium (40-69), High (70-89), Critical (90-100).
+
+The scoring contributions are written into each risk-driver description for
+traceability. The score is a prioritisation score, NOT a probability of
+non-compliance. These are default weights for an initial implementation and
+should be reviewed/approved by URA risk governance before production use.
+
+Deployment caution:
+This patch is based on /mnt/data/app.py in this working session. Compare it
+with the exact current GitHub/Render source and merge the changes; do not
+overwrite unrelated newer fixes. Validate in a test deployment using controlled
+sample rules and data before production.
