@@ -32,7 +32,7 @@ th{background:#f5f7fa;color:#334155}
       <h1 class="review-title">Review Business Risk</h1>
       <div class="muted">Review the configured rule, test results, data-source versions and evidence before making a human decision.</div>
     </div>
-    <a class="btn" href="{{ url_for('risk_rules') if 'risk_rules' in current_app.view_functions else url_for('business_rules') }}">← Risk Rules</a>
+    <a class="btn" href="{{ url_for('business_rules') }}">← Risk Rules</a>
   </div>
 
   <section class="card">
