@@ -32,7 +32,7 @@ th{background:#f5f7fa;color:#334155}
       <h1 class="review-title">Review Business Risk</h1>
       <div class="muted">Review the configured rule, test results, data-source versions and evidence before making a human decision.</div>
     </div>
-    <a class="btn" href="{{ url_for('risk_rules') if 'risk_rules' in current_app.view_functions else url_for('business_rules') }}">← Risk Rules</a>
+    <a class="btn" href="{{ url_for('business_rules') }}">← Risk Rules</a>
   </div>
 
   <section class="card">
@@ -127,8 +127,10 @@ th{background:#f5f7fa;color:#334155}
       <div class="warning">Approval is unavailable until the preview status is Completed.</div>
     {% elif not legal_count %}
       <div class="warning">Approval is blocked because no legal-basis record is linked to this rule version.</div>
+    {% elif not sources_current %}
+      <div class="warning">Approval is blocked because one or more source versions are no longer approved or no longer match the version used in the rule. Reopen the rule and run the preview again.</div>
     {% else %}
-      <div class="success">Preview completed and legal-basis record(s) found. Confirm source versions and the taxpayer evidence before approving.</div>
+      <div class="success">Preview completed, legal backing found, and all source versions are approved and current. Confirm the taxpayer evidence before approving.</div>
     {% endif %}
     <form method="post" action="{{ url_for('risk_rule_decision', rule_id=rule['id']) }}">
       <div style="margin:10px 0">
@@ -138,7 +140,7 @@ th{background:#f5f7fa;color:#334155}
       <div class="actions">
         <button class="btn" type="submit" name="decision" value="Under Review">Keep Under Review</button>
         <button class="btn" type="submit" name="decision" value="Rejected">Reject</button>
-        <button class="btn primary" type="submit" name="decision" value="Approved" {% if version['preview_status'] != 'Completed' or not legal_count %}disabled title="Completed preview and legal basis are required"{% endif %}>Approve and Activate</button>
+        <button class="btn primary" type="submit" name="decision" value="Approved" {% if version['preview_status'] != 'Completed' or not legal_count or not sources_current %}disabled title="A completed preview, legal basis, and current approved source versions are required"{% endif %}>Approve and Activate</button>
       </div>
     </form>
   </section>

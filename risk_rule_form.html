@@ -408,7 +408,7 @@
   flex-wrap:wrap
 }
 
-.natural-language-preview{background:#102d4a;color:#fff;border-radius:7px;padding:14px;font:13px/1.65 Arial,sans-serif;white-space:pre-wrap;max-height:300px;overflow:auto}.json{
+.json{
   background:#102d4a;
   color:#fff;
   border-radius:7px;
@@ -1561,21 +1561,22 @@
     >
 
       <h3>
-        Execution Logic in Natural Language
+        Execution Plan Preview
       </h3>
 
       <div
         class="muted"
         style="margin-bottom:8px"
       >
-        This is a plain-language explanation of what the configured rule will execute. The structured execution plan is submitted to the backend separately and is not production until the rule is approved.
+        This is the structured configuration that will be submitted
+        to the backend. It is not production until the rule is approved.
       </div>
 
       <div
-        class="natural-language-preview"
+        class="json"
         id="planPreview"
       >
-        Preparing the natural-language explanation from the configured rule…
+        {}
       </div>
 
     </div>
@@ -4905,71 +4906,41 @@ function buildPlan(){
 }
 
 
-function naturalLanguageExecutionLogic(p){
-  const lines=[];
-  const baseId=p.base_source?.source_id;
-  if(baseId){
-    lines.push(`The rule starts with the approved dataset “${sourceName(baseId)}”.`);
-  }
-  const steps=Array.isArray(plan.steps)?plan.steps:[];
-  for(const s of steps){
-    const c=s.config||{};
-    const op=String(s.op||'').toUpperCase();
-    if(op==='FROM') continue;
-    if(op==='JOIN'){
-      const left=`${sourceName(c.left_source_id)}${c.left_field?'.'+c.left_field:''}`;
-      const right=`${sourceName(c.right_source_id)}${c.right_field?'.'+c.right_field:''}`;
-      lines.push(`The system combines ${sourceName(c.right_source_id)} with ${sourceName(c.left_source_id)} using a ${(c.join_type||'INNER').toUpperCase()} join, matching ${left} to ${right}.`);
-    } else if(op==='FIELD'){
-      lines.push(`The rule examines the field ${sourceName(c.source_id)}${c.field?'.'+c.field:''}.`);
-    } else if(op==='CALCULATE'){
-      const calcName=c.name||'the calculated value';
-      const calcOp=String(c.operation||'configured operation').toLowerCase();
-      const expression=c.expression_text||[c.left_field,c.right_field].filter(Boolean).join(' and ');
-      lines.push(`The system calculates ${calcName} using ${calcOp}${expression?' with '+expression:''}.`);
-    } else if(['IF','AND','OR','WHERE','WHEN','WHILE','EXCEPT','NOT'].includes(op)){
-      const condition=String(conditionSummary(c)||'the configured condition').replace(/\s+/g,' ').trim();
-      if(op==='EXCEPT') lines.push(`Records are excluded when ${condition}.`);
-      else if(op==='WHERE') lines.push(`The analysis is limited to records where ${condition}.`);
-      else if(op==='WHEN'||op==='IF') lines.push(`A taxpayer meets this risk condition when ${condition}.`);
-      else if(op==='AND') lines.push(`The following additional condition must also be true: ${condition}.`);
-      else if(op==='OR') lines.push(`The risk condition is also met when ${condition}.`);
-      else if(op==='WHILE') lines.push(`The condition must remain true while ${condition}.`);
-      else lines.push(`The system applies NOT to the configured condition ${condition}.`);
-    } else if(op==='GROUP BY'){
-      lines.push(`The records are grouped by the configured taxpayer or business fields${Array.isArray(c.fields)&&c.fields.length?': '+c.fields.join(', '):''}.`);
-    } else if(op==='STOP'){
-      lines.push(`Evaluation stops for the configured ${c.scope||'record'} when ${c.description||'the stop condition is met'}.`);
-    } else if(op==='THEN'){
-      lines.push(`When the risk conditions are met, the system will ${c.description||'record the detected risk'}.`);
-    } else if(op==='ELSE'){
-      lines.push(`Otherwise, the system will ${c.description||'continue with the configured alternative action'}.`);
-    } else if(op==='CONTINUE'){
-      lines.push(`The system continues evaluation${c.description?': '+c.description:''}.`);
-    } else if(op==='PREVIOUS MONTH'||op==='PREVIOUS YEAR'||op.startsWith('AVG PREVIOUS')||op==='GROWTH %'||op==='DECLINE %'||op==='FREQUENCY'||op==='PERSISTENCE'){
-      lines.push(`The rule uses the historical comparison “${op.toLowerCase()}”${c.description?': '+c.description:''}.`);
-    } else if(c.description){
-      lines.push(`${c.description.replace(/[.\s]+$/,'')}.`);
-    } else {
-      lines.push(`The rule applies the configured ${op.toLowerCase().replaceAll('_',' ')} step.`);
-    }
-  }
-  if(p.period?.description) lines.push(`Period treatment: ${p.period.description.replace(/[.\s]+$/,'')}.`);
-  if(p.period?.from||p.period?.to) lines.push(`The applicable period runs from ${p.period.from||'the configured start'} to ${p.period.to||'the configured end'}.`);
-  if(p.exposure?.formula||p.exposure?.field) lines.push(`Estimated exposure is based on ${p.exposure.formula||p.exposure.field}.`);
-  if(p.exposure?.minimum) lines.push(`Only exposures meeting the minimum threshold of ${p.exposure.minimum} are included.`);
-  if(!lines.length) return 'Add and configure logic blocks to see the natural-language execution explanation here.';
-  return lines.join('\n\n');
-}
-
 function updatePlanPreview(){
+
   try{
-    const p=buildPlan();
-    document.getElementById('planPreview').textContent=naturalLanguageExecutionLogic(p);
-    document.getElementById('rule_plan').value=JSON.stringify(p);
-  } catch(e){
-    document.getElementById('planPreview').textContent='Unable to explain the configured logic: '+e.message;
+
+    const p=
+      buildPlan();
+
+
+    document.getElementById(
+      'planPreview'
+    ).textContent=
+      JSON.stringify(
+        p,
+        null,
+        2
+      );
+
+
+    document.getElementById(
+      'rule_plan'
+    ).value=
+      JSON.stringify(p);
+
   }
+
+  catch(e){
+
+    document.getElementById(
+      'planPreview'
+    ).textContent=
+      'Unable to build execution plan: '+
+      e.message;
+
+  }
+
 }
 
 
