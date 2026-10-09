@@ -1938,27 +1938,60 @@ def _parse_rule_plan(form,source_catalog):
     try:plan=json.loads(raw)
     except Exception as exc:raise ValueError(f'Invalid rule definition: {exc}')
     if not isinstance(plan,dict):raise ValueError('The rule definition must be a structured object.')
-    allowed={int(x['id']):x for x in source_catalog};ids=set()
+    allowed={int(x['id']):x for x in source_catalog}
     base=plan.get('base_source') or {}
-    if base.get('source_id'):ids.add(int(base['source_id']))
-    for x in plan.get('sources',[]):
-        if x.get('id'):ids.add(int(x['id']))
-    for j in plan.get('joins',[]):
+    if not base.get('source_id'):raise ValueError('Select a primary data source.')
+    base_id=int(base['source_id'])
+    if base_id not in allowed:raise ValueError(f'The selected primary data source {base_id} is not approved or is no longer available.')
+
+    # The browser may retain a stale source ID in a condition/calculation after
+    # the analyst changes the rule back to a single-source rule.  In that case,
+    # safely rebind the field to the primary source only when that exact field
+    # exists there and the source is not explicitly participating in a JOIN.
+    explicit_ids={base_id}
+    joins=plan.get('joins',[]) or []
+    for j in joins:
         for k in ('left_source_id','right_source_id'):
-            if j.get(k):ids.add(int(j[k]))
-    for obj in plan.get('filters',[])+plan.get('conditions',[]):
+            if j.get(k): explicit_ids.add(int(j[k]))
+
+    base_columns={str(col).strip().casefold() for col in (allowed[base_id].get('columns') or [])}
+    def normalise_ref(ref):
+        if not isinstance(ref,dict) or ref.get('type')=='calculation' or not ref.get('source_id'):
+            return
+        try: sid=int(ref['source_id'])
+        except (TypeError,ValueError): return
+        field=str(ref.get('field') or '').strip()
+        if sid not in explicit_ids and field.casefold() in base_columns:
+            ref['source_id']=base_id
+
+    for obj in (plan.get('filters',[]) or [])+(plan.get('conditions',[]) or []):
+        for side in ('left','right'): normalise_ref(obj.get(side))
+    for calc in plan.get('calculations',[]) or []:
+        for side in ('left','right'): normalise_ref(calc.get(side))
+        for ref in calc.get('group_by',[]) or []: normalise_ref(ref)
+    for ref in plan.get('preview_fields',[]) or []: normalise_ref(ref)
+
+    # Build the source set from the primary source and explicit joins, not from
+    # stale client-side `sources` entries. A second source must be joined before
+    # its fields can be used in a rule.
+    ids=set(explicit_ids)
+    for obj in (plan.get('filters',[]) or [])+(plan.get('conditions',[]) or []):
         for side in ('left','right'):
-            if obj.get(side,{}).get('source_id'):ids.add(int(obj[side]['source_id']))
-    for calc in plan.get('calculations',[]):
+            ref=obj.get(side) or {}
+            if ref.get('type')!='calculation' and ref.get('source_id'): ids.add(int(ref['source_id']))
+    for calc in plan.get('calculations',[]) or []:
         for side in ('left','right'):
-            if calc.get(side,{}).get('source_id'):ids.add(int(calc[side]['source_id']))
-        for x in calc.get('group_by',[]):
-            if x.get('source_id'):ids.add(int(x['source_id']))
+            ref=calc.get(side) or {}
+            if ref.get('type')!='calculation' and ref.get('source_id'): ids.add(int(ref['source_id']))
+        for ref in calc.get('group_by',[]) or []:
+            if ref.get('source_id'): ids.add(int(ref['source_id']))
     missing=[str(x) for x in ids if x not in allowed]
     if missing:raise ValueError('The rule references data sources that are not approved or no longer available: '+', '.join(missing))
-    if not base.get('source_id'):raise ValueError('Select a primary data source.')
+    unjoined=sorted(ids-explicit_ids)
+    if unjoined:
+        raise ValueError('The rule refers to a field from another source that is not joined. Add an explicit JOIN, or select a field from the primary source.')
     plan['sources']=[{'id':sid,'name':allowed[sid]['name'],'version':allowed[sid]['version'],'ref':allowed[sid]['ref'],'columns':allowed[sid]['columns']} for sid in sorted(ids)]
-    plan['base_source']={'source_id':int(base['source_id']),'name':allowed[int(base['source_id'])]['name']}
+    plan['base_source']={'source_id':base_id,'name':allowed[base_id]['name']}
     return plan
 
 def _save_rule_version(c,name,category,tax_type,scope,period,natural,plan,legal,requests,exposure,ranking,existing_rule_id=None):
@@ -2042,7 +2075,16 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         field=ref.get('field')
         key=_field_key(sid,field)
         if key not in df.columns:
-            raise ValueError(f"Field '{field}' from source {sid} is not available after source combination.")
+            # Backward-compatible repair for a saved single-source rule whose
+            # field reference retained an obsolete source ID. Never guess when
+            # multiple sources are present.
+            if len(loaded)==1:
+                only_id=next(iter(loaded))
+                original_names={str(x).strip().casefold() for x in source_originals.get(only_id,[])}
+                if str(field or '').strip().casefold() in original_names:
+                    key=_field_key(only_id,field)
+            if key not in df.columns:
+                raise ValueError(f"Field '{field}' from source {sid} is not available after source combination. Check the source field mapping or add an explicit JOIN if the field belongs to another dataset.")
         return df[key]
 
     allowed_join_types={'inner','left','right','outer'}
@@ -2341,6 +2383,7 @@ def risk_rule_review(rule_id):
         rule=r,version=v,plan=plan,
         natural_language=v['generated_natural_language'] or r['natural_language'],
         summary=_json_or_default(v['preview_summary_json'],{}),
+        sources_current=all(x['approved'] and str(x['current_version'])==str(x['rule_version']) for x in source_state),
         preview_rows=[_json_or_default(x['result_json'],{}) for x in previews],
         latest_run=latest_run,legal_count=legal_count,source_state=source_state)
 
