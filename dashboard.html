@@ -21,38 +21,38 @@
   </div>
 
   <form class="filters" method="get" action="{{ url_for('dashboard') }}">
-    <div class="field"><label>Financial Year</label><select name="financial_year"><option value="">All Financial Years</option>{% for x in financial_years %}<option value="{{ x }}" {% if financial_year==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
-    <div class="field"><label>Tax Type</label><select name="tax_type"><option value="">All Tax Types</option>{% for x in tax_types %}<option value="{{ x }}" {% if tax_type==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
-    <div class="field"><label>Station</label><select name="station"><option value="">All Stations</option>{% for x in stations %}<option value="{{ x }}" {% if station==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Financial Year</label><select name="financial_year"><option value="">All Financial Years</option>{% for x in financial_years|default([], true) %}<option value="{{ x }}" {% if financial_year==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Tax Type</label><select name="tax_type"><option value="">All Tax Types</option>{% for x in tax_types|default([], true) %}<option value="{{ x }}" {% if tax_type==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Station</label><select name="station"><option value="">All Stations</option>{% for x in stations|default([], true) %}<option value="{{ x }}" {% if station==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
     <div class="field"><label>Risk Level</label><select name="band"><option value="">All Levels</option>{% for x in ['Critical','High','Medium','Low'] %}<option value="{{ x }}" {% if band==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
     <div class="field" style="flex:1"><label>Search</label><input name="q" value="{{ q or '' }}" placeholder="TIN, taxpayer, sector or station"></div>
     <button class="btn primary" type="submit">Apply Filters</button><a class="btn" href="{{ url_for('dashboard') }}">Clear</a>
   </form>
 
   <div class="grid kpis">
-    <div class="card kpi"><div class="label">Taxpayers Analysed</div><div class="value">{{ '{:,}'.format(taxpayers_analysed) }}</div></div>
-    <div class="card kpi high"><div class="label">High Risk</div><div class="value">{{ '{:,}'.format(high_risk) }}</div></div>
-    <div class="card kpi critical"><div class="label">Critical Risk</div><div class="value">{{ '{:,}'.format(critical_risk) }}</div></div>
-    <div class="card kpi audit"><div class="label">In Audit</div><div class="value">{{ '{:,}'.format(in_audit) }}</div></div>
-    <div class="card kpi validation"><div class="label">Pending Validation</div><div class="value">{{ '{:,}'.format(pending_validation) }}</div></div>
+    <div class="card kpi"><div class="label">Taxpayers Analysed</div><div class="value">{{ '{:,}'.format(taxpayers_analysed|default(total|default(0, true), true)|int) }}</div></div>
+    <div class="card kpi high"><div class="label">High Risk</div><div class="value">{{ '{:,}'.format(high_risk|default(high|default(0, true), true)|int) }}</div></div>
+    <div class="card kpi critical"><div class="label">Critical Risk</div><div class="value">{{ '{:,}'.format(critical_risk|default(critical|default(0, true), true)|int) }}</div></div>
+    <div class="card kpi audit"><div class="label">In Audit</div><div class="value">{{ '{:,}'.format(in_audit|default(0, true)|int) }}</div></div>
+    <div class="card kpi validation"><div class="label">Pending Validation</div><div class="value">{{ '{:,}'.format(pending_validation|default(0, true)|int) }}</div></div>
   </div>
 
   <div class="grid three" style="margin-bottom:13px">
     <div class="card">
       <h2 class="section-title">Risk Distribution</h2><div class="section-sub">Latest assessment for each taxpayer.</div>
       {% set mx = (risk_distribution|map(attribute=1)|max) if risk_distribution else 1 %}
-      {% for label,n in risk_distribution %}<div class="barrow"><span class="barlabel">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ ((n / (mx or 1))*100)|round(0) }}%"></span></span><span class="num">{{ '{:,}'.format(n) }}</span></div>{% endfor %}
+      {% for label,n in risk_distribution|default([], true) %}<div class="barrow"><span class="barlabel">{{ label }}</span><span class="bar"><span class="fill" style="width:{{ ((n / (mx or 1))*100)|round(0) }}%"></span></span><span class="num">{{ '{:,}'.format(n) }}</span></div>{% endfor %}
     </div>
     <div class="card">
       <h2 class="section-title">Top Risk Drivers</h2><div class="section-sub">Rules most frequently driving current risk.</div>
-      {% for d in top_drivers %}<div class="driver"><div><div class="driver-name">{{ d.name }}</div><div class="driver-meta">{{ d.category }} · {{ '{:,}'.format(d.n) }} taxpayer trigger{{ '' if d.n==1 else 's' }}</div></div><div class="driver-value">UGX {{ '{:,.0f}'.format((d.exposure or 0)|float) }}</div></div>{% else %}<div class="empty">No risk drivers available.</div>{% endfor %}
+      {% for d in top_drivers|default([], true) %}<div class="driver"><div><div class="driver-name">{{ d.name }}</div><div class="driver-meta">{{ d.category }} · {{ '{:,}'.format(d.n) }} taxpayer trigger{{ '' if d.n==1 else 's' }}</div></div><div class="driver-value">UGX {{ '{:,.0f}'.format((d.exposure or 0)|float) }}</div></div>{% else %}<div class="empty">No risk drivers available.</div>{% endfor %}
     </div>
     <div class="card">
       <h2 class="section-title">Human Validation Queue</h2><div class="section-sub">AI output cannot become consequential action without human control.</div>
       <div class="queue">
-        <a href="{{ url_for('findings_queue') }}"><div class="qbox"><div class="n">{{ '{:,}'.format(validation_queue.findings) }}</div><div class="l">Findings</div></div></a>
-        <a href="{{ url_for('cases') }}"><div class="qbox"><div class="n">{{ '{:,}'.format(validation_queue.communications) }}</div><div class="l">Communications</div></div></a>
-        <a href="{{ url_for('cases') }}"><div class="qbox"><div class="n">{{ '{:,}'.format(validation_queue.evidence) }}</div><div class="l">Evidence Reviews</div></div></a>
+        <a href="{{ url_for('findings_queue') }}"><div class="qbox"><div class="n">{{ '{:,}'.format((validation_queue|default({}, true)).get('findings', 0)|int) }}</div><div class="l">Findings</div></div></a>
+        <a href="{{ url_for('cases') }}"><div class="qbox"><div class="n">{{ '{:,}'.format((validation_queue|default({}, true)).get('communications', 0)|int) }}</div><div class="l">Communications</div></div></a>
+        <a href="{{ url_for('cases') }}"><div class="qbox"><div class="n">{{ '{:,}'.format((validation_queue|default({}, true)).get('evidence', 0)|int) }}</div><div class="l">Evidence Reviews</div></div></a>
       </div>
     </div>
   </div>
@@ -62,7 +62,7 @@
     <div class="section-sub">Prioritised by risk level, score and estimated exposure. Human auditors retain the decision.</div>
     <div class="tablewrap">
       <table class="tbl"><thead><tr><th>TIN</th><th>Taxpayer Name</th><th>Sector</th><th>Risk</th><th>Tax Gap / Exposure</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody>{% for r in attention %}<tr>
+      <tbody>{% for r in attention|default([], true) %}<tr>
         <td>{{ r.tin }}</td><td><b>{{ r.taxpayer_name }}</b></td><td>{{ r.sector or '—' }}</td>
         <td><span class="pill {{ r.band|lower }}">{{ r.band }}</span></td>
         <td>UGX {{ '{:,.0f}'.format((r.exposure or 0)|float) }}</td>
