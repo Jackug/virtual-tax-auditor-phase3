@@ -1,0 +1,1 @@
+Fix: calculate derived fields before WHERE/WHEN/EXCEPT filters, so a filter can reference a calculated field such as PROFIT RATIO MARGIN. Natural-language execution preview now describes calculations before filters.
