@@ -4852,22 +4852,26 @@ function calcObj(s){
       c.operation ||
       '',
 
-    left:
-      c.left ||
-      {
-        type:'field',
-        source_id:
-          Number(
-            c.left_source_id
-          ) || 0,
-        field:
-          c.left_field ||
-          ''
-      },
+    left:(()=>{
+      const r=c.left || {};
+      return {
+        type:r.type || 'field',
+        source_id:Number(r.source_id || c.left_source_id || plan.base_source?.source_id || selectedSources()[0]) || 0,
+        field:String(r.field || c.left_field || ''),
+        name:String(r.name || c.left_name || '')
+      };
+    })(),
 
-    right:
-      c.right ||
-      null,
+    right:(()=>{
+      const r=c.right || {};
+      if(!r.type && !r.source_id && !r.field && !r.name) return null;
+      return {
+        type:r.type || 'field',
+        source_id:Number(r.source_id || c.right_source_id || plan.base_source?.source_id || selectedSources()[0]) || 0,
+        field:String(r.field || c.right_field || ''),
+        name:String(r.name || c.right_name || '')
+      };
+    })(),
 
     expression_text:
       c.expression_text ||

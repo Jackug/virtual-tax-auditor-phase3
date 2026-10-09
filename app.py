@@ -1870,16 +1870,16 @@ def _load_approved_source(c, source_id):
 
 def _condition_text(cond,source_map):
     left=cond.get('left',{})
-    if left.get('type')=='calculation':left_text=left.get('name','calculated value')
+    if left.get('type')=='calculation':left_text=left.get('name') or 'calculated value'
     else:
-        src=source_map.get(str(left.get('source_id')),{});left_text=f"{src.get('name','Source')}.{left.get('field','field')}"
+        src=source_map.get(str(left.get('source_id')),{});left_text=f"{src.get('name','Source')}.{left.get('field') or 'selected field'}"
     op=cond.get('operator','')
     if op in ('EXISTS','NOT EXISTS'):return f"{left_text} {'exists' if op=='EXISTS' else 'does not exist'}"
     if cond.get('right_type')=='field':
         right=cond.get('right',{})
-        if right.get('type')=='calculation':right_text=right.get('name','calculated value')
+        if right.get('type')=='calculation':right_text=right.get('name') or 'calculated value'
         else:
-            src=source_map.get(str(right.get('source_id')),{});right_text=f"{src.get('name','Source')}.{right.get('field','field')}"
+            src=source_map.get(str(right.get('source_id')),{});right_text=f"{src.get('name','Source')}.{right.get('field') or 'selected field'}"
     else:right_text=str(cond.get('value',''))
     return f"{left_text} {op} {right_text}"
 
@@ -1911,8 +1911,28 @@ def _generate_rule_natural_language(plan):
         elif clause=='WHILE': parts.append(f"The condition must remain true WHILE {text}.")
         else: parts.append(f"The analysis will be restricted WHERE {text}.")
     for calc in plan.get('calculations',[]):
-        expr=calc.get('expression_text') or calc.get('operation','the configured calculation')
-        parts.append(f"The system will CALCULATE {calc.get('name','the derived value')} using {expr}.")
+        op=str(calc.get('operation') or 'the configured calculation').upper()
+        left=calc.get('left') or {}
+        if left.get('type')=='calculation':
+            operand=left.get('name') or 'the referenced calculated field'
+        else:
+            src=source_map.get(str(left.get('source_id')),{}).get('name','the selected source')
+            operand=f"{src}.{left.get('field') or 'selected field'}"
+        if op in ('SUM','COUNT','AVERAGE','MIN','MAX'):
+            expr=f"{op} of {operand} per taxpayer TIN (unless explicit grouping is configured)"
+        elif calc.get('expression_text'):
+            expr=calc.get('expression_text')
+        elif op in ('ADD','SUBTRACT','MULTIPLY','DIVIDE','PERCENTAGE DIFFERENCE','PERCENTAGE OF'):
+            right=calc.get('right') or {}
+            if right.get('type')=='calculation':
+                right_operand=right.get('name') or 'the referenced calculated field'
+            else:
+                right_source=source_map.get(str(right.get('source_id')),{}).get('name','the selected source')
+                right_operand=f"{right_source}.{right.get('field') or 'selected field'}"
+            expr=f"{operand} {op} {right_operand}"
+        else:
+            expr=op
+        parts.append(f"The system will CALCULATE {calc.get('name') or 'the derived value'} using {expr}.")
     conditions=plan.get('conditions',[])
     if conditions:
         ct=[]
@@ -2063,7 +2083,41 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
     df=loaded[base_id].copy()
     calc_series={}
 
-    def series_for(ref):
+    def _repair_single_source_ref(ref, operation=None):
+        """Repair legacy UI references such as 'from source 1' only when safe.
+
+        A single-source rule can be repaired deterministically: source IDs are rebound
+        to the sole approved source, and an aggregation placeholder is replaced only
+        when the dataset has an unambiguous amount/value column. Multi-source rules
+        are never guessed.
+        """
+        if not isinstance(ref,dict) or ref.get('type')=='calculation' or len(loaded)!=1:
+            return ref
+        only_id=next(iter(loaded))
+        field=str(ref.get('field') or '').strip()
+        originals=source_originals.get(only_id,[])
+        names={str(x).strip().casefold():x for x in originals}
+        sid=ref.get('source_id')
+        placeholder=(not field or field.casefold() in {'field','select field','from source','source field'}
+                     or re.fullmatch(r'from\s+source\s+\d+',field,re.I) is not None)
+        if field.casefold() in names:
+            ref['source_id']=only_id
+            ref['field']=names[field.casefold()]
+            return ref
+        if placeholder and operation in {'SUM','AVERAGE','MIN','MAX'}:
+            normal={re.sub(r'[^a-z0-9]+','',str(col).casefold()):col for col in originals}
+            priorities=('collectedamount','paymentamount','amountcollected','totalamount','amountpaid','transactionamount','amount')
+            match=next((normal[k] for k in priorities if k in normal),None)
+            if match is None:
+                candidates=[col for col in originals if any(t in re.sub(r'[^a-z0-9]+','',str(col).casefold()) for t in ('amount','value'))]
+                if len(candidates)==1: match=candidates[0]
+            if match is not None:
+                ref['source_id']=only_id
+                ref['field']=match
+                return ref
+        return ref
+
+    def series_for(ref, operation=None):
         if not ref:
             return None
         if ref.get('type')=='calculation':
@@ -2071,20 +2125,23 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
             if name not in calc_series:
                 raise ValueError(f"Calculated field '{name}' is not available at this stage.")
             return calc_series[name]
-        sid=int(ref.get('source_id'))
+        ref=_repair_single_source_ref(ref,operation)
+        try:
+            sid=int(ref.get('source_id'))
+        except (TypeError,ValueError):
+            sid=next(iter(loaded)) if len(loaded)==1 else 0
         field=ref.get('field')
         key=_field_key(sid,field)
+        if key not in df.columns and len(loaded)==1:
+            only_id=next(iter(loaded))
+            original_names={str(x).strip().casefold():x for x in source_originals.get(only_id,[])}
+            if str(field or '').strip().casefold() in original_names:
+                field=original_names[str(field).strip().casefold()]
+                ref['field']=field
+                ref['source_id']=only_id
+                key=_field_key(only_id,field)
         if key not in df.columns:
-            # Backward-compatible repair for a saved single-source rule whose
-            # field reference retained an obsolete source ID. Never guess when
-            # multiple sources are present.
-            if len(loaded)==1:
-                only_id=next(iter(loaded))
-                original_names={str(x).strip().casefold() for x in source_originals.get(only_id,[])}
-                if str(field or '').strip().casefold() in original_names:
-                    key=_field_key(only_id,field)
-            if key not in df.columns:
-                raise ValueError(f"Field '{field}' from source {sid} is not available after source combination. Check the source field mapping or add an explicit JOIN if the field belongs to another dataset.")
+            raise ValueError(f"Field '{field}' from source {sid} is not available after source combination. The saved field reference does not match the selected source's actual columns. Re-select the field in the rule editor.")
         return df[key]
 
     allowed_join_types={'inner','left','right','outer'}
@@ -2129,8 +2186,12 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         name=str(calc.get('name','')).strip()
         if not name:
             raise ValueError('Every calculation must have a name.')
-        op=calc.get('operation')
-        a=pd.to_numeric(series_for(calc.get('left')),errors='coerce')
+        op=str(calc.get('operation') or '').upper()
+        left_ref=calc.get('left')
+        if op in ('SUM','COUNT','AVERAGE','MIN','MAX'):
+            left_ref=_repair_single_source_ref(left_ref,op)
+            calc['left']=left_ref
+        a=pd.to_numeric(series_for(left_ref,op),errors='coerce')
         b=pd.to_numeric(series_for(calc.get('right')),errors='coerce') if calc.get('right') else None
         if op=='ADD': v=a+b
         elif op=='SUBTRACT': v=a-b
@@ -2139,17 +2200,32 @@ def _execute_rule_plan(c,plan,sample_only=5,return_records=False):
         elif op=='PERCENTAGE DIFFERENCE': v=(a-b)/a.replace(0,float('nan'))*100
         elif op=='PERCENTAGE OF': v=a/b.replace(0,float('nan'))*100
         elif op in ('SUM','COUNT','AVERAGE','MIN','MAX'):
+            base_ref=calc.get('left') or {}
             if calc.get('group_by'):
-                keys=[_field_key(int(x['source_id']),x['field']) for x in calc['group_by']]
-                base_ref=calc.get('left') or {}
+                keys=[]
+                for group_ref in calc['group_by']:
+                    group_ref=_repair_single_source_ref(group_ref)
+                    keys.append(_field_key(int(group_ref['source_id']),group_ref['field']))
                 basecol=_field_key(int(base_ref['source_id']),base_ref['field'])
-                missing=[k for k in keys+[basecol] if k not in df.columns]
-                if missing: raise ValueError(f'Aggregation field(s) not available: {missing}')
-                g=df.groupby(keys,dropna=False)[basecol]
-                v={'SUM':g.transform('sum'),'COUNT':g.transform('count'),'AVERAGE':g.transform('mean'),
-                   'MIN':g.transform('min'),'MAX':g.transform('max')}[op]
             else:
-                v=a
+                # Aggregations default to taxpayer-level totals, not the original
+                # row values and not a dataset-wide total. Use the source's TIN.
+                tin_candidates={'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno','taxpayeridentificationnumbertin'}
+                tin_col=None
+                for sid0, cols0 in source_originals.items():
+                    if sid0==int(base_ref.get('source_id') or base_id):
+                        tin_col=next((col for col in cols0 if re.sub(r'[^a-z0-9]+','',str(col).casefold()) in tin_candidates),None)
+                        if tin_col:
+                            keys=[_field_key(sid0,tin_col)]
+                            break
+                if not tin_col:
+                    raise ValueError(f"{op} needs a taxpayer TIN grouping field. Add a TIN column to the source or explicitly configure GROUP BY.")
+                basecol=_field_key(int(base_ref['source_id']),base_ref['field'])
+            missing=[k for k in keys+[basecol] if k not in df.columns]
+            if missing: raise ValueError(f'Aggregation field(s) not available: {missing}')
+            g=df.groupby(keys,dropna=False)[basecol]
+            v={'SUM':g.transform('sum'),'COUNT':g.transform('count'),'AVERAGE':g.transform('mean'),
+               'MIN':g.transform('min'),'MAX':g.transform('max')}[op]
         else:
             raise ValueError(f'Unsupported calculation: {op}')
         calc_series[name]=v
