@@ -76,41 +76,6 @@
   </div>
 
   <div class="rr-card">
-    <h3>5. Test Results — Top Five Taxpayer Risks</h3>
-    <div class="rr-note">The Top Five are ranked using the rule's configured exposure measure. They are generated from the actual test execution, not manually selected.</div>
-    {% set top5 = summary.get('top5_risks',[]) or [] %}
-    {% if top5 %}
-    <div class="rr-scroll" style="margin-top:12px">
-      <table class="rr-table">
-        <thead><tr><th>Rank</th><th>TIN</th><th>Taxpayer</th><th>Risk</th><th>Exposure</th><th>Why Flagged</th></tr></thead>
-        <tbody>
-        {% for x in top5 %}
-        <tr><td><b>{{x.get('rank')}}</b></td><td>{{x.get('tin','')}}</td><td>{{x.get('taxpayer_name','')}}</td><td>{{x.get('risk','')}}</td><td>UGX {{'{:,.2f}'.format((x.get('exposure',0) or 0)|float)}}</td><td>{{x.get('explanation','')}}</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}<div class="rr-warning">No triggered taxpayers were returned by the test execution.</div>{% endif %}
-  </div>
-
-  <div class="rr-card">
-    <h3>6. Explanation — What the Risk Means and Why Each Taxpayer Triggered</h3>
-    <div class="rr-note"><b>Rule-level explanation:</b> this is generated directly from the structured execution logic. It becomes part of the approved rule version and is carried into the Risk Universe.</div>
-    <div class="rr-card" style="margin-top:10px;background:#f8fafc"><div style="font-size:13px;line-height:1.7">{{ natural_language }}</div></div>
-    {% if top5 %}
-      <h4 style="margin:18px 0 8px;color:#17365d">Taxpayer-level explanations</h4>
-      {% for x in top5 %}
-      <div class="rr-card" style="margin-top:8px;background:#fbfdff">
-        <div><b>#{{x.get('rank')}} — {{x.get('taxpayer_name','Unknown taxpayer')}}</b> <span class="rr-pill">TIN {{x.get('tin','')}}</span> <span class="rr-pill">UGX {{'{:,.0f}'.format((x.get('exposure',0) or 0)|float)}} exposure</span></div>
-        <div style="font-size:12px;line-height:1.65;margin-top:7px">{{x.get('explanation','')}}</div>
-        {% if x.get('conditions_satisfied') %}<div class="rr-muted" style="margin-top:7px"><b>Conditions satisfied:</b> {{x.get('conditions_satisfied')|join('; ')}}</div>{% endif %}
-        {% if x.get('evidence') %}<div class="rr-muted" style="margin-top:7px"><b>Evidence used:</b> {{x.get('evidence')}}</div>{% endif %}
-      </div>
-      {% endfor %}
-    {% endif %}
-  </div>
-
-  <div class="rr-card">
     <h3>3. Real Data Execution Result</h3>
     <div class="rr-note">
       <b>Important:</b> the rows displayed below are only a small display sample. They are <b>not the dataset used for execution</b>.
@@ -149,7 +114,7 @@
   </div>
 
   <div class="rr-card">
-    <h3>7. Human Review & Approval Gate</h3>
+    <h3>5. Approval Gate</h3>
     {% if ps == 'Completed' and legal_count > 0 %}
       <div class="rr-note">
         The rule has been executed against approved data and has approved Knowledge Base legal backing. Approval will activate the rule and rebuild the Risk Universe from the approved rule library.
@@ -160,15 +125,6 @@
       <div class="rr-warning">The rule cannot be approved until approved Knowledge Base legal backing is attached.</div>
     {% endif %}
 
-    {% if ps == 'Completed' and legal_count > 0 %}
-    <div style="border:1px solid #dbe3ec;border-radius:7px;padding:12px;margin-top:12px;background:#fbfdff">
-      <div style="font-size:12px;font-weight:800;color:#17365d;margin-bottom:7px">I confirm that I have reviewed:</div>
-      {% for name,label in [('confirm_interpretation','the system-generated interpretation'),('confirm_sources','the approved data sources and source versions'),('confirm_relationships','the data relationships and preparation controls'),('confirm_calculations','the calculations and exposure measure'),('confirm_conditions','the detection conditions and logical operators'),('confirm_results','the test results and Top Five taxpayer risks')] %}
-      <label style="display:block;font-size:11px;margin:5px 0"><input type="checkbox" name="{{name}}" value="1" form="approvalForm"> I confirm {{label}}.</label>
-      {% endfor %}
-    </div>
-    {% endif %}
-
     <div class="rr-footer-actions">
       <div class="rr-actions">
         <form method="post" action="{{ url_for('risk_rule_preview',rule_id=rule.id) }}" style="margin:0">
@@ -176,7 +132,7 @@
         </form>
         <a class="rr-btn" href="{{ url_for('risk_rule_edit',rule_id=rule.id) }}">Edit / Rebuild Rule</a>
       </div>
-      <form method="post" id="approvalForm" action="{{ url_for('risk_rule_approve',rule_id=rule.id) }}" style="margin:0">
+      <form method="post" action="{{ url_for('risk_rule_approve',rule_id=rule.id) }}" style="margin:0">
         <button class="rr-btn primary" type="submit" {% if ps != 'Completed' or legal_count == 0 %}disabled title="Successful execution and approved legal backing are required"{% endif %}>Approve Rule & Populate Risk Universe</button>
       </form>
     </div>
@@ -184,7 +140,7 @@
 
   {% if latest_run %}
   <div class="rr-card">
-    <h3>8. Latest Production Rule Run</h3>
+    <h3>6. Latest Production Rule Run</h3>
     <div class="rr-muted">Approval creates the authoritative Risk Engine run. The latest stored run for this rule/version is shown below.</div>
     <table class="rr-table" style="margin-top:10px">
       <tr><th>Run Status</th><td>{{ latest_run.run_status }}</td></tr>
