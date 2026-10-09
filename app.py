@@ -639,6 +639,11 @@ def iter_knowledge_document(file_path, original_filename):
         wb = load_workbook(filename=str(path), read_only=True, data_only=True)
         try:
             for number, ws in enumerate(wb.worksheets, start=1):
+                # Some uploaded XLSX files advertise worksheet dimensions that
+                # are extremely large or malformed. Reset dimensions before
+                # streaming rows so openpyxl does not perform a costly
+                # parse_dimensions() scan that can kill the Render worker.
+                ws.reset_dimensions()
                 buffer = [f'Sheet: {ws.title}']
                 chars = len(buffer[0])
                 for row in ws.iter_rows(values_only=True):
@@ -1650,30 +1655,94 @@ def data_source_ext(filename):
     return filename.rsplit('.',1)[1].lower() if '.' in filename else ''
 
 def inspect_data_source(path):
-    if pd is None: raise RuntimeError('pandas is required for data-source validation.')
-    ext=data_source_ext(path.name)
-    if ext=='csv':
-        df=pd.read_csv(path,nrows=5000,low_memory=False)
-        with open(path,'rb') as fh: total_rows=max(sum(1 for _ in fh)-1,0)
+    """Validate a source without loading an entire Excel workbook into RAM.
+
+    XLSX files are streamed with openpyxl. This avoids pandas/openpyxl trying
+    to infer worksheet dimensions by loading a very large or malformed sheet,
+    which can cause the Render worker to be killed during source registration.
+    """
+    if pd is None:
+        raise RuntimeError('pandas is required for data-source validation.')
+
+    ext = data_source_ext(path.name)
+    sample_limit = 5000
+    total_rows = 0
+    sample_rows = []
+
+    if ext == 'csv':
+        df = pd.read_csv(path, nrows=sample_limit, low_memory=False)
+        with open(path, 'rb') as fh:
+            total_rows = max(sum(1 for _ in fh) - 1, 0)
+    elif ext == 'xlsx':
+        if load_workbook is None:
+            raise RuntimeError('XLSX validation requires openpyxl. Add openpyxl to requirements.txt and redeploy.')
+        wb = load_workbook(filename=str(path), read_only=True, data_only=True)
+        try:
+            if not wb.worksheets:
+                df = pd.DataFrame()
+            else:
+                ws = wb.worksheets[0]
+                # Ignore potentially unreliable worksheet dimensions and stream
+                # the XML directly, avoiding an expensive dimensions pre-scan.
+                ws.reset_dimensions()
+                row_iter = ws.iter_rows(values_only=True)
+                header = next(row_iter, None)
+                columns = [str(v).strip() if v is not None else '' for v in (header or ())]
+                for row in row_iter:
+                    values = list(row)
+                    if any(v is not None and str(v).strip() for v in values):
+                        total_rows += 1
+                    if len(sample_rows) < sample_limit:
+                        if len(values) < len(columns):
+                            values.extend([None] * (len(columns) - len(values)))
+                        elif len(values) > len(columns):
+                            extra = len(values) - len(columns)
+                            old_count = len(columns)
+                            columns.extend([f'Column{old_count+i+1}' for i in range(extra)])
+                            for prior in sample_rows:
+                                prior.extend([None] * extra)
+                        sample_rows.append(values[:len(columns)])
+                df = pd.DataFrame(sample_rows, columns=columns)
+        finally:
+            wb.close()
     else:
-        df=pd.read_excel(path,nrows=5000)
-        try: total_rows=int(pd.read_excel(path,usecols=[0]).shape[0])
-        except Exception: total_rows=len(df)
-    df.columns=[str(x).strip() for x in df.columns]; cols=list(df.columns); errors=[]; warnings=[]
-    if not cols: errors.append('No columns were detected.')
-    if len(cols)!=len(set(cols)): errors.append('Duplicate column names were detected.')
-    blank=[c for c in cols if not str(c).strip() or str(c).lower().startswith('unnamed')]
-    if blank: warnings.append('Blank/unnamed columns detected: '+', '.join(blank[:10]))
-    blank_rows=len(df)-len(df.dropna(how='all'))
-    if blank_rows: warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
-    normalized={c.lower().replace(' ','').replace('_','') for c in cols}
-    if not normalized.intersection({'tin','taxpayertin','taxpayeridentificationnumber','taxpayeridentificationno'}):
+        # Retain the existing XLS path for legacy .xls files.
+        df = pd.read_excel(path, nrows=sample_limit)
+        try:
+            total_rows = int(pd.read_excel(path, usecols=[0]).shape[0])
+        except Exception:
+            total_rows = len(df)
+
+    df.columns = [str(x).strip() for x in df.columns]
+    cols = list(df.columns)
+    errors = []
+    warnings = []
+    if not cols:
+        errors.append('No columns were detected.')
+    if len(cols) != len(set(cols)):
+        errors.append('Duplicate column names were detected.')
+    blank = [c for c in cols if not str(c).strip() or str(c).lower().startswith('unnamed')]
+    if blank:
+        warnings.append('Blank/unnamed columns detected: ' + ', '.join(blank[:10]))
+    blank_rows = len(df) - len(df.dropna(how='all'))
+    if blank_rows:
+        warnings.append(f'{blank_rows} blank rows were found in the validation sample.')
+    normalized = {c.lower().replace(' ', '').replace('_', '') for c in cols}
+    if not normalized.intersection({'tin', 'taxpayertin', 'taxpayeridentificationnumber', 'taxpayeridentificationno'}):
         warnings.append('No obvious TIN column was detected. TIN mapping will be required before Taxpayer 360 ingestion.')
-    null_summary={c:int(df[c].isna().sum()) for c in cols if int(df[c].isna().sum())>0}
+    null_summary = {c: int(df[c].isna().sum()) for c in cols if int(df[c].isna().sum()) > 0}
     if null_summary:
-        top=sorted(null_summary.items(),key=lambda x:x[1],reverse=True)[:10]
-        warnings.append('Missing values detected in: '+', '.join(f'{k} ({v})' for k,v in top))
-    summary={'sample_rows':int(len(df)),'record_count':int(total_rows),'column_count':len(cols),'columns':cols,'nulls_sample':null_summary,'errors':errors,'warnings':warnings}
+        top = sorted(null_summary.items(), key=lambda x: x[1], reverse=True)[:10]
+        warnings.append('Missing values detected in: ' + ', '.join(f'{k} ({v})' for k, v in top))
+    summary = {
+        'sample_rows': int(len(df)),
+        'record_count': int(total_rows),
+        'column_count': len(cols),
+        'columns': cols,
+        'nulls_sample': null_summary,
+        'errors': errors,
+        'warnings': warnings,
+    }
     return summary, ('Failed' if errors else ('Warnings' if warnings else 'Passed'))
 
 # ========================= STEP 3A: ANALYST RISK RULE LIBRARY =========================
